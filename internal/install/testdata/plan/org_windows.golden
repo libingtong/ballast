@@ -1,0 +1,196 @@
+{
+  "allowManagedHooksOnly": true,
+  "hooks": {
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PostToolBatch"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PostToolUse"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PostToolUseFailure"
+            ]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PreToolUse"
+            ]
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "SessionEnd"
+            ]
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "SessionStart"
+            ]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "Stop"
+            ]
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "SubagentStop"
+            ]
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "UserPromptSubmit"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "failIfUnavailable": true,
+    "excludedCommands": [],
+    "filesystem": {
+      "denyWrite": [
+        "C:\\Program Files\\ClaudeCode\\ballast",
+        "~/.ballast",
+        "./.ballast",
+        "C:\\Program Files\\Ballast",
+        "~/.claude/settings*.json"
+      ]
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Edit(C:\\Program Files\\ClaudeCode\\ballast/**)",
+      "Edit(~/.ballast/**)",
+      "Edit(./.ballast/**)",
+      "Edit(C:\\Program Files\\Ballast/**)",
+      "Edit(~/.claude/settings*.json)",
+      "Write(C:\\Program Files\\ClaudeCode\\ballast/**)",
+      "Write(~/.ballast/**)",
+      "Write(./.ballast/**)",
+      "Write(C:\\Program Files\\Ballast/**)",
+      "Write(~/.claude/settings*.json)",
+      "NotebookEdit(C:\\Program Files\\ClaudeCode\\ballast/**)",
+      "NotebookEdit(~/.ballast/**)",
+      "NotebookEdit(./.ballast/**)",
+      "NotebookEdit(C:\\Program Files\\Ballast/**)",
+      "NotebookEdit(~/.claude/settings*.json)"
+    ]
+  },
+  "allowManagedPermissionRulesOnly": true
+}

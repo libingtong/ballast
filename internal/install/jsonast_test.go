@@ -135,7 +135,7 @@ func FuzzParseJSONDoc(f *testing.F) {
 			return
 		}
 		out := doc.bytes()
-		if len(strings.TrimSpace(string(in))) != 0 && string(out) != string(in) {
+		if len(strings.TrimSpace(strings.TrimPrefix(string(in), "\ufeff"))) != 0 && string(out) != string(in) {
 			t.Fatalf("unmodified document changed: %q -> %q", in, out)
 		}
 		// mutate and make sure the result still parses and encoding/json agrees

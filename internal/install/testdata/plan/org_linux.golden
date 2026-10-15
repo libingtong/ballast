@@ -1,0 +1,196 @@
+{
+  "allowManagedHooksOnly": true,
+  "hooks": {
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PostToolBatch"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PostToolUse"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PostToolUseFailure"
+            ]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PreToolUse"
+            ]
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "SessionEnd"
+            ]
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "SessionStart"
+            ]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "Stop"
+            ]
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "SubagentStop"
+            ]
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "UserPromptSubmit"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "failIfUnavailable": true,
+    "excludedCommands": [],
+    "filesystem": {
+      "denyWrite": [
+        "/etc/claude-code/ballast",
+        "~/.ballast",
+        "./.ballast",
+        "/usr/local/libexec/ballast",
+        "~/.claude/settings*.json"
+      ]
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Edit(/etc/claude-code/ballast/**)",
+      "Edit(~/.ballast/**)",
+      "Edit(./.ballast/**)",
+      "Edit(/usr/local/libexec/ballast/**)",
+      "Edit(~/.claude/settings*.json)",
+      "Write(/etc/claude-code/ballast/**)",
+      "Write(~/.ballast/**)",
+      "Write(./.ballast/**)",
+      "Write(/usr/local/libexec/ballast/**)",
+      "Write(~/.claude/settings*.json)",
+      "NotebookEdit(/etc/claude-code/ballast/**)",
+      "NotebookEdit(~/.ballast/**)",
+      "NotebookEdit(./.ballast/**)",
+      "NotebookEdit(/usr/local/libexec/ballast/**)",
+      "NotebookEdit(~/.claude/settings*.json)"
+    ]
+  },
+  "allowManagedPermissionRulesOnly": true
+}

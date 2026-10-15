@@ -31,6 +31,7 @@ func TestFeaturesHooks(t *testing.T) {
 		{"empty file", "", "[features]\nhooks = true\n", true},
 		{"other content", "model = \"x\"\n", "model = \"x\"\n\n[features]\nhooks = true\n", true},
 		{"no trailing newline", "model = 1", "model = 1\n\n[features]\nhooks = true\n", true},
+		{"header only, no newline", "[features]", "[features]\nhooks = true\n", true},
 		{"features without hooks", "[features]\nfoo = 1\n", "[features]\nhooks = true\nfoo = 1\n", true},
 		{"features before other table", "[features]\n\n[tui]\nx = 1\n", "[features]\nhooks = true\n\n[tui]\nx = 1\n", true},
 		{"false flips", "[features]\nhooks = false # off\n", "[features]\nhooks = true # off\n", true},

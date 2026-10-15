@@ -90,7 +90,7 @@ func renderOrg(lay layout.Layout, fsys sys.FS, opt OrgRenderOptions) ([]byte, er
 	}
 
 	protected := []string{
-		filepath.Dir(lay.OrgRules),
+		dirOf(lay.OrgRules, goos),
 		"~/.ballast",
 		"./.ballast",
 		dirOf(binary, goos),

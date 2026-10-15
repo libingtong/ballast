@@ -57,6 +57,9 @@ func (d *yamlDoc) bytes() []byte {
 }
 
 func (d *yamlDoc) insert(at int, texts ...string) {
+	if at > 0 && at <= len(d.lines) && d.lines[at-1].eol == "" {
+		d.lines[at-1].eol = d.eol // the previous last line gets its newline
+	}
 	ins := make([]yline, len(texts))
 	for i, t := range texts {
 		ins[i] = yline{t, d.eol}

@@ -19,11 +19,15 @@ const MaxBackups = 10
 const backupTimeLayout = "20060102T150405Z"
 
 // EncodeBackupName turns an absolute path into a backup file name: path
-// separators become "%2F" ('%' and ':' are escaped too so the name is valid
-// on every platform and reversible).
+// separators become "%2F". To keep the name reversible and valid on Windows,
+// '%' is escaped as "%25" and the drive colon as "%3A".
 func EncodeBackupName(p string) string {
-	r := strings.NewReplacer("%", "%25", "/", "%2F", `\`, "%2F", ":", "%3A")
-	return r.Replace(p)
+	drive := ""
+	if len(p) >= 2 && p[1] == ':' {
+		drive, p = p[:1]+"%3A", p[2:]
+	}
+	r := strings.NewReplacer("%", "%25", "/", "%2F", `\`, "%2F")
+	return drive + r.Replace(p)
 }
 
 func isBackupDirName(n string) bool {

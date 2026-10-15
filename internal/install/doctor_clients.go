@@ -69,6 +69,14 @@ func locateEntry(c model.ClientID, data []byte, path, goos string, rec model.Man
 	return state, nil
 }
 
+// checkPrefix is the id prefix of a client's checks ("claude.entry.Stop").
+func checkPrefix(c model.ClientID) string {
+	if c == model.ClientClaude {
+		return "claude"
+	}
+	return string(c)
+}
+
 func hasRecords(m *model.InstallManifest, c model.ClientID) bool {
 	for _, e := range m.Entries {
 		if e.Client == c {
@@ -93,7 +101,7 @@ func entryChecks(c model.ClientID, lay layout.Layout, fsys sys.FS, m *model.Inst
 		if rec.Client != c {
 			continue
 		}
-		id := fmt.Sprintf("%s.entry.%s", c, rec.Native)
+		id := fmt.Sprintf("%s.entry.%s", checkPrefix(c), rec.Native)
 		fix := fmt.Sprintf("run: ballast install --client %s", c)
 		data, ok := cache[rec.File]
 		err := cacheErr[rec.File]

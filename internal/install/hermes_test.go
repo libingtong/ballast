@@ -62,6 +62,24 @@ func TestHermesRoundTrip(t *testing.T) {
 	}
 }
 
+func TestHermesFilesWithoutTrailingNewline(t *testing.T) {
+	for _, orig := range []string{"model: x", "hooks:\n  pre_tool_call:\n    - command: a", "hooks:", "hooks:\n  # c", "a: 1\nhooks:\n  x: []"} {
+		p, err := gHermesT().Plan([]byte(orig), gspec(model.ClientHermes), nil)
+		if err != nil {
+			t.Fatalf("%q: %v", orig, err)
+		}
+		if _, err := parseYAMLDoc(p.After).section(); err != nil {
+			t.Errorf("%q: output unusable: %v\n%s", orig, err, p.After)
+		}
+		if !strings.HasPrefix(string(p.After), strings.SplitN(orig, "\n", 2)[0]+"\n") {
+			t.Errorf("%q: first line damaged:\n%s", orig, p.After)
+		}
+		if !strings.HasSuffix(string(p.After), "\n") {
+			t.Errorf("%q: result lacks a final newline", orig)
+		}
+	}
+}
+
 func TestHermesAbsentFileIsDeleted(t *testing.T) {
 	_, r := hermesRoundTrip(t, absent)
 	if r.After != nil || !r.Changed() {

@@ -1066,3 +1066,29 @@ func TestLiveInstallLockBlocks(t *testing.T) {
 		t.Error("nothing may change while locked out (and the foreign lock must stay)")
 	}
 }
+
+func TestNilOptionFieldsFallBackToTheRealSystem(t *testing.T) {
+	// FS, Env, Clock and IDs default to the real implementations; the layout
+	// still points into the sandbox, so nothing outside it is touched.
+	e := newTenv(t)
+	opt := Options{Layout: e.lay, Clients: []model.ClientID{model.ClientClaude}, Binary: fakeBinary(), Force: true, DryRun: true}
+	rep, err := Install(opt)
+	if err != nil || rep.Diff == "" {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	if e.exists(e.claudeSettings()) || e.exists(e.lay.Home) {
+		t.Error("dry-run wrote something")
+	}
+	opt.DryRun = false
+	mustInstall(t, opt)
+	if !e.exists(e.claudeSettings()) {
+		t.Fatal("not installed")
+	}
+	if cs := Doctor(DoctorOptions{Layout: e.lay}); len(cs) == 0 {
+		t.Error("Doctor with a nil FS returned nothing")
+	}
+	mustUninstall(t, Options{Layout: e.lay})
+	if e.exists(e.claudeSettings()) {
+		t.Error("not uninstalled")
+	}
+}

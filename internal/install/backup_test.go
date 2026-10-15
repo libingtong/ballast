@@ -17,12 +17,13 @@ func TestEncodeBackupName(t *testing.T) {
 		"/home/u/.claude/settings.json": "%2Fhome%2Fu%2F.claude%2Fsettings.json",
 		`C:\Users\u\x.json`:             "C%3A%2FUsers%2Fu%2Fx.json",
 		"/a%2Fb":                        "%2Fa%252Fb",
+		"/opt/a:b/c":                    "%2Fopt%2Fa:b%2Fc",
 		"relative.json":                 "relative.json",
 	} {
 		if got := EncodeBackupName(in); got != want {
 			t.Errorf("EncodeBackupName(%q) = %q, want %q", in, got, want)
 		}
-		if strings.ContainsAny(EncodeBackupName(in), `/\:`) {
+		if strings.ContainsAny(EncodeBackupName(in), `/\`) {
 			t.Errorf("%q: encoded name still contains a separator", in)
 		}
 	}

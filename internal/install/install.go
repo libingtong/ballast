@@ -102,10 +102,17 @@ type Report struct {
 
 // Install installs hook entries for opt.Clients.
 // Errors: model.ErrSettingsParse (exit 3), model.ErrManagedPresent (exit 1),
-// client not detected without Force (exit 2), I/O (exit 5).
+// client not detected without Force (exit 2), I/O (exit 5). Beyond the
+// frozen list (see errors.go): ErrUsage, ErrClientNotDetected and
+// ErrBinaryUnstable are exit 2, ErrLocked is exit 5. Nothing is written
+// before every target has been planned, so any error leaves the file system
+// untouched (a failure while writing rolls the written files back).
 func Install(opt Options) (*Report, error) { return runInstall(opt) }
 
 // Uninstall removes owned entries/files/flags recorded in the manifest.
+// Entries the user modified are kept and reported in Report.Warnings (the
+// CLI exits 1 when it is non-empty); a file that cannot be parsed is an
+// error (model.ErrSettingsParse), never a silent success.
 func Uninstall(opt Options) (*Report, error) { return runUninstall(opt) }
 
 // HookArgv returns the frozen hook argv: [binary, "hook", "--client", id, "--event", native].

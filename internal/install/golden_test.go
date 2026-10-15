@@ -182,6 +182,10 @@ logging:
 		p := planAfter(t, gHermesT(), cur, gspec(model.ClientHermes), nil)
 		checkGolden(t, "hermes_existing", string(p.After))
 	})
+	t.Run("cursor mdc", func(t *testing.T) {
+		p := planAfter(t, gMDCT(), absent, gspec(model.ClientCursor), nil)
+		checkGolden(t, "cursor_mdc", string(p.After))
+	})
 	t.Run("dry-run diff", func(t *testing.T) {
 		p := planAfter(t, gClaudeT(), "{\n  \"model\": \"opus\"\n}\n", gspec(model.ClientClaude), nil)
 		checkGolden(t, "claude_diff", UnifiedDiff(p.Path, p.Before, p.After))

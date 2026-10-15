@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 )
 
 // EntryHash = hex(sha256(canonical JSON of the entry object)).
@@ -76,8 +75,6 @@ func writePyJSONString(b *strings.Builder, s string) {
 			b.WriteString(`\f`)
 		case r < 0x20:
 			fmt.Fprintf(b, `\u%04x`, r)
-		case r == utf8.RuneError:
-			b.WriteString("�")
 		default:
 			b.WriteRune(r)
 		}

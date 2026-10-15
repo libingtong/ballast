@@ -14,15 +14,6 @@ func Clients() []Client {
 	return []Client{claudeClient{}, codexClient{}, cursorClient{}, hermesClient{}}
 }
 
-func clientByID(id model.ClientID) Client {
-	for _, c := range Clients() {
-		if c.ID() == id {
-			return c
-		}
-	}
-	return nil
-}
-
 func envGOOS(lay layout.Layout, env sys.Env) string {
 	if lay.GOOS != "" {
 		return lay.GOOS

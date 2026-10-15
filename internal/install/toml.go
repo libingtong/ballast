@@ -379,6 +379,9 @@ func (d *tomlDoc) setValue(i int, v string) {
 }
 
 func (d *tomlDoc) insertLines(at int, texts ...string) {
+	if at > 0 && at <= len(d.lines) && d.lines[at-1].eol == "" {
+		d.lines[at-1].eol = d.eol // the previous last line gets its newline
+	}
 	ins := make([]tline, len(texts))
 	for i, t := range texts {
 		ins[i] = tline{text: t, eol: d.eol}
