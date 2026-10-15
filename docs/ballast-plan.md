@@ -1,4 +1,6 @@
-# Ballast(压舱石)实施计划 v0.3
+# Ballast(压舱石)实施计划 v0.4
+
+> v0.4(2026-10-16):M0a/M0c 实测完成,并按用户要求加入多客户端支持(参照 pinrule)。改动见末尾"v0.4 变更",与正文冲突时以 v0.4 变更为准。
 
 > v0.2 根据 `docs/ballast-plan-review.md`(R01–R20,5 blocker / 13 major / 2 minor)重写。逐条修订去向见末尾"审核意见追溯表"。
 > 用户已裁决(2026-10-15):信任模型 = **分级边界**;语言 = **Go**;首发 OS = **macOS + Linux + WSL2 + 原生 Windows**;M0 = **用户层探针 + 托管层容器测试都做**。
@@ -556,7 +558,48 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 | A10 原文 | 已在 hooks 文档 Stop input 一节找到原文并引用;运行期行为另列 M0a case `stop-cap` |
 | A24 | 标【未核验】;v0.3 不再依赖该字段 |
 
+
+## v0.4 变更(实施依据,优先于正文)
+
+**依据**:`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`,以及用户要求"参考原项目的安装、卸载流程,以及不同 AI IDE 的支持"。
+
+### 1. 多客户端支持(取代原"只支持 Claude Code")
+
+| 客户端 | 级别 | 注入 | 拦截 | Stop | 安装目标 |
+|---|---|---|---|---|---|
+| Claude Code | 一级,完整支持 | SessionStart、UserPromptSubmit、PostToolBatch | PreToolUse 的 deny/ask/warn;UserPromptSubmit block | block / systemMessage | `~/.claude/settings.json`(遵循 `CLAUDE_CONFIG_DIR`),条目用 `command`+`args` |
+| Codex | 二级 | SessionStart、UserPromptSubmit、PostToolUse 的 additionalContext | PreToolUse deny;PermissionRequest 用 `decision.behavior`;**不支持 ask** | block(【未核验】) | `~/.codex/hooks.json`;启用 `[features] hooks=true`;trust 哈希只在显式 `--codex-trust` 时写入 |
+| Cursor | 二级 | sessionStart、postToolUse 的 `additional_context`;beforeSubmitPrompt;另生成托管 `~/.cursor/rules/ballast.mdc`(`alwaysApply: true`) | preToolUse、beforeShellExecution、beforeMCPExecution、beforeReadFile 用 `permission:"deny"`;ask【未核验】 | 只支持 `followup_message`(需配 `loop_limit`);lint 把 Stop 的 deny 视为"续跑" | `~/.cursor/hooks.json`(`version:1`,平铺条目) |
+| Hermes | 三级,尽力支持 | 仅 `pre_llm_call` 的 `{context}` | `pre_tool_call` 用 `{decision:"block"}` | 不支持 | `~/.hermes/config.yaml` 的 `hooks:` 段,外科式改写 |
+
+- **运行时不嗅探客户端**:安装器把客户端写进命令行,例如 `<abs>/ballast hook --client codex --event PreToolUse`。
+- **Adapter 接口**:`ID`、`Detect`、`Capabilities`、`NativeEvents`、`ParseEvent`、`NormalizeTool`、`Render`、`InstallTargets`、`Transcript`、`Doctor`,见 `docs/research/pinrule-install-and-clients.md` 的 C2。
+- **lint**:按客户端的能力矩阵拒绝不支持的"事件 × 动作"组合;默认只对已安装的客户端生效。
+- **工具名归一化**:`apply_patch` → Edit(解析出多个目标文件);`exec_command`、`Shell`、`terminal` → Bash;`Task` → Agent。
+- **安装与卸载升入核心路径**(新的 M4-core):
+  - 每个客户端有一组 `InstallTarget`。`Plan` 和 `Remove` 是纯函数,同时用于 `--dry-run` 输出 diff。
+  - 已有条目原地替换,不调整顺序。
+  - 归属判定同时满足两条:命令前缀等于"二进制绝对路径 + `hook --client X`",且与 manifest 记录的 hash 一致。
+  - 每个目标单独备份;`uninstall` 以 manifest 为准(覆盖已卸载的客户端),同时删除托管的 `.mdc` 和由安装新建、现已为空的文件;配置加载失败时返回非 0。
+  - 不复制 pinrule 的以下做法:`init` 时自动安装、按子串识别归属、把 venv 解释器绑进命令、备份不轮转。
+- **e2e 测试**:`BALLAST_HOME` 和各客户端的配置根目录都可以重定向,不写入真实的 `~`。
+
+### 2. 快照实现(M0c:用 git 子进程算快照 p95 80–157ms,超过门槛)
+- **C 和 S 都在进程内原生计算**。解析索引(v2/v3/v4),按 exempt 过滤,在内存中构造 tree 并计算 SHA-1。
+- 计算 S 时,对每个索引条目做 lstat:stat 与索引一致且没有 racy 风险就沿用索引里的 blob id;否则读文件内容计算 blob 哈希。还需处理符号链接、可执行位(`core.filemode`)和已删除的文件。
+- **以下情况退回 git**:未合并条目、split/sparse index、skip-worktree/intent-to-add、SHA-256 仓库、配置了 clean/smudge/eol 转换(`.gitattributes` 中的 `filter`、`text`、`eol`,或 `core.autocrlf`)。
+  - runner 退回时不设时限。
+  - hook 退回时最多等到剩余期限;超时返回 unknown(放行并写审计)。
+- **一致性测试**:在夹具仓库上与 `git add -u` + `write-tree` 的结果逐位比对。
+- exempt 的 glob 统一编译成同一个匹配器,S 和 C 共用。
+
+### 3. 其他决定
+- **状态事务**:无锁读取后求值,再加锁重读、合并增量写回,缩短持锁时间。状态文件不 fsync;evidence 文件 fsync,因为它不在热路径上。
+- **compact 时的内部 agent**(`agent_type` 为空的 SubagentStop):默认忽略。
+- **Stop 族的 warn**:映射到 `systemMessage`,已由 M0a 实测确认。
+- **gob 规则缓存**:可选;热更新所需的 stat 检测必须保留。
+
 ## 已定事项(无需再裁决)
 - 合并语义:采用 B4 的方案,org 整体不可变,原问题 3 的备选方案升格为正式方案,以消除歧义。
-- Codex:只预留 Adapter 接口,不实现,也不创建任何 Codex 配置。
+- ~~Codex:只预留 Adapter 接口~~ → 已被 v0.4 多客户端支持取代(用户 2026-10-16 要求)。
 - 计划批准后,将本文件同步覆盖 `docs/ballast-plan.md`,v0.1 留在审核报告记录的 hash 中可追溯。
