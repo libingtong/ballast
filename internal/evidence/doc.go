@@ -81,6 +81,54 @@
 //   - Provider implements ports.EvidenceProvider; Open performs no I/O
 //     (FS fake records zero calls).
 //
+// Implementation notes (U8b; additive, the contract above stays in force):
+//
+//   - Options.Env (optional) feeds snapshot (global git config, TMPDIR); nil
+//     means the process environment.
+//   - Store also exposes JobPath, LogPath, SpecPath (the runner's per-job
+//     sidecar), SupersededPath (the runner's supersede marker) and LockPath
+//     (the file the job's runner holds an exclusive lock on while it lives);
+//     GC removes all of them with the job. ReadJob and JobActive are exported
+//     as well.
+//   - A running job whose PID is not recorded yet (the detached child writes
+//     its own PID when it starts) counts as running for JobStartGrace (30s);
+//     afterwards only a live PID before the job Deadline counts. The runner
+//     sets Deadline to started_at + timeout_s + JobDeadlineSlack (10 minutes:
+//     the command timer starts after the start snapshot; the kill grace and
+//     the end snapshot follow it). A PID is only a liveness hint (it may be
+//     recycled); the runner's lock file is what proves identity (see runner).
+//   - verify_fresh reads job files of an entry only for jobs younger than its
+//     timeout_s (default 1800) + JobDeadlineSlack + JobStartGrace, judged by
+//     the job id's time prefix (RunningJobsWithin); RunningJobs uses the 25h
+//     bound. A job that outlives a later, shorter timeout_s edit is missed.
+//   - A latest record that cannot be read or decoded is no evidence:
+//     false(not_valid_pass), never a pass from an older record.
+//   - FreshQuery.Kind "" is treated as worktree; any other unknown kind is
+//     unknown(unparseable_commit).
+//   - ParseCommitForm leaves CommitForm.Reason empty (the acceptance table
+//     compares whole forms). Unknown options, --git-dir/--work-tree, a -a
+//     with paths and -i/-o without paths are unparseable.
+//   - DEVIATION, pending U0/architect confirmation (it relaxes the frozen
+//     "dynamic words => unparseable" rule, which still holds for the
+//     subcommand, -C, options and paths): a dynamic word that is the value of
+//     a value-taking option (-m "$(...)") is accepted, since a quoted value
+//     cannot change which tree is committed. model.Word does not tell quoted
+//     from unquoted dynamic words, so an unquoted `-m $MSG` that expands to
+//     several words would turn the later words into pathspecs; the form is
+//     then judged plain and the result may be true or false where the frozen
+//     rule gives unknown (a rule that uses verify_fresh positively sees a
+//     different value; the default `not verify_fresh` matches neither). The
+//     pre-commit --check on the real index is the backstop. Restoring the
+//     frozen rule means turning the dynamic option value back into
+//     unparseable in ParseCommitForm.
+//   - Without -C, path-form pathspecs are resolved against the event cwd (git
+//     resolves them against its own cwd); ParseCommitForm leaves Dir empty and
+//     VerifyFresh fills it from FreshQuery.Cwd, which must be absolute
+//     (otherwise unknown/unparseable_commit).
+//   - Check resolves a relative CheckOptions.IndexFile against cwd.
+//   - FinishedSince reads only files whose t_start is within 25h before
+//     `since` (a record cannot run longer than the 86400s timeout cap).
+//
 // Integration acceptance (U12): scripts/freshness.sh with the real binary
 // and an installed pre-commit hook running `ballast verify --check`.
 package evidence

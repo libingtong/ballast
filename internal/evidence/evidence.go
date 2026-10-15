@@ -27,6 +27,9 @@ type Options struct {
 	// one view; for `git -C <dir>` targeting another repo the TARGET repo's
 	// project.json (required names and exempt) is used.
 	Project ports.ProjectLoader
+	// Env supplies HOME / TMPDIR / GIT_CONFIG_* to snapshot (global git
+	// config lookup and the fallback's environment). nil ⇒ sys.OSEnv.
+	Env sys.Env
 }
 
 // Store reads and writes verify records and job status files.
@@ -35,58 +38,67 @@ type Store struct {
 }
 
 // NewStore returns a Store.
-func NewStore(opt Options) *Store { return &Store{opt: opt} }
+func NewStore(opt Options) *Store { return &Store{opt: opt.withDefaults()} }
 
 // RecordPath returns the evidence file path for rec.
 func (s *Store) RecordPath(rec *model.VerifyRecord) string {
-	panic("unimplemented: evidence.Store.RecordPath")
+	return s.recordPath(rec)
 }
 
 // WriteRecord writes rec atomically WITH fsync.
 func (s *Store) WriteRecord(rec *model.VerifyRecord) error {
-	panic("unimplemented: evidence.Store.WriteRecord")
+	return s.writeRecord(rec)
 }
 
 // Latest returns the latest record (by t_start) for name, or nil.
 func (s *Store) Latest(repoInst, name string) (*model.VerifyRecord, error) {
-	panic("unimplemented: evidence.Store.Latest")
+	return s.latest(repoInst, name)
 }
 
 // FinishedSince lists records of repoInst with t_end > since (all names).
 func (s *Store) FinishedSince(repoInst string, since time.Time) ([]model.VerifyRecord, error) {
-	panic("unimplemented: evidence.Store.FinishedSince")
+	return s.finishedSince(repoInst, since)
 }
 
 // FindJob locates a job by id (any repo/name) for `verify --status <job>`.
 func (s *Store) FindJob(jobID string) (*model.JobStatus, *model.VerifyRecord, error) {
-	panic("unimplemented: evidence.Store.FindJob")
+	return s.findJob(jobID)
 }
 
 // WriteJob writes a JobStatus atomically.
 func (s *Store) WriteJob(js *model.JobStatus) error {
-	panic("unimplemented: evidence.Store.WriteJob")
+	return s.writeJob(js)
 }
 
 // RunningJobs returns running jobs for (repoInst, name); dead PIDs or
 // passed deadlines are reported as not running (and marked done/infra by GC).
 func (s *Store) RunningJobs(repoInst, name string) ([]model.JobStatus, error) {
-	panic("unimplemented: evidence.Store.RunningJobs")
+	return s.runningJobs(repoInst, name, maxRunSpan)
+}
+
+// RunningJobsWithin is RunningJobs for callers that know the entry's
+// timeout_s: job files of jobs started longer ago than timeout + deadline
+// slack + start grace are not read. timeoutS <= 0 means the default.
+func (s *Store) RunningJobsWithin(repoInst, name string, timeoutS int) ([]model.JobStatus, error) {
+	if timeoutS <= 0 {
+		timeoutS = defaultTimeoutS
+	}
+	age := time.Duration(timeoutS)*time.Second + JobDeadlineSlack + JobStartGrace
+	if age > maxRunSpan {
+		age = maxRunSpan
+	}
+	return s.runningJobs(repoInst, name, age)
 }
 
 // GC applies retention (package doc).
 func (s *Store) GC() error {
-	panic("unimplemented: evidence.Store.GC")
+	return s.gc()
 }
 
 // ProcessAlive reports whether pid is alive (unix: kill(pid,0); windows:
 // OpenProcess + GetExitCodeProcess == STILL_ACTIVE).
 func ProcessAlive(pid int) bool {
 	return processAlive(pid)
-}
-
-// ParseCommitForm turns a git commit invocation into a CommitForm (package doc).
-func ParseCommitForm(git *model.GitInvocation, cwd string) model.CommitForm {
-	panic("unimplemented: evidence.ParseCommitForm")
 }
 
 // Provider implements ports.EvidenceProvider.
@@ -98,12 +110,15 @@ type Provider struct {
 var _ ports.EvidenceProvider = (*Provider)(nil)
 
 // NewProvider returns a Provider.
-func NewProvider(opt Options) *Provider { return &Provider{Store: NewStore(opt), opt: opt} }
+func NewProvider(opt Options) *Provider {
+	opt = opt.withDefaults()
+	return &Provider{Store: NewStore(opt), opt: opt}
+}
 
 // Open implements ports.EvidenceProvider. It does no I/O (no project.json
 // read, no snapshot) until a method of the returned view is called.
 func (p *Provider) Open(repo *model.RepoInfo, deadline time.Time) (model.EvidenceView, error) {
-	panic("unimplemented: evidence.Provider.Open")
+	return p.open(repo, deadline), nil
 }
 
 // CheckMode selects what `verify --check` compares against.
@@ -143,5 +158,5 @@ type CheckOptions struct {
 // project.json (opt.Project); verify_fresh steps 2–5 of the package doc
 // apply with C as described in CheckOptions.
 func Check(opt Options, cwd string, co CheckOptions) (model.FreshResult, error) {
-	panic("unimplemented: evidence.Check")
+	return check(opt, cwd, co)
 }

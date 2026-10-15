@@ -61,4 +61,63 @@
 // removed) on fixture repos covering
 // symlinks, exec bits, deletions, racy entries, nested dirs, v2/v3/v4
 // indexes; native C on a 10k-file index < 5ms; fallback honours deadline.
+//
+// Implementation notes (U8a; additive, the contract above stays in force):
+//
+//   - Exempt matching is a port of git's wildmatch.c plus git's pathspec
+//     rules (literal name or leading directory, then wildmatch on the part
+//     after the literal head), i.e. exactly the semantics of the pathspec
+//     ':(glob)<glob>' that the fallback hands to `git rm --cached`; it is
+//     differentially tested against `git ls-files`. doublestar is not used
+//     because its "a/**" and directory semantics differ from git's.
+//   - The fallback runs `git rm --cached -r -q -f --ignore-unmatch`: without
+//     -f git refuses to drop an exempt file whose staged content differs
+//     from both HEAD and the work tree and the whole snapshot would fail.
+//   - Entries are filtered (exempt) before they are refreshed, so exempt
+//     files are never read; the result is identical because add -u followed
+//     by rm --cached commutes with filtering.
+//   - Racy test, both halves of git's protection: an index entry whose
+//     mtime is in the same second as (or later than) the index file mtime is
+//     rehashed, and so is a size-0 entry whose id is not the empty blob
+//     (git's smudged-entry rule in ce_match_stat_basic; it is the only
+//     protection left once the index has been rewritten).
+//     Sub-second fields are compared when the index carries them; dev is
+//     compared as the contract says; uid/gid are not (chown changes ctime).
+//   - assume-unchanged entries are left alone (git add -u does so, even for
+//     deleted files); a path below a symlinked or missing directory counts
+//     as removed, like git's has_symlink_leading_path.
+//   - Conversions: only content that contains CRLF can change under
+//     core.autocrlf, core.eol and the text/eol/crlf attributes, so a dirty
+//     file without CRLF is hashed natively even in such repositories; a
+//     dirty file that has CRLF, any filter/ident/working-tree-encoding
+//     attribute on the way to it, core.safecrlf=true, core.symlinks=false
+//     with symlinks involved, or a configuration the scanner cannot
+//     evaluate (conditional include that sets a relevant key, `git -c`
+//     style environment overrides) falls back. NeedsFallback keeps the
+//     strict contract meaning ("any such setting present"); the plain C
+//     form never reads the work tree and ignores all of this.
+//   - Options.Env (default sys.OSEnv) locates the global/system git config
+//     and attributes (HOME, XDG_CONFIG_HOME, GIT_CONFIG_GLOBAL,
+//     GIT_CONFIG_SYSTEM, GIT_CONFIG_NOSYSTEM) and the fallback's TMPDIR.
+//   - Gitlinks (submodules; mode 160000) are handled like git's add -u: a
+//     missing directory is a removal, a directory without ".git"
+//     (uninitialised submodule) keeps the recorded commit, and a checked-out
+//     submodule records its HEAD, resolved natively (".git" directory or
+//     gitfile; detached id, or a loose ref or packed-refs entry). A HEAD
+//     that cannot be resolved that way (unborn, reftable, sha256, a
+//     "commondir" layout, unusual ref names), a gitlink replaced by a
+//     non-directory and a tracked file or symlink replaced by a directory
+//     holding ".git" (git records the nested repository's HEAD as a gitlink)
+//     fall back; these are fallback conditions beyond the list above.
+//   - TreeC paths form: pathspecs are relative to CommitForm.Dir when set
+//     (else the repo root), absolute paths inside the repo are accepted
+//     (symlinks in them and in Dir are resolved), "--only" is approximated
+//     by "-i" as in the contract, and magic pathspecs (":(glob)...",
+//     ":!...") are left to the fallback. The fallback runs `git add -u` in
+//     Dir, so magic pathspecs mean what they would to `git commit` there.
+//   - Killing a timed-out fallback git takes down its whole process tree:
+//     the process group on unix and a Job Object on Windows. On Windows this
+//     is best effort: the job is created right after the child starts (a
+//     helper spawned in between escapes), and when it cannot be created only
+//     the git process itself is killed.
 package snapshot
