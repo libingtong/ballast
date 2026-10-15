@@ -1,5 +1,10 @@
 package hook
 
+import (
+	"fmt"
+	"strings"
+)
+
 // FaultPoint names an injection point of the pipeline (plan B7 fault tests).
 type FaultPoint string
 
@@ -42,4 +47,42 @@ type FaultInjector interface {
 // the environment).
 func FaultsFromEnv(getenv func(string) (string, bool)) FaultInjector {
 	return faultsFromEnv(getenv)
+}
+
+// parseFaultSpec parses "<point>:<mode>" (the BALLAST_FAULT value).
+func parseFaultSpec(spec string) (FaultPoint, FaultMode, error) {
+	ps, ms, ok := strings.Cut(strings.TrimSpace(spec), ":")
+	if !ok {
+		return "", "", fmt.Errorf("fault spec %q: want <point>:<mode>", spec)
+	}
+	p := FaultPoint(ps)
+	known := false
+	for _, x := range AllFaultPoints {
+		if x == p {
+			known = true
+		}
+	}
+	if !known {
+		return "", "", fmt.Errorf("fault spec %q: unknown point %q", spec, ps)
+	}
+	m := FaultMode(ms)
+	switch m {
+	case FaultError, FaultPanic, FaultHang:
+		return p, m, nil
+	}
+	return "", "", fmt.Errorf("fault spec %q: unknown mode %q", spec, ms)
+}
+
+// singleFault arms exactly one point.
+type singleFault struct {
+	point FaultPoint
+	mode  FaultMode
+}
+
+func (f singleFault) Hit(p FaultPoint) *FaultMode {
+	if p != f.point {
+		return nil
+	}
+	m := f.mode
+	return &m
 }
