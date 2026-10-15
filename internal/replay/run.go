@@ -1,0 +1,830 @@
+package replay
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/libingtong/ballast/internal/model"
+	"github.com/libingtong/ballast/internal/ports"
+	"github.com/libingtong/ballast/internal/sys"
+)
+
+// ReportVersion is Report.V.
+const ReportVersion = 1
+
+// maxUnknownSamples bounds the unknown samples kept per rule (counts stay exact).
+const maxUnknownSamples = 50
+
+// maxPending bounds the tool calls per agent awaiting their result.
+const maxPending = 256
+
+// shellReadPaths is the shared shell-read rule (model.ShellReadPaths); a
+// variable only so tests can run before U2's implementation is merged.
+var shellReadPaths = model.ShellReadPaths
+
+type scopeKey struct{ session, agent string }
+
+type pendingCall struct {
+	name  string
+	input []byte
+}
+
+// scope is the replay state of one (session, agent).
+type scope struct {
+	st      *memState
+	pending map[string]pendingCall
+	order   []string
+	cwd     string
+	branch  string
+	lastTS  time.Time
+	exists  map[string]bool
+	agent   string
+	session string
+}
+
+// runner is one replay.
+type runner struct {
+	opt     Options
+	deps    Deps
+	client  model.ClientID
+	adapter ports.Adapter
+
+	rs         *model.CompiledRuleSet
+	rulesHash  string
+	metas      map[string]*ruleMeta
+	eventRules map[model.EventName]bool
+	anchorEvery,
+	batchAfter int
+
+	needsEvidence bool
+	initial       *initialState
+	scopes        map[scopeKey]*scope
+	// per-session facts
+	cwdBySession   map[string]string
+	writeBySession map[string]time.Time
+	evidence       map[string][]model.VerifyRecord
+	evidenceFile   []model.VerifyRecord
+	evidenceLoaded bool
+	pathCtx        map[string]model.PathContext
+	homeRaw        string
+	homeNorm       string
+
+	items, skipped int
+	order          []string
+	summaries      map[string]*RuleSummary
+	samples        []Sample
+	unknownKept    map[string]int
+	transcriptRef  string
+}
+
+// Run replays one transcript.
+func Run(opt Options, deps Deps) (*Report, error) {
+	r, err := newRunner(opt, deps)
+	if err != nil {
+		return nil, err
+	}
+	if opt.RulesPath != "" {
+		if err := r.loadRulesFile(); err != nil {
+			return nil, err
+		}
+	}
+
+	f, err := deps.FS.OpenFile(opt.Transcript, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, fmt.Errorf("replay: opening transcript: %w", err)
+	}
+	err = r.processStream(f, "")
+	if cerr := f.Close(); err == nil && cerr != nil {
+		err = cerr
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if opt.Subagents && r.client == model.ClientClaude {
+		if err := r.processSubagents(); err != nil {
+			return nil, err
+		}
+	}
+	if err := r.ensureRules(""); err != nil {
+		return nil, err
+	}
+	return r.report(), nil
+}
+
+func newRunner(opt Options, deps Deps) (*runner, error) {
+	if opt.Transcript == "" {
+		return nil, fmt.Errorf("%w: no transcript given", ErrUsage)
+	}
+	client := opt.Client
+	if client == "" {
+		client = model.ClientClaude
+	}
+	switch opt.Format {
+	case "", "json", "md":
+	default:
+		return nil, fmt.Errorf("%w: unknown format %q (want json or md)", ErrUsage, opt.Format)
+	}
+	switch opt.EvidenceMode {
+	case "", "auto":
+	case "file":
+		if opt.EvidenceFile == "" {
+			return nil, fmt.Errorf("%w: evidence mode file needs an evidence file", ErrUsage)
+		}
+	default:
+		return nil, fmt.Errorf("%w: unknown evidence mode %q (want auto or file)", ErrUsage, opt.EvidenceMode)
+	}
+	switch client {
+	case model.ClientClaude, model.ClientCodex, model.ClientCursor:
+	default:
+		return nil, fmt.Errorf("%w: no transcript reader for client %q (%w)", ErrUsage, client, model.ErrUnknownClient)
+	}
+	if deps.FS == nil || deps.Engine == nil || deps.Adapters == nil || deps.Paths == nil || deps.Clock == nil {
+		return nil, errors.New("replay: missing dependency (FS, Clock, Adapters, Engine or Paths)")
+	}
+	if opt.RulesPath == "" && deps.Rules == nil {
+		return nil, errors.New("replay: missing dependency Rules (no --rules path given)")
+	}
+	if opt.RulesPath != "" && deps.Compiler == nil {
+		return nil, errors.New("replay: missing dependency Compiler (needed for --rules)")
+	}
+	adapter, ok := deps.Adapters.Get(client)
+	if !ok {
+		return nil, fmt.Errorf("replay: no adapter for client %q: %w", client, model.ErrUnknownClient)
+	}
+
+	r := &runner{
+		opt: opt, deps: deps, client: client, adapter: adapter,
+		scopes:         map[scopeKey]*scope{},
+		cwdBySession:   map[string]string{},
+		writeBySession: map[string]time.Time{},
+		evidence:       map[string][]model.VerifyRecord{},
+		pathCtx:        map[string]model.PathContext{},
+		summaries:      map[string]*RuleSummary{},
+		unknownKept:    map[string]int{},
+	}
+	if opt.InitialState != "" {
+		is, err := loadInitialState(deps.FS, opt.InitialState)
+		if err != nil {
+			return nil, err
+		}
+		r.initial = is
+	}
+	r.homeRaw = deps.Home
+	if r.homeRaw == "" {
+		r.homeRaw, _ = sys.OSEnv{}.HomeDir()
+	}
+	ctx0 := model.PathContext{Home: r.homeRaw, GOOS: runtime.GOOS}
+	if r.homeRaw != "" {
+		r.homeNorm = deps.Paths.Normalize(r.homeRaw, "", ctx0)
+	}
+	r.transcriptRef = r.refOf(opt.Transcript)
+	return r, nil
+}
+
+// refOf renders a path "~/"-relative when it lies under the home directory.
+func (r *runner) refOf(path string) string {
+	p := filepath.Clean(path)
+	if r.homeRaw != "" {
+		home := filepath.Clean(r.homeRaw)
+		if rel, err := filepath.Rel(home, p); err == nil && rel != "." && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
+			return "~/" + filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(p)
+}
+
+// ---------------------------------------------------------------- rules ---
+
+func (r *runner) loadRulesFile() error {
+	data, err := r.deps.FS.ReadFile(r.opt.RulesPath)
+	if err != nil {
+		return fmt.Errorf("replay: reading rules: %w", err)
+	}
+	rf, diags, err := r.deps.Compiler.ParseFile(model.LayerFile, r.opt.RulesPath, data)
+	if err != nil {
+		return fmt.Errorf("%w: rules file %s: %v", ErrUsage, r.opt.RulesPath, err)
+	}
+	for _, d := range diags {
+		if d.Severity == model.SevError {
+			return fmt.Errorf("%w: rules file %s: %s: %s", ErrUsage, r.opt.RulesPath, d.Code, d.Message)
+		}
+	}
+	var loaded []model.LoadedRule
+	for i := range rf.Rules {
+		if rf.Rules[i].IsEnabled() {
+			loaded = append(loaded, model.LoadedRule{Rule: rf.Rules[i], Layer: model.LayerFile, Source: r.opt.RulesPath, Index: i})
+		}
+	}
+	var settings model.Settings
+	if rf.Settings != nil {
+		settings = *rf.Settings
+	}
+	sum := sha256.Sum256(data)
+	rs, err := r.deps.Compiler.Compile(loaded, settings, hex.EncodeToString(sum[:])[:16])
+	if err != nil {
+		return fmt.Errorf("%w: compiling %s: %v", ErrUsage, r.opt.RulesPath, err)
+	}
+	r.setRules(rs)
+	return nil
+}
+
+// ensureRules loads the rules in effect once, at the first transcript item
+// (its cwd selects the repo layer).
+func (r *runner) ensureRules(cwd string) error {
+	if r.rs != nil {
+		return nil
+	}
+	rs, err := r.deps.Rules.Load(model.LoadRequest{Client: r.client, Cwd: cwd, Now: r.deps.Clock.Now()})
+	if err != nil {
+		return fmt.Errorf("replay: loading rules: %w", err)
+	}
+	r.setRules(rs)
+	return nil
+}
+
+func (r *runner) setRules(rs *model.CompiledRuleSet) {
+	if rs == nil {
+		rs = &model.CompiledRuleSet{}
+	}
+	r.rs = rs
+	r.rulesHash = rs.Generation
+	if r.rulesHash == "" {
+		var ids []string
+		for i := range rs.Rules {
+			ids = append(ids, rs.Rules[i].Rule.ID)
+		}
+		sum := sha256.Sum256([]byte(strings.Join(ids, "\n")))
+		r.rulesHash = hex.EncodeToString(sum[:])[:16]
+	}
+	r.metas = map[string]*ruleMeta{}
+	r.eventRules = map[model.EventName]bool{}
+	r.anchorEvery, r.batchAfter = model.DefaultAnchorEvery, model.DefaultBatchAfterTools
+	if in := rs.Settings.Inject; in != nil {
+		if in.AnchorEvery != nil {
+			r.anchorEvery = *in.AnchorEvery
+		}
+		if in.BatchAfterTools != nil {
+			r.batchAfter = *in.BatchAfterTools
+		}
+	}
+	for i := range rs.Rules {
+		cr := &rs.Rules[i]
+		if !cr.Rule.AppliesTo(r.client) {
+			continue
+		}
+		m := analyzeRule(cr)
+		r.metas[m.id] = m
+		r.needsEvidence = r.needsEvidence || m.usesVerify
+		r.eventRules[m.event] = true
+		r.order = append(r.order, m.id)
+		r.summaries[m.id] = &RuleSummary{RuleID: m.id, Counts: map[Class]int{KnownHit: 0, KnownMiss: 0, Unknown: 0, Approximate: 0}}
+	}
+}
+
+// -------------------------------------------------------- initial state ---
+
+// initialState is the state subset of model.Fixture (doc.go, --initial-state).
+type initialState struct {
+	read                 []string
+	priorHits            map[string]int
+	prevPrompt           string
+	toolCountSinceInject *int
+}
+
+var initialStateKeys = map[string]bool{"read": true, "prior_hits": true, "prev_prompt": true, "tool_count_since_inject": true}
+
+func loadInitialState(fsys sys.FS, path string) (*initialState, error) {
+	data, err := fsys.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("replay: reading initial state: %w", err)
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return nil, fmt.Errorf("%w: initial state %s is not a JSON object: %v", ErrUsage, path, err)
+	}
+	var bad []string
+	for k := range keys {
+		if !initialStateKeys[k] {
+			bad = append(bad, k)
+		}
+	}
+	if len(bad) > 0 {
+		sort.Strings(bad)
+		return nil, fmt.Errorf("%w: initial state %s: key(s) %s not allowed (only read, prior_hits, prev_prompt, tool_count_since_inject)", ErrUsage, path, strings.Join(bad, ", "))
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var fx model.Fixture
+	if err := dec.Decode(&fx); err != nil {
+		return nil, fmt.Errorf("%w: initial state %s: %v", ErrUsage, path, err)
+	}
+	return &initialState{read: fx.Read, priorHits: fx.PriorHits, prevPrompt: fx.PrevPrompt, toolCountSinceInject: fx.ToolCountSinceInject}, nil
+}
+
+// -------------------------------------------------------------- streams ---
+
+func (r *runner) processSubagents() error {
+	dir := filepath.Join(strings.TrimSuffix(r.opt.Transcript, filepath.Ext(r.opt.Transcript)), "subagents")
+	ents, err := r.deps.FS.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("replay: reading subagent transcripts: %w", err)
+	}
+	var names []string
+	for _, e := range ents {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		agent := strings.TrimPrefix(strings.TrimSuffix(name, ".jsonl"), "agent-")
+		f, err := r.deps.FS.OpenFile(filepath.Join(dir, name), os.O_RDONLY, 0)
+		if err != nil {
+			return fmt.Errorf("replay: opening subagent transcript: %w", err)
+		}
+		err = r.processStream(f, agent)
+		if cerr := f.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *runner) processStream(src io.Reader, fileAgent string) error {
+	tr, err := OpenTranscript(r.client, src)
+	if err != nil {
+		return err
+	}
+	for {
+		it, err := tr.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return fmt.Errorf("replay: reading transcript: %w", err)
+		}
+		if fileAgent != "" && (it.AgentID == "" || it.AgentID == "sidechain") {
+			it.AgentID = fileAgent
+		}
+		if !r.opt.Subagents && it.AgentID != "" {
+			continue
+		}
+		if err := r.ensureRules(it.Cwd); err != nil {
+			return err
+		}
+		r.items++
+		r.handle(it)
+	}
+	r.skipped += tr.Skipped()
+	return nil
+}
+
+// --------------------------------------------------------------- items ---
+
+func (r *runner) scopeFor(it *Item) *scope {
+	agent := it.AgentID
+	if agent == "" {
+		agent = "main"
+	}
+	key := scopeKey{it.SessionID, agent}
+	sc := r.scopes[key]
+	if sc == nil {
+		sc = &scope{st: newMemState(r.rulesHash), pending: map[string]pendingCall{}, exists: map[string]bool{}, agent: agent, session: it.SessionID}
+		r.scopes[key] = sc
+		if it.Cwd != "" {
+			sc.cwd = it.Cwd
+		} else {
+			sc.cwd = r.cwdBySession[it.SessionID]
+		}
+		if agent == "main" && r.initial != nil {
+			r.seed(sc)
+		}
+	}
+	if it.Cwd != "" {
+		sc.cwd = it.Cwd
+		r.cwdBySession[it.SessionID] = it.Cwd
+	}
+	if it.GitBranch != "" {
+		sc.branch = it.GitBranch
+	}
+	if !it.TS.IsZero() {
+		sc.lastTS = it.TS
+	}
+	return sc
+}
+
+func (r *runner) seed(sc *scope) {
+	is := r.initial
+	for _, p := range is.read {
+		n := r.norm(sc, p)
+		sc.st.addRead(n, time.Time{})
+		sc.exists[n] = true
+	}
+	for id, n := range is.priorHits {
+		sc.st.priorHits[id] = n
+	}
+	if is.prevPrompt != "" {
+		sc.st.promptTail = tailRunes(is.prevPrompt, promptTailRune)
+	}
+	if is.toolCountSinceInject != nil {
+		sc.st.sinceInject = *is.toolCountSinceInject
+	}
+}
+
+func (r *runner) handle(it *Item) {
+	sc := r.scopeFor(it)
+	ts := it.TS
+	if ts.IsZero() {
+		ts = sc.lastTS
+	}
+	switch it.Kind {
+	case ItemUserPrompt:
+		ev := r.buildEvent(sc, model.EventUserPromptSubmit, it, payloadIn{prompt: it.Text})
+		hits := r.runRules(sc, ev, it, ts)
+		sc.st.touch(ts, model.EventUserPromptSubmit, "")
+		sc.st.onPrompt(it.Text, r.anchorEvery)
+		sc.st.onHits(hits)
+	case ItemToolUse:
+		if len(sc.pending) >= maxPending && len(sc.order) > 0 {
+			delete(sc.pending, sc.order[0])
+			sc.order = sc.order[1:]
+		}
+		if it.ToolUseID != "" {
+			sc.pending[it.ToolUseID] = pendingCall{name: it.ToolName, input: it.ToolInput}
+			sc.order = append(sc.order, it.ToolUseID)
+		}
+		ev := r.buildEvent(sc, model.EventPreToolUse, it, payloadIn{toolName: it.ToolName, toolInput: it.ToolInput, toolUseID: it.ToolUseID})
+		hits := r.runRules(sc, ev, it, ts)
+		sc.st.touch(ts, model.EventPreToolUse, it.ToolName)
+		sc.st.onToolCall()
+		sc.st.onHits(hits)
+	case ItemToolResult:
+		r.handleResult(sc, it, ts)
+	case ItemAssistantText:
+		sc.st.lastText = it.Text
+	case ItemTurnEnd:
+		name := model.EventStop
+		if sc.agent != "main" {
+			name = model.EventSubagentStop
+		}
+		text := it.Text
+		if text == "" {
+			text = sc.st.lastText
+		}
+		ev := r.buildEvent(sc, name, it, payloadIn{lastText: &text})
+		hits := r.runRules(sc, ev, it, ts)
+		sc.st.touch(ts, name, "")
+		sc.st.onHits(hits)
+		sc.st.lastText = ""
+	case ItemCompact:
+		sc.st.sinceInject = 0
+	}
+}
+
+func (r *runner) handleResult(sc *scope, it *Item, ts time.Time) {
+	pc, ok := sc.pending[it.ToolUseID]
+	if !ok {
+		return
+	}
+	delete(sc.pending, it.ToolUseID)
+	name := model.EventPostToolUse
+	pin := payloadIn{toolName: pc.name, toolInput: pc.input, toolUseID: it.ToolUseID}
+	failed := it.IsError && r.hasEvent(model.EventPostToolUseFailure)
+	if failed {
+		name = model.EventPostToolUseFailure
+		pin.errText = it.Text
+	} else {
+		resp, _ := json.Marshal(it.Text)
+		pin.toolResponse = resp
+	}
+	ev := r.buildEvent(sc, name, it, pin)
+	hits := r.runRules(sc, ev, it, ts)
+	sc.st.touch(ts, name, pc.name)
+	sc.st.onHits(hits)
+	if failed {
+		sc.st.failureAt = ts
+		return
+	}
+	if ev != nil && ev.Tool != nil {
+		r.registerReads(sc, ev, ts)
+	}
+	sc.st.onMidTurn(r.batchAfter)
+}
+
+// registerReads applies the PostToolUse read-set rule of internal/hook/doc.go.
+func (r *runner) registerReads(sc *scope, ev *model.Event, ts time.Time) {
+	tool := ev.Tool
+	switch tool.Name {
+	case model.ToolRead, model.ToolEdit, model.ToolWrite, model.ToolMultiEdit, model.ToolNotebookEdit:
+		for _, p := range tool.Targets {
+			n := r.norm(sc, p)
+			sc.st.addRead(n, ts)
+			sc.exists[n] = true
+		}
+		for _, p := range tool.TargetDeletes {
+			sc.exists[r.norm(sc, p)] = false
+		}
+		if tool.Name != model.ToolRead {
+			r.writeBySession[sc.session] = ts
+		}
+	}
+	if tool.Shell != model.ShellNone {
+		cl, err := r.parseShell(tool)
+		if err != nil || cl == nil {
+			return
+		}
+		for _, p := range shellReadPaths(cl) {
+			n := r.norm(sc, p)
+			sc.st.addRead(n, ts)
+			sc.exists[n] = true
+		}
+	}
+}
+
+func (r *runner) parseShell(tool *model.ToolCall) (*model.CommandList, error) {
+	switch tool.Shell {
+	case model.ShellBash:
+		if r.deps.Bash == nil {
+			return nil, errors.New("replay: no bash parser")
+		}
+		return r.deps.Bash.ParseBash(tool.Command)
+	case model.ShellPowerShell:
+		if r.deps.PS == nil {
+			return nil, errors.New("replay: no PowerShell parser")
+		}
+		return r.deps.PS.ParsePowerShell(tool.Command)
+	}
+	return nil, nil
+}
+
+func (r *runner) hasEvent(name model.EventName) bool {
+	for _, ne := range model.NativeEventTable[r.client] {
+		if ne.Event == name {
+			return true
+		}
+	}
+	return false
+}
+
+// ----------------------------------------------------------- evaluation ---
+
+type payloadIn struct {
+	prompt       string
+	toolName     string
+	toolInput    []byte
+	toolUseID    string
+	toolResponse json.RawMessage
+	errText      string
+	lastText     *string
+}
+
+type hookPayload struct {
+	SessionID            string          `json:"session_id,omitempty"`
+	ConversationID       string          `json:"conversation_id,omitempty"`
+	Cwd                  string          `json:"cwd,omitempty"`
+	HookEventName        string          `json:"hook_event_name"`
+	AgentID              string          `json:"agent_id,omitempty"`
+	SubagentID           string          `json:"subagent_id,omitempty"`
+	Prompt               string          `json:"prompt,omitempty"`
+	ToolName             string          `json:"tool_name,omitempty"`
+	ToolInput            json.RawMessage `json:"tool_input,omitempty"`
+	ToolUseID            string          `json:"tool_use_id,omitempty"`
+	ToolResponse         json.RawMessage `json:"tool_response,omitempty"`
+	Error                string          `json:"error,omitempty"`
+	LastAssistantMessage *string         `json:"last_assistant_message,omitempty"`
+}
+
+// buildEvent synthesizes the client's hook payload for a transcript item and
+// parses it with the client's adapter (the same normalization as the live
+// hook). It returns nil when the event does not exist on the client or the
+// adapter rejects the payload.
+func (r *runner) buildEvent(sc *scope, name model.EventName, it *Item, in payloadIn) *model.Event {
+	native := ""
+	for _, ne := range model.NativeEventTable[r.client] {
+		if ne.Event == name {
+			native = ne.Native
+			break
+		}
+	}
+	if native == "" {
+		return nil
+	}
+	if !r.eventRules[name] && name != model.EventPostToolUse {
+		return nil // nothing to evaluate and no state to derive from it
+	}
+	p := hookPayload{
+		SessionID: it.SessionID, Cwd: sc.cwd, HookEventName: native,
+		Prompt: in.prompt, ToolName: in.toolName, ToolUseID: in.toolUseID,
+		ToolResponse: in.toolResponse, Error: in.errText, LastAssistantMessage: in.lastText,
+	}
+	if len(in.toolInput) > 0 && json.Valid(in.toolInput) {
+		p.ToolInput = in.toolInput
+	}
+	if sc.agent != "main" {
+		p.AgentID = sc.agent
+	}
+	if r.client == model.ClientCursor {
+		p.ConversationID = it.SessionID
+		p.SubagentID = p.AgentID
+	}
+	data, err := json.Marshal(&p)
+	if err != nil {
+		return nil
+	}
+	ev, err := r.adapter.ParseEvent(native, data)
+	if err != nil || ev == nil {
+		return nil
+	}
+	ev.ReceivedAt = it.TS
+	return ev
+}
+
+// runRules evaluates the rules of ev.Name and records the judgements. It
+// returns the ids of the rules that hit (feeds prior_hit).
+func (r *runner) runRules(sc *scope, ev *model.Event, it *Item, ts time.Time) []string {
+	if ev == nil || !r.eventRules[ev.Name] {
+		return nil
+	}
+	ctx := r.pathContext(sc)
+	in := &model.EvalInput{
+		Event: ev, Client: r.client, Paths: ctx, Session: sc.st, SessionReadable: true,
+		World: &replayWorld{r: r, sc: sc}, Now: ts,
+	}
+	if ev.Tool != nil && ev.Tool.Shell != model.ShellNone {
+		tool := ev.Tool
+		in.Commands = model.NewLazyCommands(tool.Command, func(string) (*model.CommandList, error) {
+			cl, err := r.parseShell(tool)
+			if err == nil && cl == nil {
+				err = errors.New("replay: shell parser returned no result")
+			}
+			return cl, err
+		})
+	}
+	recs, hasEvidence := r.evidenceFor(sc.session)
+	if hasEvidence {
+		in.Evidence = newEvidenceView(recs, ts, r.writeBySession[sc.session])
+	}
+
+	verdict, err := r.deps.Engine.Evaluate(r.rs, in)
+	var results []model.RuleResult
+	var hits []model.RuleHit
+	if err != nil || verdict == nil {
+		for _, id := range r.order {
+			if m := r.metas[id]; m.event == ev.Name {
+				results = append(results, model.RuleResult{RuleID: id, Outcome: model.TriUnknown, UnknownCause: causeEvalError})
+			}
+		}
+	} else {
+		results, hits = verdict.Results, verdict.Hits
+	}
+
+	var hitIDs []string
+	for _, h := range hits {
+		hitIDs = append(hitIDs, h.RuleID)
+	}
+	for _, res := range results {
+		m := r.metas[res.RuleID]
+		sum := r.summaries[res.RuleID]
+		if m == nil || sum == nil {
+			continue
+		}
+		class, cause := classify(m, res, hasEvidence, r.client)
+		sum.Counts[class]++
+		switch {
+		case res.Outcome == model.TriTrue && class != Unknown:
+			s := Sample{
+				ID: SampleID(r.transcriptRef, it.UUID, res.RuleID, r.rulesHash), RuleID: res.RuleID,
+				Class: class, Event: ev.Name, TS: it.TS, UUID: it.UUID,
+			}
+			for _, h := range hits {
+				if h.RuleID == res.RuleID {
+					s.Matched = h.Matched
+					break
+				}
+			}
+			r.samples = append(r.samples, s)
+		case class == Unknown && r.unknownKept[res.RuleID] < maxUnknownSamples:
+			r.unknownKept[res.RuleID]++
+			r.samples = append(r.samples, Sample{
+				ID: SampleID(r.transcriptRef, it.UUID, res.RuleID, r.rulesHash), RuleID: res.RuleID,
+				Class: Unknown, Event: ev.Name, TS: it.TS, UUID: it.UUID, UnknownCause: cause,
+			})
+		}
+	}
+	return hitIDs
+}
+
+// evidenceFor returns the trusted evidence records for a session and
+// whether any exist.
+func (r *runner) evidenceFor(session string) ([]model.VerifyRecord, bool) {
+	if !r.needsEvidence {
+		return nil, false
+	}
+	if r.opt.EvidenceMode == "file" {
+		if !r.evidenceLoaded {
+			r.evidenceLoaded = true
+			recs, err := loadEvidenceFile(r.deps.FS, r.opt.EvidenceFile)
+			if err == nil {
+				r.evidenceFile = recs
+			}
+		}
+		return r.evidenceFile, len(r.evidenceFile) > 0
+	}
+	recs, ok := r.evidence[session]
+	if !ok {
+		recs = loadEvidenceDir(r.deps.FS, r.deps.EvidenceDir, session)
+		r.evidence[session] = recs
+	}
+	return recs, len(recs) > 0
+}
+
+// pathContext builds (and caches) the PathContext of a scope's cwd.
+func (r *runner) pathContext(sc *scope) model.PathContext {
+	if ctx, ok := r.pathCtx[sc.cwd]; ok {
+		return ctx
+	}
+	goos := runtime.GOOS
+	if looksWindows(sc.cwd) {
+		goos = "windows"
+	}
+	ctx := model.PathContext{Home: r.homeNorm, GOOS: goos}
+	if sc.cwd != "" {
+		ctx.Cwd = r.deps.Paths.Normalize(sc.cwd, "", ctx)
+		ctx.ProjectRoot = ctx.Cwd
+		dir := filepath.Clean(sc.cwd)
+		for i := 0; i < 64; i++ {
+			if _, err := r.deps.FS.Stat(filepath.Join(dir, ".git")); err == nil {
+				ctx.ProjectRoot = r.deps.Paths.Normalize(dir, "", ctx)
+				break
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+	r.pathCtx[sc.cwd] = ctx
+	return ctx
+}
+
+func looksWindows(cwd string) bool {
+	if strings.HasPrefix(cwd, `\\`) {
+		return true
+	}
+	return len(cwd) >= 3 && cwd[1] == ':' && (cwd[2] == '\\' || cwd[2] == '/') &&
+		(cwd[0] >= 'a' && cwd[0] <= 'z' || cwd[0] >= 'A' && cwd[0] <= 'Z')
+}
+
+func (r *runner) norm(sc *scope, p string) string {
+	return r.deps.Paths.Normalize(p, sc.cwd, r.pathContext(sc))
+}
+
+// replayWorld answers path_exists from the transcript first, then from the
+// current disk (approximate); env and branch come from the transcript.
+type replayWorld struct {
+	r  *runner
+	sc *scope
+}
+
+func (w *replayWorld) PathExists(norm string) model.Tri {
+	if v, ok := w.sc.exists[norm]; ok {
+		return model.TriOf(v)
+	}
+	_, err := w.r.deps.FS.Stat(filepath.FromSlash(norm))
+	switch {
+	case err == nil:
+		return model.TriTrue
+	case errors.Is(err, fs.ErrNotExist):
+		return model.TriFalse
+	}
+	return model.TriUnknown
+}
+
+func (w *replayWorld) Getenv(string) (string, bool) { return "", false }
+
+func (w *replayWorld) Branch() (string, model.Tri) {
+	if w.sc.branch == "" {
+		return "", model.TriUnknown
+	}
+	return w.sc.branch, model.TriTrue
+}
