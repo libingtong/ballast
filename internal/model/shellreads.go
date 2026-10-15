@@ -19,7 +19,58 @@ package model
 // Implemented by U2 (owner of the read-extraction tables); this file is the
 // only file under internal/model U2 may edit, plus shellreads_test.go.
 func ShellReadPaths(cl *CommandList) []string {
-	panic("unimplemented: model.ShellReadPaths (U2)")
+	if cl == nil {
+		return nil
+	}
+	var out []string
+	var seen map[string]struct{}
+	changesDir := false
+	for i := range cl.Nodes {
+		n := &cl.Nodes[i]
+		if !changesDir && len(n.Argv) > 0 && !n.Argv[0].Dynamic {
+			cmd := n.Argv[0].Lit
+			if cl.Shell == ShellPowerShell {
+				lower := []byte(cmd)
+				for j, c := range lower {
+					if c >= 'A' && c <= 'Z' {
+						lower[j] = c + 'a' - 'A'
+					}
+				}
+				switch string(lower) {
+				case "set-location", "push-location", "pop-location", "cd", "sl", "chdir", "pushd", "popd":
+					changesDir = true
+				}
+			} else if cmd == "cd" || cmd == "pushd" || cmd == "popd" {
+				changesDir = true
+			}
+		}
+		for _, r := range n.Reads {
+			if r.Dynamic || r.Path == "" {
+				continue
+			}
+			if _, dup := seen[r.Path]; dup {
+				continue
+			}
+			if seen == nil {
+				seen = make(map[string]struct{})
+			}
+			seen[r.Path] = struct{}{}
+			out = append(out, r.Path)
+		}
+	}
+	if !changesDir {
+		return out
+	}
+	abs := out[:0]
+	for _, p := range out {
+		if IsAbsShellPath(p) {
+			abs = append(abs, p)
+		}
+	}
+	if len(abs) == 0 {
+		return nil
+	}
+	return abs
 }
 
 // IsAbsShellPath reports whether a literal shell path is absolute on any
@@ -30,5 +81,16 @@ func ShellReadPaths(cl *CommandList) []string {
 //
 // Implemented by U2.
 func IsAbsShellPath(p string) bool {
-	panic("unimplemented: model.IsAbsShellPath (U2)")
+	switch {
+	case p == "":
+		return false
+	case p[0] == '/' || p[0] == '~' && (len(p) == 1 || p[1] == '/' || p[1] == '\\'):
+		return true
+	case len(p) >= 2 && p[0] == '\\' && p[1] == '\\':
+		return true
+	case len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/'):
+		c := p[0] | 0x20
+		return c >= 'a' && c <= 'z'
+	}
+	return false
 }
