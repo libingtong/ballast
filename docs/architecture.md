@@ -1,6 +1,6 @@
-# Ballast 架构与接口契约(冻结版 v1.1)
+# Ballast 架构与接口契约(冻结版 v1.3)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -119,19 +119,19 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 |---|---|---|---|
 | `rules.json` | 用户 | RuleFile(user 层) | 用户手写 |
 | `state/<repo_inst>/<session>/<agent>.json` | U5 | `state.Record` JSON,`"v":1` | 加锁事务 + 原子替换,不 fsync |
-| `state/<repo_inst>/<session>/<agent>.json.lock` | U5 | 空文件,flock / LockFileEx | — |
+| `state/<repo_inst>/<session>/<agent>.json.lock` | U5 | 空文件,flock / LockFileEx | DropAgent/DropSession 只在持锁时删状态文件,**从不删除锁文件**;锁文件随会话目录由 GC 清理(v1.3) |
 | `evidence/<repo_inst>/<name>/<t_start 20 位纳秒>-<job_id>.json` | U8 | `model.VerifyRecord` | 原子 + **fsync**,0600 |
 | `jobs/<repo_inst>/<name>/<job_id>.json` | U8 | `model.JobStatus` | 原子 |
 | `jobs/<repo_inst>/<name>/<job_id>.log` | U8 | runner 合并输出 | 追加 |
 | `audit/YYYY-MM.jsonl`、`audit/YYYY-MM.N.jsonl` | U5 | 每行一个 `model.AuditRecord`,≤8 KiB | `O_APPEND` 单次 write |
 | `cache/stat.json` | U4 | `{key(stat 指纹+版本) → generation}` | 原子,失败不算异常 |
-| `cache/rules-<generation>.json` | U4 | `{sources, rules([]LoadedRule), settings, notices}` | 原子,失败不算异常 |
+| `cache/rules-<generation>-<key[:8]>.json` | U4 | `{sources, rules([]LoadedRule), settings, notices}`;key = stat 指纹键,避免同 generation 的不同仓库互相覆盖(v1.3) | 原子,失败不算异常 |
 | `cache/lkg/<layer>-<sha256(abs path)[:12]>.json` | U4 | 该层最近一次合法的原始字节 | 原子 |
 | `backups/<UTC yyyymmddThhmmssZ>-<rand6>/` | U10 | 被改写文件的原样副本(文件名为原绝对路径,分隔符转 `%2F`) | 目录 0700、文件 0600,保留最近 10 个 |
 | `reviews/<rule_id>.json` | U9 | `stats.Review` | 原子 |
 | `labels/<rule_id>.jsonl` | 用户/U9 | `{"sample_id","label":"tp"\|"fp","note"}` | 用户追加 |
 | `install-manifest.json` | U10 | `model.InstallManifest` | 原子 + fsync |
-| `gc.stamp` | U7/U12 | 空文件,mtime 即上次 GC 时间 | — |
+| `gc.stamp` | U7 | 空文件,mtime 即上次 GC 时间 | 只由 hook 在派生 `ballast gc` 之前 touch;派生失败时删除以便下次重试;`ballast gc` 本身不写(v1.3) |
 | `replay-set.txt` | 用户 | 每行一个 transcript 路径(不入库) | — |
 
 目录权限 0700,文件 0600。所有路径经 `layout.Layout` 解析,任何单元不得手拼 `~/.ballast`。
@@ -221,7 +221,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 
 | 客户端 | 原生事件 → 归一事件(安装全部) |
 |---|---|
-| Claude Code | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, SubagentStop, SessionEnd(同名) |
+| Claude Code | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, SubagentStop, SessionEnd(同名);另有**仅解析**的 PreCompact、PostCompact、SubagentStart(表中 `Install=false`:适配器能解析,安装器与 doctor 跳过,规则不能引用;v1.3) |
 | Codex | SessionStart, UserPromptSubmit, PreToolUse, **PermissionRequest→PreToolUse**, PostToolUse, Stop |
 | Cursor | sessionStart→SessionStart, beforeSubmitPrompt→UserPromptSubmit, preToolUse→PreToolUse, beforeShellExecution→PreToolUse(Bash), beforeMCPExecution→PreToolUse(mcp__*), beforeReadFile→PreToolUse(Read), postToolUse→PostToolUse, afterAgentResponse→AgentResponse(仅记账), stop→Stop, subagentStop→SubagentStop |
 | Hermes | on_session_start→SessionStart, pre_llm_call→UserPromptSubmit, pre_tool_call→PreToolUse, post_tool_call→PostToolUse, on_session_end→SessionEnd |
@@ -233,7 +233,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | 原生 | 归一 | 说明 |
 |---|---|---|
 | Codex `apply_patch` | Edit | 解析 envelope:Update/Add/Delete/Move 全部目标进入 `Targets`;Add → `TargetAdds`;Delete → `TargetDeletes` |
-| Codex `exec_command` / `shell` | Bash | `cmd` 为字符串或 argv 数组(数组按 shell 引号拼接) |
+| Codex `exec_command` / `shell` | Bash | `cmd` 为字符串或 argv 数组(数组按 shell 引号拼接)。例外(v1.3):argv 形如 `["apply_patch"\|"applypatch", …, "<envelope>"]` 时按 `apply_patch` 归一为 Edit(RawName 保留原名);字符串形式的 `apply_patch <<EOF` 仍是 Bash(已知局限) |
 | Cursor `Shell` | Bash | |
 | Hermes `terminal` / `shell` / `execute_shell` | Bash | |
 | Hermes `read_file` / `write_file` / `create_file` / `patch_file` / `edit_file` | Read / Write / Write / Edit / Edit | |
@@ -254,6 +254,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 - **卸载以 manifest 为准**(覆盖已卸载的客户端);配置解析失败返回非 0。
 - 托管层(Claude managed settings)已部署 Ballast 时拒绝用户层安装(A15)。
 - 不在 `init` 时自动安装;不按子串识别;不绑定解释器;备份轮转。
+- **结构标记**(v1.3):安装时在 `ManagedFlag` 中记录被填充的容器(JSON `hooks` 对象、Hermes `hooks:` 表头与各事件键)原本是否存在及其原文,以及新建文件上方最近的已存在目录;卸载只删除 Ballast 创建的空容器,还原用户原有的空 `hooks` 对象、`hooks: {}`/`hooks: # 注释` 表头与 `pre_tool_call: []`,目录只清理到安装前已存在的那一层(`--force` 新建的客户端根目录一并清理)。键名见 `internal/install/doc.go`。
 
 ### 5.1 Claude Code
 
@@ -281,7 +282,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 
 ### 5.3 Cursor
 
-- `~/.cursor/hooks.json`:`{"version":1,"hooks":{"<event>":[{"command":"<quoted argv>"}]}}`;`stop`、`subagentStop` 条目另加 `"loop_limit":10`;10 个原生事件。`version:1` 仅在缺失时添加。
+- `~/.cursor/hooks.json`:`{"version":1,"hooks":{"<event>":[{"command":"<quoted argv>"}]}}`;`stop`、`subagentStop` 条目另加 `"loop_limit":10`;10 个原生事件。`version:1` 仅在缺失时添加;添加到已有文件时记入 manifest,卸载后若已无任何 hooks 则一并删除(v1.3)。
 - `~/.cursor/rules/ballast.mdc`:整文件托管(`inject.RenderMDC`,front matter `alwaysApply: true` + 托管标记行 `inject.MDCMarker` + 全文注入),记为 `ManagedFile{whole:true}`,卸载删除。规则变更后由 `ballast install --client cursor` 重新生成;`doctor` 检查是否过期(`cursor.mdc_current`)。
 - 安装后提示 Reload Window。
 
@@ -428,6 +429,7 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 - `scripts/bench/`:由 `proto/m0c/bench` 移植,11 个场景,预热 20、正式 300、p95 取 `ceil(0.95n)`,门槛 30ms。
 - **集成验收清单**(从各单元移交):U3 的"rules/、examples/ 全部 lint 与 test-rules 通过";U8 的 `commitform.json` 端到端(`cmd` 列经 bashparse 取 git 节点 → `ParseCommitForm`,与 `want` 一致)与 `scripts/freshness.sh`(真实 pre-commit hook 调 `ballast verify --check`);U7 的 bench p95 ≤ 30ms;U11 的 lint/test-rules;hook 端到端:Codex `exec_command` 执行 `sed -n 1,80p a.go` 后对 `a.go` 的 `apply_patch` 不命中 `read-before-edit`。
 - `.github/workflows/ci.yml`:ubuntu、macos、windows 三平台;`go vet ./...`、`go test ./... -race`、`internal/archtest`、accept 脚本、bench 门槛;Windows 跑 PowerShell 回归。
+- v1.3 新增接线项:`replay.Deps.Project` 注入 `project.Loader`(否则 replay 退回宽松解码);退出码映射可继续用 `install.Err*`(已是 `model` 同值别名)。
 - 合并 U1–U11 后删除 `internal/cli/wire.go` 中的 `wiringSurface`,换成真实接线;`proto/` 在 M1 结束时按计划删除(由用户决定时机)。
 
 ---
@@ -442,6 +444,7 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
   - 时间、随机数、环境变量、文件系统一律经 `sys.Clock`/`sys.IDGen`/`sys.Env`/`sys.FS` 注入。
 - **分项预算**(进程内,p50 目标):读 stdin + 解析 ≤ 0.3ms;规则加载(缓存命中)≤ 0.5ms;冷编译 12 条 ≤ 1ms;状态无锁读 ≤ 0.2ms;求值(不含快照)≤ 0.5ms;100KB bash 解析 ≤ 3ms;原生 C 快照 10k 文件 ≤ 5ms;状态事务 ≤ 1ms(锁等待上限 20ms);审计写 ≤ 0.3ms。
 - **看门狗** 150ms;昂贵谓词(快照退回 git)的 deadline = 启动时刻 + 120ms。退回 git 超时 → unknown + 审计 diag。
+- 原生快照的回退条件以 `internal/snapshot/doc.go` 为准;v1.3 把子模块相关条件(HEAD 无法原生解析、git 目录缺 `objects/`/`refs/`、gitlink 被非目录替换、已跟踪文件被含 `.git` 的目录替换)和 racy 判定中的 smudged 规则(索引中 size 为 0 且 id 不是空 blob)写入契约。
 - 状态文件**不 fsync**;evidence、manifest、备份 **fsync**(不在热路径)。
 - gob 规则缓存可选(M0c:12 条规则只省约 0.3ms);热更新所需的 stat 检测必须保留。
 - 输出协议:stdout 只写一次;GC 只在 SessionStart 以 detached 子进程触发,每天至多一次(`gc.stamp`)。
@@ -453,6 +456,7 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 | 层 | 约定 |
 |---|---|
 | **hook(U7)** | 唯一的"放行决策者"。任何返回的 error、panic、看门狗 → stdout 空、stderr `ballast: <msg>`、exit 1。只有 stdout 成功写出后才 exit 0。 |
+| hook 降级的审计频率(v1.3) | `ErrNotRepo` 每会话只在 SessionStart 写一次 `diag: not_a_repo`;其他 Locate 错误按无仓库降级并写 `diag: repo_locate_failed`;配置 notice 只在注入实际展示它时写审计;GC 派生或写 stamp 失败在提交后补写 `diag: gc_spawn_failed`(第二次 Append,失败忽略)。详见 `internal/hook/doc.go` |
 | 必须向 hook 返回 error(= 放行)的情形 | stdin 非 JSON 对象、未知客户端/事件、`Rules.Load` 的意外 I/O 错误、`State.Commit` 的非超时错误(磁盘满等)、`Audit.Append` 任何错误(含短写)、`Render` 错误、内部不变量被破坏。 |
 | **不得**作为 error 返回(内部降级 + 审计 diag) | 不在 git 仓库(`ErrNotRepo`);状态锁超时(`LockTimeout`);状态文件损坏(重置);状态无锁读失败(相关谓词 unknown);规则文件非法(LKG/空层 + `config_invalid`);缓存/LKG 写失败(stderr 诊断);谓词 unknown;快照退回超时;Spawner 失败;能力降级。 |
 | dsl(U3) | `Evaluate` 不得 panic;内部错误转为该规则 unknown 并在 `UnknownCause` 说明。`ParseFile` 只在输入无法解码时返回 error,其余为 Diagnostic。 |
@@ -461,7 +465,7 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 | state/audit(U5) | 锁超时不报错;其余 I/O 错误如实返回。 |
 | snapshot/evidence(U8) | `ErrFallback`、`ErrDeadline`、`ErrNotRepo` 用 `errors.Is` 区分;View 方法不返回 error,而以 `FreshResult.Cause` 表达。 |
 | 非热路径命令(CLI) | 返回 error,由 U12 映射为 §7 的退出码;不吞错(卸载加载失败必须非 0)。 |
-| 哨兵错误 | 统一在 `model/errors.go`,各单元用 `%w` 包装。 |
+| 哨兵错误 | 跨单元共享的哨兵统一在 `model/errors.go`,各单元用 `%w` 包装。v1.3 澄清:非热路径命令包(install、stats、replay)自身的用法/闸门类哨兵允许是包级变量,由 CLI 按包变量 `errors.Is` 映射退出码,但必须在包内集中定义并写明退出码;install 的 5 个哨兵已移入 model(`ErrInstallUsage`、`ErrClientNotDetected`、`ErrBinaryUnstable`、`ErrOrgWriteDenied`、`ErrInstallLocked`),包内原名保留为同值别名,调用方无需修改。 |
 
 边界声明(写入用户文档):stdout 一旦提交,决策即生效;之后进程即使崩溃也不撤销。磁盘写满会使强制失效(风险 6),审计与 doctor 告警。
 
@@ -511,6 +515,77 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 ---
 
 ## 14. 修订记录
+
+### v1.3(2026-10-16,U1–U11 实现后的契约跟进)
+
+各单元在实现与审核中提出的契约问题、已知缺口与审核 minor,逐条裁决如下(采纳 = 本版落实;延后 = 记录在案、本版不改;不采纳 = 维持原契约)。`internal/cli`、`cmd/ballast` 不在本次范围内。
+
+| 来源 | 条目 | 裁决 | 处理 / 涉及文件 |
+|---|---|---|---|
+| U1 契约 | §5.2 先词法折叠 `..` 与内核物理语义不符 | 采纳 | dsl-semantics §5.2 写明 POSIX 候选含物理 `..` 形式;`internal/paths/doc.go` |
+| U1 契约 | `paths.CompileGlobs(GlobOptions)` 无法表达 `~` 双重展开 | 采纳(文档) | 其他单元只经 `ports.PathService` 的 `Service.CompileGlobs`;包级函数是实现辅助;`internal/paths/doc.go` |
+| U1 缺口 | 物理父目录解析只在 OSFS 验证;Service 缓存假定布局稳定 | 延后 / 接受 | 等 Windows CI;单进程内成立 |
+| U1 minor | `physicalDotDot` 把盘符路径拼到 cwd | 采纳 | `internal/paths/paths.go` 加 `isDriveAbs` 判断,`candidates_test.go` 补用例 |
+| 多个单元 | `GOOS=windows go vet` 在 `proto/m0c/hook` 失败 | 采纳 | `proto/m0c/hook/*.go` 加 `//go:build !windows`(原型保留) |
+| U2 缺口 | 100KB 解析约 2.4ms,高于 M0c 目标 2ms | 延后 | 满足 <5ms 验收;优化留给 bench 阶段 |
+| U2 minor | `builtin cd` 不被视为切换目录 | 采纳 | 先改 `model.ShellReadPaths` 冻结规则文字,再实现;`shellreads_test.go` 补用例;dsl-semantics §14 |
+| U3 契约 | Bash 无写入目标时的绑定、B/U 是否适用于无 `when` 的规则 | 采纳 | 无 shell 匹配器、无 `path` 时以 `when` 是否引用 `$target`(`usesTarget`)门控解析;dsl-semantics §9 |
+| U3 契约 | 07 示例 hermes PostToolUse warn | 采纳 | `schema/examples/07` 的 `secret-in-output` 加 `clients` |
+| U3 契约 | `input-field-unknown` 与 `field-not-applicable` 措辞 | 采纳(文档) | 以 §11 为准,允许同时报两者;`internal/dsl/doc.go` |
+| U3 契约 | `…(+N)` 中 N 的含义 | 采纳(文档) | N = 未完整显示的命中行数;dsl-semantics §10.1 |
+| U3 契约 | 文本源缺失为 unknown 还是 false | 采纳 | 按 §5.5 为 false;仅状态不可读时 unknown;`internal/dsl/eval.go` |
+| U3 契约 | `TestCase/TestReport.Skipped` | 采纳 | 作为追加字段写入 `internal/dsl/doc.go` |
+| U3 缺口 | `strip_quotes` 不跨行配对 | 接受 | dsl-semantics §5.5 写明 |
+| U3 minor | `verify_fresh` 绑定节点含无匹配器的写入目标绑定 | 采纳 | `binding.matcher` 字段;`cond.go` 只认匹配器绑定;`predicates_test.go` |
+| U3 minor | `len(p.when) > 0` 门控 | 采纳 | 编译期 `program.usesTarget`;`matchers_test.go` |
+| U4 缺口 | 同 generation 不同仓库互相覆盖 `rules-<generation>.json` | 采纳 | 文件名改为 `rules-<generation>-<key[:8]>.json`(§3.1);`internal/config/cache.go` |
+| U4 缺口 | 不可用层不缓存、`fitCut` 省略 omitted 行 | 接受 | 维持实现 |
+| U4 minor | `degrade_test.go` 注释与实现不符 | 采纳 | 改注释 |
+| U5 契约 | `Matched` 由谁裁剪 | 采纳(文档) | `audit.Writer` 兜底脱敏与裁剪;`model/audit.go` 注释 |
+| U5 契约 | `ClipRunes` 语义 | 采纳(核对) | 结果 ≤ n rune、省略号计入;hook 本地 `clipRunes` 语义一致 |
+| U5 缺口 | Windows 锁只做了 vet | 延后 | 等 Windows CI |
+| U5 minor | DropAgent/DropSession 删除锁文件的竞态 | 采纳 | 只在持锁时删状态文件,永不删锁文件,锁超时留给 GC;`internal/state/store.go`、`ports.StateStore` 注释、§3.1 |
+| U6 契约 | InstallTargets/Transcript/Doctor 未在 adapter 实现 | 不采纳(维持 §13 拆分) | — |
+| U6 契约 | PreCompact/PostCompact/SubagentStart 不在表中 | 采纳 | `NativeEventTable[claude-code]` 增加三行 `Install=false`,删除 claudecode 私有白名单;§4.3 |
+| U6 契约 | Hermes post_tool_call 只能 log | 接受 | 与 §4.1 一致 |
+| U6 缺口 | Codex/Cursor/Hermes 字段未取证、Cursor `loop_count` 推断、heredoc 形式的 apply_patch | 延后 | 【未核验】项随 doctor/取证跟进 |
+| U6 minor | apply_patch 标记行首空白/多空格 | 采纳 | `normMarker`;`testdata/patches.json` 追加 3 行 |
+| U6 minor | `shell` argv `["apply_patch", envelope]` 漏判 | 采纳(契约变更) | 归一为 Edit(§4.4);`testdata/parse.json` 追加 3 行 |
+| U6 minor | 非法 JSON 写入 `ToolCall.Input` 导致无法序列化 | 采纳 | 只在 `json.Valid` 时设置 |
+| U6 minor | `FlattenStrings` 32 层截断 | 采纳 | 去掉截断,路径改为线性构造 |
+| U7 契约 | `ShellReadPaths` 桩 | 采纳 | U2 已合并;删除 hook 测试中的替身 |
+| U7 契约 | `Readable`/`Exists` 语义 | 采纳(核对) | 缺失文件 = Readable、!Exists、nil error;Readable=false 当且仅当 err≠nil;`ports.StateStore.Load`、`model.StateLoadInfo` 注释 |
+| U7 契约 | `FlushedEvals` 分工、`RuleDigest` 与 Generation 关系 | 采纳(核对) | RuleDigest 非 nil 当且仅当事件可注入;两者同时记录;`model.Injection` 注释、`internal/hook/doc.go` |
+| U7 契约 | Spawner 的 env/logPath、gc.stamp | 采纳(核对) | env 为完整环境(nil = 继承),logPath 空 = 空设备;stamp 只由 hook 维护;`ports.Spawner`、§3.1 |
+| U7 契约 | hook 本地脱敏、notice 审计频率、阻断决策不渲染注入、job 回报窗口、Stop 文本回退 | 采纳(文档) | 写入 `internal/hook/doc.go` |
+| U7 契约 / minor | `ErrNotRepo` 每会话一次 diag | 采纳 | §10、`internal/hook/doc.go` |
+| U7(核对发现) | Cursor `afterAgentResponse` 文本保留头部,与 state "保留最后 4000 字"不一致 | 采纳 | hook 改为保留尾部;`model.StateDelta` 注释 |
+| U7 缺口 | bench、真实 ports 端到端 | 延后 | U12 集成验收 |
+| U7 minor | Spawner 失败未审计 | 采纳 | `diag: gc_spawn_failed`,派生失败回滚 stamp;`lifecycle_test.go` |
+| U7 minor | transcriptRef 大小写敏感 | 采纳 | windows/darwin 上前缀比较忽略大小写 |
+| U8a 契约 | 回退条件、smudged 规则、`Options.Env` | 采纳 | `internal/snapshot/doc.go` 契约段;§9 |
+| U8a 缺口 | sha256、reftable 子模块 | 接受 | 回退 git |
+| U8a minor | 损坏子模块仍给出原生 gitlink id | 采纳 | `submoduleHead` 要求 `objects/`、`refs/`;`TestDamagedSubmoduleFallsBack` |
+| U8b 契约 | `JobStatus.Deadline` 注释 | 采纳 | `timeout_s + JobDeadlineSlack` |
+| U8b 契约 | runner 自带锁与 state 锁重复 | 延后 | 将来在 `internal/sys` 提供锁原语后合并 |
+| U8b 契约 | 动态 `-m` 值放行(DEVIATION) | 采纳 | 值类选项的动态值不使 commit 形式不可解析(Claude 常用 `-m "$(cat <<EOF…)"`);`internal/evidence/doc.go` |
+| U8b 缺口 | PID 复用、timeout 改小漏判、无锁 runner | 接受 | 均为保守一侧,已写入包文档 |
+| U8b minor | supersede 测试未断言持锁 | 采纳 | `detached_test.go` |
+| U9 缺口 | 不跳过 compact agent 的 SubagentStop | 延后 | 缺 transcript 取证 |
+| U9 缺口 | 无 project.json 一律 unknown;按本机 project.json 判定 | 接受 | — |
+| U9 minor | 主流程看不到之后回放的子 agent 写入 | 采纳 | 回放前预扫描子 agent 文件写入;`TestRunMainEventSeesEarlierSubagentWrites` |
+| U9 minor | 回放端宽松解码 project.json | 采纳 | 新增可选 `replay.Deps.Project`(U12 接线,见 §8.3) |
+| U10 契约 | 哨兵错误位置 | 采纳 | 移入 `model/errors.go`,install 保留同值别名;§10 |
+| U10 契约 | manifest 不记录创建的目录 | 采纳(以结构标记实现) | `dir:kept` 等 `ManagedFlag`,未新增 `ManagedFile` 字段;§5 |
+| U10 缺口 | 锁清理残余窗口、YAML 深层检查、python3 校验 | 接受 | — |
+| U10 minor | Cursor `version:1` 卸载后残留 | 采纳 | `json:version` 标记,无 hooks 时卸载删除;§5.3 |
+| U10 minor | Hermes 卸载删掉用户原有表头/注释/空事件键 | 采纳 | `yaml:hooks`、`yaml:hooks.<event>` 标记,卸载按原文还原 |
+| U10 minor | 用户原有空 `~/.cursor/rules` 被删 | 采纳 | `dir:kept`;`TestUninstallKeepsPreexistingCursorRulesDir` |
+| U11 缺口 | lint/test-rules 待 U12 | 延后 | 本次用真实引擎临时核对:全部内容文件 300 个示例通过 |
+| U11 minor | `no-hack-commit-message` 缺 ps 变体 | 采纳 | 补 ps 变体与 PowerShell 示例 |
+| U11 minor | 映射文档子串匹配示例错误、表格 `\|` 未转义 | 采纳 | `docs/pinrule-mapping.md` |
+
+导出签名:未修改任何已有导出签名;只做了追加(`model` 新哨兵与 `NativeEventTable` 行、`replay.Deps.Project` 字段)。
 
 ### v1.2(2026-10-16,第二轮审核 minor)
 

@@ -13,6 +13,13 @@
 // is PRESERVED in the string; comparisons fold case when GOOS is windows or
 // darwin (IsCaseInsensitive).
 //
+// Candidates on POSIX (contract v1.3): besides the lexically folded form,
+// a path containing ".." also yields its PHYSICAL form, where ".." applies
+// to the directory reached so far (symlinks resolved), as the kernel and
+// shells do: "link/../x" is "<target of link>/../x". Windows (Win32 folds
+// ".." lexically) and Windows-client drive paths ("c:/x/../y" seen on a
+// POSIX host) get the lexical form only.
+//
 // Glob lists: patterns OR-combined; a pattern starting with "!" is a
 // negation; GlobSet.Match(candidates...) is true iff SOME candidate matches
 // ≥1 positive pattern AND NO candidate matches any negative pattern (order
@@ -20,7 +27,11 @@
 // invalid (lint error "glob-only-negation"). Patterns without '/' match the
 // basename of any candidate ("*.md" ≡ "**/*.md"). Patterns beginning with
 // "~/" are expanded with Home before matching. Case folding: both pattern
-// and candidate lower-cased when caseInsensitive.
+// and candidate lower-cased when caseInsensitive. Service.CompileGlobs
+// (ports.PathService, the only entry point other units use) expands "~/"
+// against BOTH the literal home and its realpath; the package-level
+// CompileGlobs(GlobOptions) knows only the literal home and is an
+// implementation helper (v1.3).
 //
 // Acceptance (U1):
 //   - testdata/normalize.json table passes on every GOOS (table rows carry

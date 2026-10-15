@@ -149,8 +149,8 @@ func (b *auditBuilder) transcriptRef() string {
 		return p
 	}
 	head := q[:len(prefix)]
-	// Windows and macOS volumes are case-insensitive: "C:/Users/Dylan" and
-	// "c:/users/dylan" are the same home (contract v1.3).
+	// Windows and macOS volumes are case-insensitive: "C:/Users/Alice" and
+	// "c:/users/alice" are the same home (contract v1.3).
 	if head == prefix || caseInsensitiveFS(b.deps.Env.GOOS()) && strings.EqualFold(head, prefix) {
 		return "~/" + q[len(prefix):]
 	}

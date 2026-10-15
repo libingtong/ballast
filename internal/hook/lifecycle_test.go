@@ -339,12 +339,12 @@ func TestTranscriptRefCaseFolding(t *testing.T) {
 	for _, c := range []struct {
 		goos, home, path, want string
 	}{
-		{"windows", `C:\Users\Dylan`, `c:\users\dylan\.claude\p\t.jsonl`, "~/.claude/p/t.jsonl"},
-		{"windows", `C:\Users\Dylan`, `C:\Users\Dylan\.claude\t.jsonl`, "~/.claude/t.jsonl"},
-		{"windows", `C:\Users\Dylan`, `D:\Users\Dylan\t.jsonl`, `D:\Users\Dylan\t.jsonl`},
-		{"darwin", "/Users/Dylan", "/users/dylan/.claude/t.jsonl", "~/.claude/t.jsonl"},
-		{"linux", "/home/Dylan", "/home/dylan/.claude/t.jsonl", "/home/dylan/.claude/t.jsonl"},
-		{"linux", "/home/dylan", "/home/dylan", "/home/dylan"},
+		{"windows", `C:\Users\Alice`, `c:\users\alice\.claude\p\t.jsonl`, "~/.claude/p/t.jsonl"},
+		{"windows", `C:\Users\Alice`, `C:\Users\Alice\.claude\t.jsonl`, "~/.claude/t.jsonl"},
+		{"windows", `C:\Users\Alice`, `D:\Users\Alice\t.jsonl`, `D:\Users\Alice\t.jsonl`},
+		{"darwin", "/Users/Alice", "/users/alice/.claude/t.jsonl", "~/.claude/t.jsonl"},
+		{"linux", "/home/Alice", "/home/alice/.claude/t.jsonl", "/home/alice/.claude/t.jsonl"},
+		{"linux", "/home/alice", "/home/alice", "/home/alice"},
 	} {
 		key := "HOME"
 		if c.goos == "windows" {
