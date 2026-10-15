@@ -94,13 +94,15 @@ func TestClipRunes(t *testing.T) {
 	}{
 		{"", 3, ""},
 		{"abc", 3, "abc"},
-		{"abcd", 3, "abc…"},
-		{"日本語テキスト", 3, "日本語…"},
+		{"abcd", 3, "ab…"},
+		{"abcd", 4, "abcd"},
+		{"abcd", 1, "…"},
+		{"日本語テキスト", 4, "日本語…"},
 		{"日本語", 3, "日本語"},
-		{"abc", 0, "…"},
+		{"abc", 0, ""},
 		{"", 0, ""},
-		{"abc", -1, "…"},
-		{"a\xffb", 2, "a\xff…"},
+		{"abc", -1, ""},
+		{"a\xffbc", 3, "a\xff…"},
 	}
 	for _, tc := range tests {
 		if got := ClipRunes(tc.in, tc.n); got != tc.want {
@@ -214,7 +216,7 @@ func TestMarshalLineShrinkOrder(t *testing.T) {
 				if err := json.Unmarshal(rec.Detail, &d); err != nil {
 					t.Fatalf("detail is not JSON: %s", rec.Detail)
 				}
-				if d["diag"] != "x" || d["truncated"] != true || len([]rune(d["note"].(string))) != 257 {
+				if d["diag"] != "x" || d["truncated"] != true || len([]rune(d["note"].(string))) != 256 {
 					t.Errorf("detail = %v", d)
 				}
 				if len(rec.Context) != 2 || len(rec.Matched) != 200 {
@@ -245,7 +247,7 @@ func TestMarshalLineShrinkOrder(t *testing.T) {
 			rec: withOverflow(model.AuditRecord{Type: model.AuditHit, Matched: big(200, "m"),
 				Context: []model.EventSummary{{Text: big(120, "a"), Hits: []string{"h"}}, {Text: big(120, "b")}}}, 20, nil),
 			check: func(t *testing.T, rec model.AuditRecord, raw map[string]any) {
-				if len(rec.Context) != 2 || len([]rune(rec.Context[0].Text)) != 61 || len(rec.Context[0].Hits) != 0 || len(rec.Matched) != 200 {
+				if len(rec.Context) != 2 || len([]rune(rec.Context[0].Text)) != 60 || len(rec.Context[0].Hits) != 0 || len(rec.Matched) != 200 {
 					t.Errorf("ctx=%d entries matched=%d", len(rec.Context), len(rec.Matched))
 				}
 			},
@@ -653,18 +655,56 @@ func TestAppendFSErrorsAreReturned(t *testing.T) {
 	}
 }
 
-func TestAppendMarshalErrorWritesNothing(t *testing.T) {
+func TestAppendBatchSingleFile(t *testing.T) {
 	w, dir := newWriter(t, 0)
-	bad := hitRec(2)
-	bad.Evals = map[string]model.EvalCount{"r": {}}
-	good := hitRec(1)
-	// A valid record followed by one that cannot fail still writes both; the
-	// nil-record path is covered by MarshalLine. Here we check batching.
-	if err := w.Append([]model.AuditRecord{good, bad}); err != nil {
+	if err := w.Append([]model.AuditRecord{hitRec(1), hitRec(2)}); err != nil {
 		t.Fatal(err)
 	}
 	if got := len(readLines(t, filepath.Join(dir, "2026-10.jsonl"))); got != 2 {
 		t.Errorf("lines = %d", got)
+	}
+}
+
+func TestAppendMarshalErrorWritesNothing(t *testing.T) {
+	w, dir := newWriter(t, 0)
+	// A year beyond 9999 cannot be encoded as RFC3339, so MarshalLine fails
+	// on the second record after the first one was already encoded.
+	bad := hitRec(2)
+	bad.TS = time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := MarshalLine(&bad); err == nil {
+		t.Fatal("MarshalLine accepted an unencodable timestamp")
+	}
+	if err := w.Append([]model.AuditRecord{hitRec(1), bad}); err == nil {
+		t.Fatal("Append returned nil for an unencodable record")
+	}
+	ents, err := os.ReadDir(dir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if len(ents) != 0 {
+		t.Errorf("a failed batch left %d file(s) behind", len(ents))
+	}
+}
+
+func TestMarshalLineCapsMatched(t *testing.T) {
+	rec := model.AuditRecord{Type: model.AuditHit, Matched: big(model.MaxMatchedRunes+50, "界")}
+	line, err := MarshalLine(&rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got model.AuditRecord
+	if err := json.Unmarshal(line, &got); err != nil {
+		t.Fatal(err)
+	}
+	if n := utf8.RuneCountInString(got.Matched); n != model.MaxMatchedRunes || !strings.HasSuffix(got.Matched, "…") {
+		t.Errorf("matched has %d runes, want %d ending in an ellipsis", n, model.MaxMatchedRunes)
+	}
+	if rec.Matched != big(model.MaxMatchedRunes+50, "界") {
+		t.Error("MarshalLine modified its input")
+	}
+	rec.Matched = big(model.MaxMatchedRunes, "m")
+	if line, _ = MarshalLine(&rec); !strings.Contains(string(line), rec.Matched) {
+		t.Error("a Matched at the limit must be kept whole")
 	}
 }
 

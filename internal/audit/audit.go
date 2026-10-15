@@ -122,7 +122,7 @@ func (w *Writer) writeMonth(month time.Time, buf []byte) error {
 
 // open opens name for appending, creating the directory on first use.
 func (w *Writer) open(name string) (sys.File, error) {
-	const flags = os.O_WRONLY | os.O_APPEND | os.O_CREATE
+	flags := appendFlags | os.O_APPEND | os.O_CREATE
 	f, err := w.opt.FS.OpenFile(name, flags, 0o600)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		if merr := w.opt.FS.MkdirAll(w.opt.Dir, 0o700); merr != nil {
@@ -191,7 +191,7 @@ func MarshalLine(rec *model.AuditRecord) ([]byte, error) {
 	if r.V == 0 {
 		r.V = model.AuditVersion
 	}
-	r.Matched = Redact(r.Matched)
+	r.Matched = ClipRunes(Redact(r.Matched), model.MaxMatchedRunes)
 	if len(r.Context) > 0 {
 		ctx := make([]model.EventSummary, len(r.Context))
 		copy(ctx, r.Context)
@@ -242,7 +242,7 @@ func MarshalLine(rec *model.AuditRecord) ([]byte, error) {
 		if r.Matched == "" {
 			break
 		}
-		r.Matched = clipTotal(r.Matched, n)
+		r.Matched = ClipRunes(r.Matched, n)
 		if line, ok, err := fit(&r); ok || err != nil {
 			return line, err
 		}
@@ -363,17 +363,6 @@ func clipValue(v any, n int) any {
 	return v
 }
 
-// clipTotal shortens s so that it is at most n runes including the ellipsis.
-func clipTotal(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	if utf8.RuneCountInString(s) <= n {
-		return s
-	}
-	return ClipRunes(s, n-1)
-}
-
 func clipBytes(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -414,14 +403,19 @@ func parseFileName(name string) (month string, n int, ok bool) {
 	return month, n, true
 }
 
-// ClipRunes truncates s to n runes, appending "…" when cut.
+// ClipRunes shortens s to at most n runes. A cut result ends with "…" and the
+// ellipsis counts towards n, so the output never exceeds the limit.
 func ClipRunes(s string, n int) string {
-	if n < 0 {
-		n = 0
+	if n <= 0 {
+		if s == "" {
+			return s
+		}
+		return ""
 	}
 	if len(s) <= n || utf8.RuneCountInString(s) <= n {
 		return s
 	}
+	n--
 	for i := range s {
 		if n == 0 {
 			return s[:i] + "…"

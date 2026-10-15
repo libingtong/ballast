@@ -43,8 +43,9 @@
 //     diag ⇒ detail.
 //   - GC returns the full paths it removed; a file goes when its month ended
 //     more than the retention ago.
-//   - ClipRunes keeps n runes and appends the ellipsis, so a cut result has
-//     n+1 runes.
+//   - ClipRunes returns at most n runes: a cut result ends with the ellipsis,
+//     which counts towards n. MarshalLine clips Matched to
+//     model.MaxMatchedRunes after redaction.
 //
 // Acceptance (U5): 8 concurrent writers × 1000 records ⇒ every line parses
 // (no interleaving); 64 MiB rotation creates .1; corrupt tail tolerated;

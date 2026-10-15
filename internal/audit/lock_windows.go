@@ -4,6 +4,7 @@ package audit
 
 import (
 	"errors"
+	"os"
 	"syscall"
 	"time"
 	"unsafe"
@@ -30,6 +31,11 @@ var (
 	procLockFileEx   = kernel32.NewProc("LockFileEx")
 	procUnlockFileEx = kernel32.NewProc("UnlockFileEx")
 )
+
+// appendFlags: Go drops GENERIC_WRITE from an O_APPEND handle (leaving
+// FILE_APPEND_DATA), and LockFileEx needs GENERIC_READ or GENERIC_WRITE on the
+// handle, so the file is opened read-write to get GENERIC_READ.
+const appendFlags = os.O_RDWR
 
 // lockAppend serializes appenders with LockFileEx on a one-byte range at a
 // far offset (the file is opened with FILE_APPEND_DATA through O_APPEND).
