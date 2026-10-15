@@ -1,6 +1,6 @@
 # Ballast 规则 DSL 语义(v1,冻结)
 
-> 状态:**已冻结**(2026-10-16;v1.1 审核修订见文末"修订记录"),与 `schema/rules.v1.json`(JSON Schema draft 2020-12)、`internal/model/rule.go` 一一对应。计划依据:`docs/ballast-plan.md` B1、B2、B4、B5、B11 与 v0.4 变更。
+> 状态:**已冻结**(2026-10-16;v1.1 与 v1.3 修订见文末"修订记录"),与 `schema/rules.v1.json`(JSON Schema draft 2020-12)、`internal/model/rule.go` 一一对应。计划依据:`docs/ballast-plan.md` B1、B2、B4、B5、B11 与 v0.4 变更。
 >
 > JSON Schema 只能表达结构;本文规定的语义检查(RE2 编译、glob 语法、字段适用性、客户端能力矩阵、跨文件预算、examples 执行)由 `ballast lint` / `ballast test-rules`(`internal/dsl`,U3)完成。所有默认规则、可选规则、示例与 `schema/examples/*` 都必须通过同一个解析器与 lint。
 >
@@ -109,7 +109,8 @@ RuleFile := {
 
 1. 规范化绝对路径(内部形式:`/` 分隔、盘符小写如 `c:/Users/x`、UNC 为 `//server/share/…`、Git Bash 的 `/c/Users` 转 `c:/Users`、`~` 展开、`.`/`..` 消解);
 2. 相对项目根(git toplevel,不在仓库时为 cwd)的相对路径(仅当目标在项目根内);
-3. 上述两种形式在 `EvalSymlinks` 解析后的版本(不存在的文件解析其最近的已存在父目录;覆盖符号链接与 Windows 目录联接)。
+3. 上述两种形式在 `EvalSymlinks` 解析后的版本(不存在的文件解析其最近的已存在父目录;覆盖符号链接与 Windows 目录联接);
+4. (v1.3,仅 POSIX)目标含 `..` 时,再加一个**物理** `..` 形式:`..` 作用于已到达的真实目录(先解析符号链接),与内核和 shell 的语义一致,`link/../x` 落在 link 目标的父目录下。第 1 项的词法折叠形式保留。Windows(Win32 按词法折叠 `..`)以及在 POSIX 主机上出现的 Windows 客户端盘符路径(`c:/x/../y`)只有词法形式。
 
 去重后,只要任一候选满足 glob 列表即算匹配。
 
@@ -181,14 +182,14 @@ RuleFile := {
 | 字段 | 说明 |
 |---|---|
 | `source` | `last_assistant_message`(Stop、SubagentStop 默认)、`prompt`(UserPromptSubmit 默认)、`tool_response`(PostToolUse 默认:对象取 `stdout + "\n" + stderr`,否则紧凑 JSON;字符串原样)、`error`(PostToolUseFailure 默认)。与事件不符 → lint `text-source-mismatch` |
-| `preprocess` | 按顺序执行:`strip_code_blocks` 删除 ```` ``` ````/`~~~` 围栏块(未闭合则到文末)与行内 `` `…` ``;`strip_quotes` 删除 `"…"`、`“…”`、`‘…’`、`「…」`、`『…』` 与以 `>` 开头的引用行 |
+| `preprocess` | 按顺序执行:`strip_code_blocks` 删除 ```` ``` ````/`~~~` 围栏块(未闭合则到文末)与行内 `` `…` ``;`strip_quotes` 删除 `"…"`、`“…”`、`‘…’`、`「…」`、`『…』` 与以 `>` 开头的引用行(引号只在同一行内配对,跨行的引文只能靠 `>` 引用行排除) |
 | `window` | `{"head_chars": n}` 取前 n 字,`{"tail_chars": n}` 取后 n 字;两者都有时先 head 后 tail |
 | `regex` | 正则列表,任一匹配为真 |
 | `not_regex` | 有序豁免列表:任一匹配则整个 `text` 为假(按列表顺序短路求值,结果与顺序无关) |
 | `cjk_ratio` | 比较 CJK 字符(汉字、平假名、片假名、谚文)占"CJK + 拉丁字母"的比例;分母为 0(无字母)时 **false** |
 | `count_regex` | `{"regex": "...", "gte": n, ...}`:比较不重叠匹配次数 |
 
-`text` 内各子条件之间为 AND,至少要有 `regex`、`not_regex`、`cjk_ratio`、`count_regex` 之一。源文本缺失 → false(Cursor `stop` 缺 `last_assistant_message` 时先回退到 `afterAgentResponse` 存下的文本)。
+`text` 内各子条件之间为 AND,至少要有 `regex`、`not_regex`、`cjk_ratio`、`count_regex` 之一。源文本缺失 → false(Stop 族缺 `last_assistant_message` 时先回退到状态中存下的文本,即 Cursor `afterAgentResponse` 的最后 4000 字;回退也没有文本 → false;状态不可读、无法查询回退 → unknown,原因 `text:state_unreadable`)。字段存在但为空字符串时就是空文本,不是缺失。
 
 ### 5.6 `agent_type`
 
@@ -245,7 +246,7 @@ RuleFile := {
 
 **路径参数**:`path` 省略或为 `"$target"` 时绑定到当前目标(§9);否则是字面路径(相对项目根,`~/` 展开),按 §5.2 规范化。字面路径的谓词对所有事件可用。
 
-**`verify_fresh` 的 C**:规则的 `bash`/`ps` 绑定节点是 `git commit` 时,C 由该节点的 commit 形式计算(普通 → 索引;`-a` → 索引 + `add -u`;带路径 → 按 git 语义;`--amend` 同对应形式;`git -C <dir>` → 该目录所属仓库实例);否则(包括 Stop 族)C = 当前工作树快照 S。算法与"严格部分暂存语义"见计划 B3 与 `internal/evidence/doc.go`。
+**`verify_fresh` 的 C**:规则的 `bash`/`ps` 绑定节点(只指由规则的 `bash`/`ps` 匹配器产生的绑定;没有 shell 匹配器的规则按写入目标形成的绑定不算,v1.3)是 `git commit` 时,C 由该节点的 commit 形式计算(普通 → 索引;`-a` → 索引 + `add -u`;带路径 → 按 git 语义;`--amend` 同对应形式;`git -C <dir>` → 该目录所属仓库实例);否则(包括 Stop 族)C = 当前工作树快照 S。算法与"严格部分暂存语义"见计划 B3 与 `internal/evidence/doc.go`。
 
 **状态作用域**:已读集合、`prior_hit`、`tool_count_since_inject` 按 (repo_inst, session, agent) 隔离,主 agent 与子 agent **互不继承**(B6)。证据按仓库内容快照共享。
 
@@ -276,6 +277,7 @@ evalRule(r, in):
   B, U := bindings(r, in)
     // 有 bash/ps:B = 肯定满足 shell 匹配器的节点(若同时有 path:节点×其满足 path 的写入目标)
     // 无 shell 匹配器、工具有目标:B = 满足 path 的目标(无 path 时为全部目标)
+    //   Bash/PowerShell 的"目标"= 解析出的写入目标;无 path 时只有 when 引用 $target 才解析(见下)
     // 否则:B = {空绑定}
     // U = 是否有候选的匹配结果为 unknown(动态目标、解析失败、CommandList.Unknown…)
   w := OR_{b ∈ B} AND_{c ∈ when} c(b)
@@ -285,6 +287,8 @@ evalRule(r, in):
 
 - B 为空且 U 为假 → false(匹配失败);B 为空且 U 为真 → unknown。
 - 工具没有目标、规则也没有 `path`:单个空绑定,其中 `$target` 形式的路径谓词为 unknown。
+- (v1.3)Bash/PowerShell 工具、规则既无 `bash`/`ps` 也无 `path`:只有当 `when` 中(任意 `all`/`any`/`not` 深度)存在绑定当前目标的路径谓词(`read_this_session`、`path_exists`、`verify_failed_since_read` 省略 `path` 或写 `"$target"`)时,才解析命令并以非动态写入目标为 B;动态目标、解析失败、`CommandList.Unknown` 计入 U;没有写入目标且 U 为假时退回单个空绑定(`$target` 谓词 unknown)。`when` 不引用 `$target` 的规则不解析命令,只有单个空绑定,所以与目标无关的 `when` 不会让解析失败或 `eval` 变成 unknown。
+- 有 `bash`/`ps` 或 `path` 的规则,B/U 的计算与是否带 `when` 无关;不带 `when` 时 `when` 恒真,`w` 只取决于 B 是否为空与 U。
 - 结果为 unknown 时规则不命中;`RuleResult.UnknownCause` 记录第一个导致 unknown 的原因(如 `bash:parse_error`、`verify_fresh:job_running`),累加 `EvalCount.Unknown` 并在审计中留痕。
 
 ---
@@ -295,7 +299,7 @@ evalRule(r, in):
 
 1. 每条命中先做**能力检查**:`Effective = action`;若该客户端不支持 (event, action),`Effective = log` 并写 `diag: capability_degraded`。
 2. 本次决策档位 = 所有命中中最严的 `Effective`(deny > ask > warn > log)。
-3. `Reason` = 档位等于决策档位(且为 warn/ask/deny)的命中,按规则加载顺序拼接 `[id] message`,总长 ≤ 2000 字,超出以 `…(+N)` 截断。
+3. `Reason` = 档位等于决策档位(且为 warn/ask/deny)的命中,按规则加载顺序拼接 `[id] message`(每条一行),总长 ≤ 2000 字,超出以 `…(+N)` 截断:N 是**未完整显示的命中行数**(连第一行都放不下时,保留第一行的前缀,它也计入 N)。
 4. **所有**命中(含 log 档的 `would_<target>`)都写入审计。
 5. 无命中或只有 log 命中 → 不输出决策(stdout 只可能含注入文本)。
 
@@ -324,7 +328,7 @@ evalRule(r, in):
 | `event-unavailable` | 警告 | 事件在某客户端不存在 |
 | `cursor-stop-followup` | 警告 | Cursor Stop 的 deny 语义为续跑 |
 | `field-not-applicable` | 错误 | 字段与事件/工具不适用(§5.8) |
-| `input-field-unknown` | 错误 | `input_regex` 键不在登记表 |
+| `input-field-unknown` | 错误 | `input_regex` 键不在登记表(实现可同时报 `field-not-applicable`,两者都是错误,退出码相同) |
 | `text-source-mismatch` | 错误 | `text.source` 与事件不符 |
 | `bad-regex` | 错误 | 不是合法 RE2 |
 | `bad-glob` / `glob-only-negation` | 错误 | glob 非法 / 只有排除模式 |
@@ -555,12 +559,22 @@ Example := {
 - shell 写入目标只覆盖 §6 列出的命令;`python -c "open(...).write()"` 之类语言内写入不被识别(T0 下本来就不是安全边界;T1 由沙箱 `denyWrite` 兜底)。
 - `verify_fresh` 只看已跟踪文件;测试依赖未跟踪文件的情况交给 CI(B3 已知边界)。
 - **`git add … && git commit …` 写在同一条命令里**:PreToolUse 时 add 尚未执行,C 取当前索引,严格语义下通常判为过期并拒绝(或影子模式下记 would_deny)。这是有意的:Ballast 不模拟同一命令中前序节点的副作用。`evidence-before-commit` 的 message 会提示"`git add` 与 `git commit` 分两次执行"。`git commit -a` 不受影响(C 按 `-a` 计算)。
-- **shell 读取目标**只覆盖 §6 列出的只读命令;`python -c "open(…).read()"`、`find … | xargs cat`、`git show HEAD:a.go` 等不计入已读集合(只会让 read-before-edit 更严,不会更松)。相对路径按事件 cwd 解析;同一命令里出现 `cd`/`pushd`(PowerShell `Set-Location`)时只登记绝对路径。读取在 PostToolUse 时登记,所以 Codex 上"先 `sed -n` 再 `apply_patch`"必须是两次工具调用。登记不看退出码:客户端触发 PostToolUse 即视为已执行(Claude Code 的非 0 失败走 PostToolUseFailure,不登记;Codex 非 0 退出是否仍触发 PostToolUse 未取证,属于放宽方向、影响有限,列为 U6/U12 取证项)。提取规则由唯一纯函数 `model.ShellReadPaths` 定义,hook 与 replay 共用。
+- **shell 读取目标**只覆盖 §6 列出的只读命令;`python -c "open(…).read()"`、`find … | xargs cat`、`git show HEAD:a.go` 等不计入已读集合(只会让 read-before-edit 更严,不会更松)。相对路径按事件 cwd 解析;同一命令里出现 `cd`/`pushd`/`popd`(含 bash 的 `builtin cd`,v1.3;PowerShell `Set-Location` 族)时只登记绝对路径。读取在 PostToolUse 时登记,所以 Codex 上"先 `sed -n` 再 `apply_patch`"必须是两次工具调用。登记不看退出码:客户端触发 PostToolUse 即视为已执行(Claude Code 的非 0 失败走 PostToolUseFailure,不登记;Codex 非 0 退出是否仍触发 PostToolUse 未取证,属于放宽方向、影响有限,列为 U6/U12 取证项)。提取规则由唯一纯函数 `model.ShellReadPaths` 定义,hook 与 replay 共用。
 - 规则语言没有 exec;需要的新能力走谓词扩展或离线 replay。
 
 ---
 
 ## 修订记录
+
+### v1.3(2026-10-16,各单元实现后的契约跟进)
+
+- §5.2:POSIX 上候选同时包含词法折叠形式与物理 `..` 形式;Windows 客户端盘符路径在 POSIX 主机上只有词法形式。
+- §5.5:源文本缺失为 false(先查状态中的回退文本);状态不可读时为 unknown;`strip_quotes` 不跨行配对。
+- §7:`verify_fresh` 只按规则 `bash`/`ps` 匹配器产生的绑定节点取 commit 形式。
+- §9:无 shell 匹配器、无 `path` 的 Bash/PowerShell 规则,只有 `when` 引用 `$target` 时才以写入目标为绑定;有 `bash`/`ps` 或 `path` 的规则,B/U 与是否带 `when` 无关。
+- §10.1:`…(+N)` 中 N 的含义。§11:`input-field-unknown` 可与 `field-not-applicable` 同时出现。
+- §14:`builtin cd` 视为切换目录。
+- `schema/examples/07`:`secret-in-output` 以 `clients` 排除 Hermes(post_tool_call 不能 warn)。
 
 ### v1.1(2026-10-16,独立审核修订)
 

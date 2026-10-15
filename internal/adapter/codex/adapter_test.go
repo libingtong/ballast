@@ -58,13 +58,16 @@ func TestNormalizeToolApplyPatch(t *testing.T) {
 }
 
 func TestNormalizeToolApplyPatchMalformed(t *testing.T) {
-	for _, in := range []string{``, `null`, `{}`, `{"input":5}`, `"just text"`, `{"input":"*** Begin Patch\n*** Update File: a.go\n+x\n"}`, `[1]`} {
+	for _, in := range []string{``, `null`, `{}`, `{"input":5}`, `"just text"`, `{"input":"*** Begin Patch\n*** Update File: a.go\n+x\n"}`, `[1]`, `"abc`, `{"input":`} {
 		got, err := New().NormalizeTool("apply_patch", json.RawMessage(in))
 		if err == nil {
 			t.Errorf("%s: want error", in)
 		}
 		if got.Name != model.ToolEdit {
 			t.Errorf("%s: ToolCall must stay usable, got %+v", in, got)
+		}
+		if _, err := json.Marshal(got); err != nil {
+			t.Errorf("%s: ToolCall must stay marshalable: %v", in, err)
 		}
 	}
 	// A truncated envelope still yields the targets that were parsed.

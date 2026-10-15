@@ -74,10 +74,15 @@ type target struct {
 }
 
 // binding is one (node, target) pair `when` is evaluated on; node is -1
-// when the binding is not tied to a shell node.
+// when the binding is not tied to a shell node. matcher is true only for
+// bindings produced by the rule's bash/ps matcher (nodeBindings): those are
+// the "bash/ps binding nodes" whose git commit form defines verify_fresh's C
+// (dsl-semantics §7). Write-target bindings of rules without a shell
+// matcher keep node for describe() but never select the commit form.
 type binding struct {
-	node int
-	tgt  target
+	node    int
+	tgt     target
+	matcher bool
 }
 
 type evalCtx struct {
@@ -326,12 +331,16 @@ func (c *evalCtx) textSource(src model.TextSource) (string, res, bool) {
 		if ev.HasLastAssistantMessage || ev.LastAssistantMessage != "" {
 			return ev.LastAssistantMessage, resTrue, true
 		}
-		if c.stateOK() {
-			if s := c.in.Session.LastAssistantText(); s != "" {
-				return s, resTrue, true
-			}
+		// Missing source text is false (dsl-semantics §5.5) once the stored
+		// fallback (Cursor afterAgentResponse) has been consulted; when the
+		// state is unreadable the fallback is unknowable ⇒ unknown.
+		if !c.stateOK() {
+			return "", unk("text:state_unreadable"), false
 		}
-		return "", unk("text:missing_source"), false
+		if s := c.in.Session.LastAssistantText(); s != "" {
+			return s, resTrue, true
+		}
+		return "", resFalse, false
 	}
 }
 
@@ -542,9 +551,11 @@ func (c *evalCtx) bindings(p *program) (bs []binding, uncertain bool, cause stri
 				return bs, false, ""
 			}
 		}
-		// Shell tools expose their write targets (§5.2). A rule without
-		// when conditions cannot observe the binding, so skip the parse.
-		if t != nil && sk != model.ShellNone && len(p.when) > 0 {
+		// Shell tools expose their write targets (§5.2). Only a `when`
+		// that references $target can observe them (dsl-semantics §9,
+		// contract v1.3); otherwise skip the parse so unrelated when
+		// conditions do not change the outcome.
+		if t != nil && sk != model.ShellNone && p.usesTarget {
 			kind := kindName(sk)
 			cl, why := c.commandList()
 			if cl == nil {
@@ -631,7 +642,7 @@ func (c *evalCtx) nodeBindings(bs []binding, p *program, sp *shellProg, cl *mode
 			}
 			switch r := c.pathMatch(p.path, w.Path); r.t {
 			case model.TriTrue:
-				bs = append(bs, binding{node: i, tgt: target{raw: w.Path, ok: true}})
+				bs = append(bs, binding{node: i, tgt: target{raw: w.Path, ok: true}, matcher: true})
 			case model.TriUnknown:
 				note(r.cause)
 			}
@@ -639,13 +650,13 @@ func (c *evalCtx) nodeBindings(bs []binding, p *program, sp *shellProg, cl *mode
 	case sp.writes != nil:
 		_, matched := c.writesMatch(sp.writes, n.Writes, kind)
 		if len(matched) == 0 {
-			return append(bs, binding{node: i})
+			return append(bs, binding{node: i, matcher: true})
 		}
 		for _, t := range matched {
-			bs = append(bs, binding{node: i, tgt: t})
+			bs = append(bs, binding{node: i, tgt: t, matcher: true})
 		}
 	default:
-		bs = append(bs, binding{node: i})
+		bs = append(bs, binding{node: i, matcher: true})
 	}
 	return bs
 }

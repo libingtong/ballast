@@ -72,13 +72,18 @@ func TestNormalizeTool(t *testing.T) {
 }
 
 func TestNormalizeToolBadInput(t *testing.T) {
-	for _, in := range []string{`"str"`, `[1]`, `{"a":`, `7`} {
+	for _, in := range []string{`"str"`, `[1]`, `{"a":`, `7`, `"abc`, `{"command":`} {
 		got, err := New().NormalizeTool("Bash", json.RawMessage(in))
 		if !errors.Is(err, model.ErrBadInput) {
 			t.Errorf("%s: err = %v", in, err)
 		}
 		if got.Name != "Bash" || got.Shell != model.ShellBash {
 			t.Errorf("%s: unusable tool %+v", in, got)
+		}
+		// The ToolCall stays marshalable (review u6 minor): invalid JSON is
+		// not kept in Input.
+		if _, err := json.Marshal(got); err != nil {
+			t.Errorf("%s: json.Marshal: %v", in, err)
 		}
 	}
 }
@@ -151,10 +156,12 @@ func TestParseEventKinds(t *testing.T) {
 			t.Errorf("%s: %+v %v", tc.native, ev, err)
 		}
 	}
-	// Parse-only events are not installable natives.
-	for _, ne := range a.NativeEvents() {
-		if _, ok := parseOnly(ne.Native); ok {
-			t.Errorf("%s leaked into NativeEvents", ne.Native)
+	// Parse-only events come from the model table with Install=false
+	// (contract v1.3); every installed event is unaffected.
+	for _, native := range []string{"PreCompact", "PostCompact", "SubagentStart"} {
+		ne, ok := model.LookupNative(model.ClientClaude, native)
+		if !ok || ne.Install {
+			t.Errorf("%s: table row %+v ok=%v, want Install=false", native, ne, ok)
 		}
 	}
 }

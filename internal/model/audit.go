@@ -51,7 +51,7 @@ type AuditRecord struct {
 	Action         Action         `json:"action,omitempty"`
 	Target         Action         `json:"target,omitempty"`
 	Decision       string         `json:"decision,omitempty"` // deny|ask|warn|log|would_<target>|none
-	Matched        string         `json:"matched,omitempty"`  // ≤200 runes, redacted
+	Matched        string         `json:"matched,omitempty"`  // ≤200 runes, redacted; audit.Writer redacts and clips on write (audit.ClipRunes: ≤n runes, the "…" counts), so callers need not (v1.3)
 	Context        []EventSummary `json:"context,omitempty"`  // ≤2 preceding ring entries
 	LatencyUS      int64          `json:"latency_us,omitempty"`
 	Tier           Tier           `json:"tier,omitempty"`

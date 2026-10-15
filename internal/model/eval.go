@@ -130,7 +130,10 @@ type Injection struct {
 	FullEmitted   bool     `json:"full_emitted,omitempty"`
 	ReportedJobs  []string `json:"reported_jobs,omitempty"`
 	// RuleDigest is the id→action digest of Rules to store in state so the
-	// next generation change can be summarized.
+	// next generation change can be summarized. Non-nil (possibly empty)
+	// exactly when the event can carry injection for the client
+	// (CapabilitySet.CanInject); the hook records Generation and RuleDigest
+	// together iff it is non-nil (contract v1.3).
 	RuleDigest map[string]Action `json:"rule_digest,omitempty"`
 }
 

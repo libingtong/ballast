@@ -52,7 +52,9 @@ func buildDelta(ev *model.Event, rs *model.CompiledRuleSet, v *model.Verdict, in
 		d.ReadPaths = append([]string(nil), readPaths...)
 	}
 	if ev.Name == model.EventAgentResponse {
-		d.LastAssistantText = clipRunes(ev.LastAssistantMessage, maxAssistantTextRunes)
+		// Keep the tail: Stop-family text rules usually window the end of
+		// the message (tail_chars), and the store keeps the tail too.
+		d.LastAssistantText = tailRunes(ev.LastAssistantMessage, maxAssistantTextRunes)
 	}
 	if ev.Name.IsStopFamily() || ev.Name == model.EventSessionEnd {
 		d.FlushEvals = true

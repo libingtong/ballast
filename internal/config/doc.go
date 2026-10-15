@@ -35,8 +35,9 @@
 // of the generation; evidence reads it lazily). The 3 StatKeys
 // (path, exists, size, mtime_ns, inode) are hashed with the binary version to
 // a cache key; cache/stat.json maps key → generation and
-// cache/rules-<generation>.json stores {sources, merged LoadedRules,
-// settings, notices}. A hit costs 3 stats + 2 small reads + Compile (regexes
+// cache/rules-<generation>-<key[:8]>.json (contract v1.3: keyed so two repos
+// whose rules merge to the same generation do not evict each other) stores
+// {sources, merged LoadedRules, settings, notices}. A hit costs 3 stats + 2 small reads + Compile (regexes
 // lazy). Cache/LKG write failures are NOT exceptions (stderr diag only).
 // LKG bytes: cache/lkg/<layer>-<sha256(abs path)[:12]>.json, rewritten when a
 // valid layer's hash changes.

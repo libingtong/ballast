@@ -393,6 +393,16 @@ func TestCandidatesDotDotAfterSymlink(t *testing.T) {
 		t.Fatalf("OS did not apply .. physically: %v", err)
 	}
 
+	// A Windows-client drive path seen on a POSIX host is absolute: no
+	// physical candidate may be produced by joining it to cwd.
+	for _, raw := range []string{`C:\x\..\y`, "c:/x/../y"} {
+		for _, c := range f.svc.Candidates(raw, f.ctx) {
+			if strings.HasPrefix(c, f.proj+"/") || strings.Contains(c, "/c:/") {
+				t.Errorf("Candidates(%q) has cwd-joined candidate %q", raw, c)
+			}
+		}
+	}
+
 	// Plain .. keeps its lexical meaning and adds no extra candidates.
 	want := []string{f.proj + "/src/a.go", "src/a.go"}
 	if got := f.svc.Candidates("src/../src/a.go", f.ctx); !reflect.DeepEqual(got, want) {
@@ -424,6 +434,8 @@ func TestPhysicalDotDotEdges(t *testing.T) {
 		{"a/../x", model.PathContext{Cwd: "/w", GOOS: "windows"}, false},
 		{"/nonexistent-ballast-root/a/../x", ctx, true},
 		{"~/a/../x", ctx, true},
+		{`C:\x\..\y`, ctx, false},
+		{"c:/x/../y", ctx, false},
 	} {
 		if _, ok := physicalDotDot(fsys, c.raw, c.ctx); ok != c.want {
 			t.Errorf("physicalDotDot(%q, %+v) ok = %v, want %v", c.raw, c.ctx, ok, c.want)

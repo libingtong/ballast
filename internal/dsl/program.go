@@ -155,6 +155,11 @@ type program struct {
 	ps     *shellProg
 	path   *pathProg
 	when   []*condProg
+
+	// usesTarget: some path predicate in when binds to the current target
+	// (path omitted or "$target"). Gates the shell write-target bindings of
+	// rules without bash/ps/path (dsl-semantics §9).
+	usesTarget bool
 }
 
 // RuleID implements model.RuleProgram.
@@ -201,7 +206,34 @@ func (e *Engine) buildProgram(r *model.Rule) *program {
 	for i := range r.When {
 		p.when = append(p.when, e.buildCond(&r.When[i]))
 	}
+	for _, cp := range p.when {
+		if condUsesTarget(cp) {
+			p.usesTarget = true
+			break
+		}
+	}
 	return p
+}
+
+// condUsesTarget reports whether cp (recursively) contains a path predicate
+// bound to the current target.
+func condUsesTarget(cp *condProg) bool {
+	if cp == nil {
+		return false
+	}
+	if cp.kind == condPred {
+		switch cp.pred {
+		case model.PredReadThisSession, model.PredPathExists, model.PredVerifyFailedSinceRead:
+			return cp.path == "" || cp.path == model.TargetBinding
+		}
+		return false
+	}
+	for _, sub := range cp.subs {
+		if condUsesTarget(sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Engine) buildShell(kind model.ShellKind, m *model.ShellMatch) *shellProg {

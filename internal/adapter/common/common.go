@@ -227,12 +227,12 @@ func Lookup(client model.ClientID, native string) (model.NativeEvent, error) {
 	return ne, nil
 }
 
-// maxFlattenDepth bounds recursion in FlattenStrings.
-const maxFlattenDepth = 32
-
 // FlattenStrings returns every string leaf of a JSON value keyed by dotted
 // path with array indices dropped (see adapter package doc). A top-level
-// scalar has no path and yields nil.
+// scalar has no path and yields nil. There is no depth cut-off (contract
+// v1.3): encoding/json already bounds nesting at 10000, and a silent cut
+// would hide deep leaves from input_regex (fail-open). The path is built in
+// one shared buffer, so deep nesting costs linear, not quadratic, work.
 func FlattenStrings(raw json.RawMessage) map[string][]string {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || (raw[0] != '{' && raw[0] != '[') {
@@ -243,21 +243,20 @@ func FlattenStrings(raw json.RawMessage) map[string][]string {
 		return nil
 	}
 	out := map[string][]string{}
-	flatten(v, "", out, 0)
+	var buf []byte
+	flatten(v, &buf, out)
 	if len(out) == 0 {
 		return nil
 	}
 	return out
 }
 
-func flatten(v any, path string, out map[string][]string, depth int) {
-	if depth > maxFlattenDepth {
-		return
-	}
+func flatten(v any, path *[]byte, out map[string][]string) {
 	switch x := v.(type) {
 	case string:
-		if path != "" {
-			out[path] = append(out[path], x)
+		if len(*path) > 0 {
+			k := string(*path)
+			out[k] = append(out[k], x)
 		}
 	case map[string]any:
 		keys := make([]string, 0, len(x))
@@ -265,16 +264,18 @@ func flatten(v any, path string, out map[string][]string, depth int) {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
+		n := len(*path)
 		for _, k := range keys {
-			p := k
-			if path != "" {
-				p = path + "." + k
+			if n > 0 {
+				*path = append(*path, '.')
 			}
-			flatten(x[k], p, out, depth+1)
+			*path = append(*path, k...)
+			flatten(x[k], path, out)
+			*path = (*path)[:n]
 		}
 	case []any:
 		for _, e := range x {
-			flatten(e, path, out, depth+1)
+			flatten(e, path, out)
 		}
 	}
 }

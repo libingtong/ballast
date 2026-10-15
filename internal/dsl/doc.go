@@ -41,6 +41,24 @@
 //   - Regexes compile lazily on first use and are cached per Engine
 //     (CompiledRuleSet is per-process; no global mutable state).
 //
+// Contract v1.3 clarifications (dsl-semantics §5.5, §7, §9):
+//   - Shell tools without bash/ps/path: the parsed write targets become
+//     bindings only when some path predicate in `when` binds to the
+//     current target (path omitted or "$target", at any depth of
+//     all/any/not). Otherwise the command is not parsed and the rule has
+//     the single empty binding, so an unrelated `when` never turns a parse
+//     failure or `eval` into unknown. With the bindings: B = non-dynamic
+//     write targets; B empty and nothing uncertain ⇒ the empty binding.
+//   - verify_fresh computes C from a commit node only for bindings produced
+//     by the rule's bash/ps matcher; write-target bindings of other rules
+//     always use the work tree snapshot S.
+//   - text with a missing source (no last_assistant_message and no stored
+//     fallback) is false; with an unreadable state the fallback cannot be
+//     consulted ⇒ unknown (text:state_unreadable).
+//   - TestCase.Skipped / TestReport.Skipped (additive): examples whose
+//     client has no adapter in Options.Adapters are reported as skipped,
+//     neither passed nor failed.
+//
 // Acceptance (U3, unit level — fakes only, no other unit's implementation):
 //   - testdata/tri.json (Kleene tables + binding OR semantics) passes.
 //   - Lint and TestRules over every rule in schema/examples/ whose examples
@@ -53,7 +71,8 @@
 //     CommandLists keyed by command string (U3 writes these fixtures in its
 //     own testdata). Examples with client codex/cursor/hermes are SKIPPED
 //     at unit level and reported as skipped.
-//   - Lint rejects: input_regex.command on Edit (field-not-applicable),
+//   - Lint rejects: input_regex.command on Edit (input-field-unknown; the
+//     implementation may additionally report field-not-applicable, v1.3),
 //     action ask on codex (action-unsupported), deny on PostToolUse,
 //     "!x"-only glob lists, non-RE2 regexes (backreference/lookaround),
 //     Cond objects with ≠1 key, >12 enabled rules for --layer org.

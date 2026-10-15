@@ -82,6 +82,11 @@ type runner struct {
 	homeRaw        string
 	homeNorm       string
 
+	// subWritesNoted: sub-agent file writes were pre-scanned into
+	// writeBySession; inSubagentFile: a sub-agent file is being replayed
+	// (its writes must not be noted twice).
+	subWritesNoted, inSubagentFile bool
+
 	items, skipped int
 	order          []string
 	summaries      map[string]*RuleSummary
@@ -98,6 +103,15 @@ func Run(opt Options, deps Deps) (*Report, error) {
 	}
 	if opt.RulesPath != "" {
 		if err := r.loadRulesFile(); err != nil {
+			return nil, err
+		}
+	}
+
+	if opt.Subagents && r.client == model.ClientClaude {
+		// Sub-agent streams are replayed after the main one; their file
+		// writes must already be known when a later main-agent event asks
+		// for evidence freshness (contract v1.3, review u9 minor).
+		if err := r.prescanSubagentWrites(); err != nil {
 			return nil, err
 		}
 	}
@@ -345,22 +359,91 @@ func loadInitialState(fsys sys.FS, path string) (*initialState, error) {
 
 // -------------------------------------------------------------- streams ---
 
-func (r *runner) processSubagents() error {
-	dir := filepath.Join(strings.TrimSuffix(r.opt.Transcript, filepath.Ext(r.opt.Transcript)), "subagents")
+// subagentFiles lists <transcript>/subagents/*.jsonl, sorted.
+func (r *runner) subagentFiles() (dir string, names []string, err error) {
+	dir = filepath.Join(strings.TrimSuffix(r.opt.Transcript, filepath.Ext(r.opt.Transcript)), "subagents")
 	ents, err := r.deps.FS.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil
+			return dir, nil, nil
 		}
-		return fmt.Errorf("replay: reading subagent transcripts: %w", err)
+		return dir, nil, fmt.Errorf("replay: reading subagent transcripts: %w", err)
 	}
-	var names []string
 	for _, e := range ents {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
 			names = append(names, e.Name())
 		}
 	}
 	sort.Strings(names)
+	return dir, names, nil
+}
+
+// prescanSubagentWrites notes the time of every successful file-tool write
+// (Edit/Write/MultiEdit/NotebookEdit tool_use with a non-error tool_result,
+// the same rule as registerReads) in the sub-agent transcripts, before the
+// main stream is replayed.
+func (r *runner) prescanSubagentWrites() error {
+	dir, names, err := r.subagentFiles()
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		f, err := r.deps.FS.OpenFile(filepath.Join(dir, name), os.O_RDONLY, 0)
+		if err != nil {
+			return fmt.Errorf("replay: opening subagent transcript: %w", err)
+		}
+		err = r.scanWrites(f)
+		if cerr := f.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+	}
+	r.subWritesNoted = true
+	return nil
+}
+
+func (r *runner) scanWrites(src io.Reader) error {
+	tr, err := OpenTranscript(r.client, src)
+	if err != nil {
+		return err
+	}
+	pending := map[string]bool{}
+	for {
+		it, err := tr.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return fmt.Errorf("replay: reading transcript: %w", err)
+		}
+		switch it.Kind {
+		case ItemToolUse:
+			switch it.ToolName {
+			case model.ToolEdit, model.ToolWrite, model.ToolMultiEdit, model.ToolNotebookEdit:
+				if it.ToolUseID != "" && len(pending) < maxPending {
+					pending[it.ToolUseID] = true
+				}
+			}
+		case ItemToolResult:
+			if pending[it.ToolUseID] {
+				delete(pending, it.ToolUseID)
+				if !it.IsError && !it.TS.IsZero() {
+					r.noteWrite(it.SessionID, it.TS)
+				}
+			}
+		}
+	}
+}
+
+func (r *runner) processSubagents() error {
+	dir, names, err := r.subagentFiles()
+	if err != nil {
+		return err
+	}
+	r.inSubagentFile = true
+	defer func() { r.inSubagentFile = false }()
 	for _, name := range names {
 		agent := strings.TrimPrefix(strings.TrimSuffix(name, ".jsonl"), "agent-")
 		f, err := r.deps.FS.OpenFile(filepath.Join(dir, name), os.O_RDONLY, 0)
@@ -619,6 +702,19 @@ func (r *runner) loadProject(root string) projectEntry {
 	if root == "" {
 		return projectEntry{cause: causeNoProject}
 	}
+	if r.deps.Project != nil {
+		pc, err := r.deps.Project.LoadProject(filepath.FromSlash(root))
+		switch {
+		case err != nil:
+			return projectEntry{cause: causeProjectInvalid}
+		case pc == nil:
+			return projectEntry{cause: causeNoProject}
+		}
+		if req := pc.Required(); len(req) > 0 {
+			return projectEntry{required: req}
+		}
+		return projectEntry{cause: causeNoRequired}
+	}
 	data, err := r.deps.FS.ReadFile(layout.ProjectJSON(filepath.FromSlash(root)))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -650,7 +746,7 @@ func (r *runner) registerReads(sc *scope, ev *model.Event, ts time.Time) {
 		for _, p := range tool.TargetDeletes {
 			sc.exists[r.norm(sc, p)] = false
 		}
-		if tool.Name != model.ToolRead {
+		if tool.Name != model.ToolRead && !(r.subWritesNoted && r.inSubagentFile) {
 			r.noteWrite(sc.session, ts)
 		}
 	}
