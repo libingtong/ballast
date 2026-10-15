@@ -96,6 +96,10 @@ var tomlSeeds = []string{
 	``, "[features]\nhooks = true\n", "[features]\nhooks = false\n", "a = 1\n[b]\nc = 2\n", "features.hooks = false\n",
 	"a = \"\"\"\n[features]\n\"\"\"\n", "a = [\n 1,\n]\n", "[x]\r\ny = 1\r\n", "[features", "k = 'v' # c\n",
 	"[hooks.state.'/home/u/.codex/hooks.json:stop:0:0']\nenabled = true\n",
+	"model = \"o3\"\nfeatures.web_search_request = true\n", "features.a = 1\n\n[profiles.x]\nb = 2\n",
+	"features.a = 1\n[features]\n", "features.hooks.x = 1\n",
+	"[hooks.state]\n'/home/u/.codex/hooks.json:stop:0:0'.enabled = true\n", "hooks.state.'/home/u/.codex/hooks.json:stop:0:0'.enabled = true\n",
+	"hooks = { state = {} }\n",
 }
 
 // FuzzCodexConfigPlan: every accepted config stays a scannable document with

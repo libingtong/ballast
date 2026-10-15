@@ -92,24 +92,27 @@ func Backup(opt Options, files []string) (*model.BackupRecord, error) {
 		}
 		rec.Files = append(rec.Files, it.path)
 	}
-	rotateBackups(fsys, lay.BackupsDir)
+	rotateBackups(fsys, lay.BackupsDir, filepath.Base(dir))
 	return rec, nil
 }
 
-// rotateBackups keeps the MaxBackups newest backup directories.
-func rotateBackups(fsys sys.FS, root string) {
+// rotateBackups keeps at most MaxBackups backup directories, deleting the
+// oldest by name. The directory just created (keep) is never deleted, even
+// when its name sorts first (same-second random suffixes, a clock that went
+// backwards).
+func rotateBackups(fsys sys.FS, root, keep string) {
 	ents, err := fsys.ReadDir(root)
 	if err != nil {
 		return
 	}
 	var names []string
 	for _, e := range ents {
-		if e.IsDir() && isBackupDirName(e.Name()) {
+		if e.IsDir() && e.Name() != keep && isBackupDirName(e.Name()) {
 			names = append(names, e.Name())
 		}
 	}
 	sort.Strings(names)
-	for len(names) > MaxBackups {
+	for len(names) > MaxBackups-1 {
 		_ = fsys.RemoveAll(filepath.Join(root, names[0]))
 		names = names[1:]
 	}

@@ -175,9 +175,6 @@ func planInstall(opt Options, clients []Client) (*installPlan, error) {
 				rep.Warnings = append(rep.Warnings, "managed settings could not be fully inspected: "+derr.Error())
 			}
 		}
-		if c.ID() == model.ClientCursor && len(opt.MDC) == 0 {
-			rep.Warnings = append(rep.Warnings, "no rendered Cursor rules (Options.MDC) supplied; ballast.mdc is not written")
-		}
 	}
 	old, err := LoadManifest(opt.FS, lay.Manifest)
 	if err != nil {
@@ -423,7 +420,8 @@ func restorePlan(opt Options, p *PlanResult) error {
 }
 
 // pruneEmptyDirs removes the (now empty) directories above a deleted file,
-// but never leaves the client's own config directory tree.
+// but only those strictly inside a client's config directory: the directory
+// itself is how the client is detected and may have existed before install.
 func pruneEmptyDirs(opt Options, file string) {
 	lay := opt.Layout
 	var roots []string
@@ -436,7 +434,7 @@ func pruneEmptyDirs(opt Options, file string) {
 	for {
 		within := false
 		for _, r := range roots {
-			if dir == r || strings.HasPrefix(dir, r+string(filepath.Separator)) {
+			if strings.HasPrefix(dir, r+string(filepath.Separator)) {
 				within = true
 			}
 		}

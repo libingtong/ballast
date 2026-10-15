@@ -3,7 +3,9 @@ package install
 import "errors"
 
 // Sentinel errors specific to the installer. Callers map them to the exit
-// codes of docs/architecture.md §7 with errors.Is.
+// codes of docs/architecture.md §7 with errors.Is. §10 wants sentinels in
+// model/errors.go; that package is frozen for this unit, so they live here
+// until a §12 contract change moves them (the error values stay the same).
 var (
 	// ErrUsage: invalid Options (no client given, unknown client, relative
 	// --binary). Exit 2.

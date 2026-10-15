@@ -165,8 +165,12 @@ func TestMissingOriginalFileIsCreatedThenDeleted(t *testing.T) {
 					t.Errorf("%s should have been deleted", p.Path)
 				}
 			}
-			if c != model.ClientCodex && e.exists(e.lay.ClientDir(c)) {
-				t.Errorf("the empty config directory %s should have been removed", e.lay.ClientDir(c))
+			// the client directory itself stays (it may have pre-existed, and it is
+			// how the client is detected); directories below it are cleaned up
+			if c != model.ClientCodex {
+				if ents, err := os.ReadDir(e.lay.ClientDir(c)); err != nil || len(ents) != 0 {
+					t.Errorf("%s should be left as an empty directory: %v %v", e.lay.ClientDir(c), ents, err)
+				}
 			}
 			if e.exists(e.lay.Manifest) {
 				m, _ := LoadManifest(e.fs, e.lay.Manifest)
@@ -972,8 +976,11 @@ func TestCursorMDCLifecycle(t *testing.T) {
 	if e.exists(e.cursorMDC()) {
 		t.Error("ballast.mdc must be deleted on uninstall")
 	}
-	if !e.exists(filepath.Join(e.lay.CursorDir)) {
-		t.Log("cursor directory removed along with the empty rules directory")
+	if !e.exists(e.lay.CursorDir) {
+		t.Error("the client directory itself must survive an uninstall")
+	}
+	if e.exists(filepath.Dir(e.cursorMDC())) {
+		t.Error("the rules directory install created should be removed once empty")
 	}
 
 	// without rendered rules the mdc is skipped with a warning
@@ -985,8 +992,26 @@ func TestCursorMDCLifecycle(t *testing.T) {
 	if e2.exists(e2.cursorMDC()) {
 		t.Error("mdc written without content")
 	}
-	if len(rep.Warnings) == 0 {
-		t.Error("expected a warning about the missing rules")
+	if len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0], e2.cursorMDC()) {
+		t.Errorf("want exactly one warning naming the mdc path, got %q", rep.Warnings)
+	}
+}
+
+func TestUninstallKeepsPreexistingEmptyClientDirs(t *testing.T) {
+	for _, c := range []model.ClientID{model.ClientHermes, model.ClientCursor, model.ClientCodex, model.ClientClaude} {
+		e := newTenv(t)
+		e.mkClientDirs() // empty directories are how the clients are detected
+		opt := e.opts(c)
+		mustInstall(t, opt)
+		mustUninstall(t, opt)
+		if !e.exists(e.lay.ClientDir(c)) {
+			t.Errorf("%s: pre-existing client directory %s was removed by uninstall", c, e.lay.ClientDir(c))
+		}
+		for _, cl := range Clients() {
+			if d := cl.Detect(e.lay, e.fs, e.sb.Env()); cl.ID() == c && !d.Installed {
+				t.Errorf("%s: no longer detected after uninstall", c)
+			}
+		}
 	}
 }
 

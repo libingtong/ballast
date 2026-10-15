@@ -42,49 +42,111 @@ type peerPlanner interface {
 	planWith(cur []byte, spec EntrySpec, m *model.InstallManifest, done []*PlanResult) (*PlanResult, error)
 }
 
-func (d *tomlDoc) featuresHooks() (idx, hdr int, val string, err error) {
-	idx, hdr = -1, -1
-	re := d.rootEnd()
-	if i, ok := d.kvIn(0, re, []string{"features", "hooks"}); ok {
-		idx = i
-	}
-	if _, ok := d.kvIn(0, re, []string{"features"}); ok {
-		return 0, 0, "", fmt.Errorf("%w: features is an inline table, which the installer does not edit", errTOMLSyntax)
-	}
-	tbls := d.tables([]string{"features"})
-	if len(tbls) > 1 {
-		return 0, 0, "", fmt.Errorf("%w: duplicate [features] table", errTOMLSyntax)
-	}
-	if len(tbls) == 1 {
-		hdr = tbls[0]
-		if idx < 0 {
-			if i, ok := d.kvIn(hdr+1, d.tableEnd(hdr), []string{"hooks"}); ok {
-				idx = i
+func hasPathPrefix(p, prefix []string) bool {
+	return len(p) >= len(prefix) && pathEq(p[:len(prefix)], prefix)
+}
+
+func joinPath(a, b []string) []string {
+	out := make([]string, 0, len(a)+len(b))
+	return append(append(out, a...), b...)
+}
+
+// featuresLoc locates features.hooks. idx is the line holding the value; hdr
+// the single [features] header; dotEnd the line after the last root-table
+// dotted "features.*" key (where "features.hooks" can be added without a
+// header); featuresScan rejects layouts that cannot be edited without producing
+// invalid TOML.
+type featuresLoc struct {
+	idx, hdr, dotEnd int
+}
+
+func (d *tomlDoc) featuresScan() (featuresLoc, error) {
+	loc := featuresLoc{idx: -1, hdr: -1, dotEnd: -1}
+	feat := []string{"features"}
+	fh := []string{"features", "hooks"}
+	var cur []string
+	nHdr, lastDot := 0, -1
+	for i, l := range d.lines {
+		switch l.kind {
+		case tlHeader:
+			cur = l.path
+			switch {
+			case l.arr && (hasPathPrefix(fh, l.path) || hasPathPrefix(l.path, fh)):
+				return loc, fmt.Errorf("%w: features is an array of tables", errTOMLSyntax)
+			case l.arr:
+			case hasPathPrefix(l.path, fh):
+				return loc, fmt.Errorf("%w: features.hooks is a table", errTOMLSyntax)
+			case pathEq(l.path, feat):
+				nHdr++
+				loc.hdr = i
+			}
+		case tlKV:
+			abs := joinPath(cur, l.path)
+			switch {
+			case pathEq(abs, fh):
+				if loc.idx >= 0 {
+					return loc, fmt.Errorf("%w: features.hooks is defined twice", errTOMLSyntax)
+				}
+				loc.idx = i
+			case hasPathPrefix(abs, fh):
+				return loc, fmt.Errorf("%w: features.hooks is a table", errTOMLSyntax)
+			case pathEq(abs, feat):
+				return loc, fmt.Errorf("%w: features is an inline table, which the installer does not edit", errTOMLSyntax)
+			}
+			if len(cur) == 0 && len(abs) >= 2 && abs[0] == "features" {
+				lastDot = i
 			}
 		}
 	}
-	if idx >= 0 {
-		val = d.value(idx)
+	if nHdr > 1 {
+		return loc, fmt.Errorf("%w: duplicate [features] table", errTOMLSyntax)
 	}
-	return idx, hdr, val, nil
+	if nHdr == 1 && lastDot >= 0 {
+		return loc, fmt.Errorf("%w: features is defined both by a [features] table and by dotted keys", errTOMLSyntax)
+	}
+	if lastDot >= 0 {
+		end := lastDot + 1
+		for end < len(d.lines) && d.lines[end].kind == tlCont {
+			end++
+		}
+		loc.dotEnd = end
+	}
+	return loc, nil
+}
+
+func (d *tomlDoc) featuresHooks() (idx, hdr int, val string, err error) {
+	loc, err := d.featuresScan()
+	if err != nil {
+		return 0, 0, "", err
+	}
+	if loc.idx >= 0 {
+		val = d.value(loc.idx)
+	}
+	return loc.idx, loc.hdr, val, nil
 }
 
 // ensureFeaturesHooks turns features.hooks on and reports whether it had to
 // edit the document.
 func (d *tomlDoc) ensureFeaturesHooks() (changed bool, err error) {
-	idx, hdr, val, err := d.featuresHooks()
+	loc, err := d.featuresScan()
 	if err != nil {
 		return false, err
 	}
+	var val string
+	if loc.idx >= 0 {
+		val = d.value(loc.idx)
+	}
 	switch {
-	case idx >= 0 && val == "true":
+	case loc.idx >= 0 && val == "true":
 		return false, nil
-	case idx >= 0 && val == "false":
-		d.setValue(idx, "true")
-	case idx >= 0:
+	case loc.idx >= 0 && val == "false":
+		d.setValue(loc.idx, "true")
+	case loc.idx >= 0:
 		return false, fmt.Errorf("%w: features.hooks has an unexpected value %s", errTOMLSyntax, val)
-	case hdr >= 0:
-		d.insertLines(hdr+1, "hooks = true")
+	case loc.hdr >= 0:
+		d.insertLines(loc.hdr+1, "hooks = true")
+	case loc.dotEnd >= 0:
+		d.insertLines(loc.dotEnd, "features.hooks = true")
 	default:
 		d.appendBlock("[features]", "hooks = true")
 	}
@@ -103,12 +165,41 @@ func parseTrustFlagKey(key string) (string, bool) {
 
 func trustTablePath(k string) []string { return []string{"hooks", "state", k} }
 
+// trustConflict reports layouts in which appending a [hooks.state.'k'] header
+// would redefine a table (TOML forbids re-declaring a table that dotted keys,
+// inline tables or values already define), so the file is refused instead.
+func (d *tomlDoc) trustConflict(k string) error {
+	tp := trustTablePath(k)
+	var cur []string
+	for _, l := range d.lines {
+		switch l.kind {
+		case tlHeader:
+			cur = l.path
+			if l.arr && (hasPathPrefix(tp, l.path) || hasPathPrefix(l.path, tp)) {
+				return fmt.Errorf("%w: hooks.state is an array of tables", errTOMLSyntax)
+			}
+		case tlKV:
+			if len(cur) >= len(tp) {
+				continue
+			}
+			abs := joinPath(cur, l.path)
+			if hasPathPrefix(abs, tp) || hasPathPrefix(tp, abs) {
+				return fmt.Errorf("%w: hooks.state.%s is defined by dotted or inline keys, which the installer does not edit", errTOMLSyntax, tomlString(k))
+			}
+		}
+	}
+	return nil
+}
+
 // setTrust writes (or updates in place) one trust table.
-func (d *tomlDoc) setTrust(k, hash string) {
+func (d *tomlDoc) setTrust(k, hash string) error {
+	if err := d.trustConflict(k); err != nil {
+		return err
+	}
 	tbls := d.tables(trustTablePath(k))
 	if len(tbls) == 0 {
 		d.appendBlock("[hooks.state."+tomlString(k)+"]", "enabled = true", `trusted_hash = "`+hash+`"`)
-		return
+		return nil
 	}
 	hdr := tbls[0]
 	want := map[string]string{"enabled": "true", "trusted_hash": `"` + hash + `"`}
@@ -122,6 +213,7 @@ func (d *tomlDoc) setTrust(k, hash string) {
 		}
 		d.insertLines(hdr+1, key+" = "+want[key])
 	}
+	return nil
 }
 
 // trustHashOf reads trusted_hash of a trust table ("" when absent).
@@ -286,7 +378,9 @@ func (t *codexConfigTarget) planWith(cur []byte, spec EntrySpec, m *model.Instal
 				}
 			}
 			for _, k := range sortedKeys(want) {
-				doc.setTrust(k, want[k])
+				if err := doc.setTrust(k, want[k]); err != nil {
+					return nil, t.parseErr(err)
+				}
 				res.Flags = append(res.Flags, model.ManagedFlag{
 					Client: model.ClientCodex, File: t.path, Key: trustFlagKey(k), Value: want[k], SetByBallast: true,
 				})

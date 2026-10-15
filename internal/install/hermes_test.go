@@ -220,6 +220,16 @@ func TestHermesUnsupportedBlocksRefuse(t *testing.T) {
 		"mixed item indent":   "hooks:\n  pre_tool_call:\n    - command: a\n   - command: b\n",
 		"quoted duplicate":    "\"hooks\":\n  a: []\nhooks:\n  b: []\n",
 		"empty flow + body":   "hooks: {}\n  a: []\n",
+		"flow item":           "hooks:\n  pre_tool_call:\n    - {command: x}\n",
+		"flow item list":      "hooks:\n  pre_tool_call:\n    - [a, b]\n",
+		"anchor item":         "hooks:\n  pre_tool_call:\n    - &a\n      command: x\n",
+		"anchor item value":   "hooks:\n  pre_tool_call:\n    - command: &a x\n",
+		"alias item":          "hooks:\n  pre_tool_call:\n    - *a\n",
+		"alias item value":    "hooks:\n  pre_tool_call:\n    - command: x\n      timeout: *t\n",
+		"tag item":            "hooks:\n  pre_tool_call:\n    - !tag\n      command: x\n",
+		"tag item value":      "hooks:\n  pre_tool_call:\n    - command: !!str x\n",
+		"flow field value":    "hooks:\n  pre_tool_call:\n    - command: x\n      env: {A: 1}\n",
+		"flow seq field":      "hooks:\n  pre_tool_call:\n    - command: x\n      args: [a]\n",
 	}
 	for name, in := range bad {
 		if _, err := gHermesT().Plan([]byte(in), gspec(model.ClientHermes), nil); !errors.Is(err, model.ErrSettingsParse) {
@@ -232,7 +242,7 @@ func TestHermesUnsupportedBlocksRefuse(t *testing.T) {
 }
 
 func TestHermesSectionParsing(t *testing.T) {
-	src := "model: x\nhooks:   # the hooks\n  pre_tool_call:\n    - command: \"a b\"   # c\n      timeout: 30\n    -   command: 'it''s'\n    - {command: flow}\n    - command: x\n      nested:\n        deep: 1\n  # comment\n\nafter: 1\n"
+	src := "model: x\nhooks:   # the hooks\n  pre_tool_call:\n    - command: \"a b\"   # c\n      timeout: 30\n    -   command: 'it''s'\n    - command: x\n      nested:\n        deep: 1\n  # comment\n\nafter: 1\n"
 	sec, err := parseYAMLDoc([]byte(src)).section()
 	if err != nil {
 		t.Fatal(err)
@@ -241,20 +251,20 @@ func TestHermesSectionParsing(t *testing.T) {
 		t.Fatalf("section = %+v", sec)
 	}
 	ev := sec.events[0]
-	if ev.name != "pre_tool_call" || ev.itemInd != 4 || len(ev.items) != 4 {
+	if ev.name != "pre_tool_call" || ev.itemInd != 4 || len(ev.items) != 3 {
 		t.Fatalf("event = %+v", ev)
 	}
-	got := []string{ev.items[0].command, ev.items[1].command, ev.items[2].command, ev.items[3].command}
-	if !reflect.DeepEqual(got, []string{"a b", "it's", "", ""}) {
+	got := []string{ev.items[0].command, ev.items[1].command, ev.items[2].command}
+	if !reflect.DeepEqual(got, []string{"a b", "it's", ""}) {
 		t.Errorf("commands = %q", got)
 	}
-	if !ev.items[2].opaque || !ev.items[3].opaque {
-		t.Error("flow item and nested item must be opaque")
+	if !ev.items[2].opaque {
+		t.Error("nested item must be opaque")
 	}
-	if ev.items[3].command != "" {
+	if ev.items[2].command != "" {
 		t.Error("opaque items never expose a command")
 	}
-	if sec.last != 10 {
+	if sec.last != 9 {
 		t.Errorf("last = %d (the trailing comment belongs to the block, the blank line does not)", sec.last)
 	}
 }

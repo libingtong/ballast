@@ -307,8 +307,8 @@ func (d *yamlDoc) section() (*ySection, error) {
 			first := strings.TrimSpace(after)
 			if first == "" || first[0] == '#' {
 				it.opaque = true
-			} else {
-				it.addField(first, false)
+			} else if err := it.addField(first); err != nil {
+				return nil, unsupported("%v at line %d", err, i+1)
 			}
 		default: // continuation of the current item
 			if it == nil || ind <= ev.itemInd {
@@ -317,8 +317,8 @@ func (d *yamlDoc) section() (*ySection, error) {
 			it.end = i
 			if ind != itemKeyCol {
 				it.opaque = true
-			} else {
-				it.addField(body, true)
+			} else if err := it.addField(body); err != nil {
+				return nil, unsupported("%v at line %d", err, i+1)
 			}
 		}
 	}
@@ -333,23 +333,51 @@ func (d *yamlDoc) section() (*ySection, error) {
 	return s, nil
 }
 
-// addField parses "key: scalar" into the item object.
-func (it *yItem) addField(s string, _ bool) {
+// flowLike reports a value that starts a flow collection, anchor, alias or
+// tag; the line editor does not understand those. Empty flow collections are
+// harmless.
+func flowLike(v string) bool {
+	v = stripYAMLComment(strings.TrimSpace(v))
+	if v == "" {
+		return false
+	}
+	switch v[0] {
+	case '&', '*', '!':
+		return true
+	case '{':
+		return v != "{}"
+	case '[':
+		return v != "[]"
+	}
+	return false
+}
+
+// addField parses "key: scalar" into the item object. Flow collections,
+// anchors, aliases and tags are refused (the block is unsupported); other
+// values the editor cannot represent only make the item opaque.
+func (it *yItem) addField(s string) error {
+	if flowLike(s) {
+		return errors.New("flow collection, anchor, alias or tag in a hook item")
+	}
 	name, rest, ok := parseYAMLKeyLine(s)
 	if !ok {
 		it.opaque = true
-		return
+		return nil
+	}
+	if flowLike(rest) {
+		return fmt.Errorf("flow collection, anchor, alias or tag in field %q", name)
 	}
 	if _, dup := it.obj[name]; dup {
 		it.opaque = true
-		return
+		return nil
 	}
 	v, ok := parseYAMLScalar(rest)
 	if !ok {
 		it.opaque = true
-		return
+		return nil
 	}
 	it.obj[name] = v
+	return nil
 }
 
 // parseYAMLKeyLine splits "name: rest" (comments stripped from rest).

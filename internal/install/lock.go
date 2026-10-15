@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/libingtong/ballast/internal/sys"
 )
 
 // Tunables (variables so tests can shorten them).
@@ -39,8 +37,8 @@ func lockInstall(opt Options) (release func(), err error) {
 		if !errors.Is(err, fs.ErrExist) {
 			return nil, fmt.Errorf("install lock: %w", err)
 		}
-		if staleLock(fsys, path) {
-			_ = fsys.Remove(path)
+		if fi, serr := fsys.Stat(path); serr == nil && time.Since(fi.ModTime()) > lockStale {
+			breakStaleLock(opt, path, fi)
 			continue
 		}
 		if time.Now().After(deadline) {
@@ -50,7 +48,26 @@ func lockInstall(opt Options) (release func(), err error) {
 	}
 }
 
-func staleLock(fsys sys.FS, path string) bool {
-	fi, err := fsys.Stat(path)
-	return err == nil && time.Since(fi.ModTime()) > lockStale
+// breakStaleLock removes an abandoned lock without deleting a live one.
+// observed is the stale file info the caller saw; between that Stat and a
+// plain Remove another process could have broken the lock and taken a fresh
+// one. Breakers are therefore serialized by a second exclusive-create file and
+// re-check, while holding it, that the lock is still the same stale file.
+func breakStaleLock(opt Options, path string, observed fs.FileInfo) {
+	fsys := opt.FS
+	guard := path + ".break"
+	f, err := fsys.OpenFile(guard, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		if fi, serr := fsys.Stat(guard); serr == nil && time.Since(fi.ModTime()) > lockStale {
+			_ = fsys.Remove(guard) // its owner died while breaking a lock
+		} else {
+			time.Sleep(lockPoll)
+		}
+		return
+	}
+	_ = f.Close()
+	defer func() { _ = fsys.Remove(guard) }()
+	if fi, err := fsys.Stat(path); err == nil && fi.ModTime().Equal(observed.ModTime()) {
+		_ = fsys.Remove(path)
+	}
 }

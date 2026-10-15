@@ -2,6 +2,7 @@ package install
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,5 +179,54 @@ func TestPruneBackupRecords(t *testing.T) {
 	got := pruneBackupRecords(e.fs, recs)
 	if len(got) != MaxBackups || got[0].Dir != recs[0].Dir || got[1].Dir != recs[2].Dir {
 		t.Errorf("pruned = %d, first dirs %v", len(got), got[:2])
+	}
+}
+
+// descIDs yields ever smaller suffixes so the newest directory sorts first.
+type descIDs struct{ n int }
+
+func (d *descIDs) NewID(int) string { d.n++; return fmt.Sprintf("%06x", 0xffffff-d.n) }
+
+func TestBackupRotationNeverDeletesTheNewBackup(t *testing.T) {
+	for name, ids := range map[string]sys.IDGen{"random": sys.RandomID{}, "descending": &descIDs{}} {
+		e := newTenv(t)
+		f := filepath.Join(e.sb.Home, "f.json")
+		e.write(f, "x")
+		opt := e.opts()
+		opt.IDs = ids
+		for i := 0; i < 12; i++ { // same second every time
+			rec, err := Backup(opt, []string{f})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(filepath.Join(rec.Dir, EncodeBackupName(f))); err != nil {
+				t.Fatalf("%s: backup %d vanished right after Backup returned: %v", name, i, err)
+			}
+		}
+		if ents, _ := os.ReadDir(e.lay.BackupsDir); len(ents) != MaxBackups {
+			t.Errorf("%s: %d backup dirs kept, want %d", name, len(ents), MaxBackups)
+		}
+	}
+	// a clock that jumps back keeps the new backup too
+	e := newTenv(t)
+	f := filepath.Join(e.sb.Home, "f.json")
+	e.write(f, "x")
+	opt := e.opts()
+	for i := 0; i < 11; i++ {
+		e.clock.Advance(time.Hour)
+		if _, err := Backup(opt, []string{f}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.clock.Advance(-48 * time.Hour)
+	rec, err := Backup(opt, []string{f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(rec.Dir); err != nil {
+		t.Errorf("backup made after a clock step back was rotated away: %v", err)
+	}
+	if ents, _ := os.ReadDir(e.lay.BackupsDir); len(ents) != MaxBackups {
+		t.Errorf("%d backup dirs kept, want %d", len(ents), MaxBackups)
 	}
 }
