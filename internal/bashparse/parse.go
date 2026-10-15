@@ -1,6 +1,7 @@
 package bashparse
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -40,12 +41,15 @@ func nodeHint(n int) int {
 	return h
 }
 
+// errInternal marks a recovered panic (a bug, never a syntax error).
+var errInternal = errors.New("bashparse: internal error")
+
 // Parse parses src as bash. A non-nil error means the command could not be
 // parsed (shell matchers then return unknown).
 func Parse(src string, opt Options) (cl *model.CommandList, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			cl, err = nil, fmt.Errorf("bashparse: internal error: %v", r)
+			cl, err = nil, fmt.Errorf("%w: %v", errInternal, r)
 		}
 	}()
 	f, err := parseFile(src)

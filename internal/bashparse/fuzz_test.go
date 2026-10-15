@@ -2,6 +2,7 @@ package bashparse
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -119,6 +120,7 @@ func seedSources(f interface{ Add(...any) }) {
 		"x=(a b); echo ${x[@]}", "echo \x00", "echo \xff\xfe", "sleep 1e999999", "sleep 99999999999999999999d",
 		"env -S", "sudo -u", "timeout", "nice -n", "git -C", "git -c", "sed -i", "dd of=", "ln",
 		"bash -c 'bash -c \"bash -c \\\"bash -c a\\\"\"'", "cat <<EOF\n$(cat <<IN\nx\nIN\n)\nEOF",
+		"0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0", "git add a b c d e f g h i j k l m n o p", strings.Repeat("a ", 40) + "; " + strings.Repeat("b ", 40),
 		strings.Repeat("(", 200) + strings.Repeat(")", 200), strings.Repeat("$(", 100) + "a" + strings.Repeat(")", 100),
 		strings.Repeat("{ ", 100) + "a;" + strings.Repeat("} ", 100), strings.Repeat("a | ", 500) + "b",
 	} {
@@ -131,6 +133,9 @@ func FuzzParse(f *testing.F) {
 	f.Fuzz(func(t *testing.T, src string) {
 		cl, err := Parse(src, Options{})
 		if err != nil {
+			if errors.Is(err, errInternal) {
+				t.Fatalf("%q: %v", src, err)
+			}
 			if cl != nil {
 				t.Fatalf("%q: list with error", src)
 			}

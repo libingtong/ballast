@@ -460,6 +460,9 @@ func (p *parser) kwFunction(c ctx) error {
 	if err := p.skipInline(); err != nil {
 		return err
 	}
+	if p.eof() {
+		return errUnbalanced
+	}
 	if _, err := p.readWord(c); err != nil {
 		return err
 	}

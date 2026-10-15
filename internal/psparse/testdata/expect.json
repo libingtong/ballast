@@ -95,6 +95,8 @@
     {"src": "foreach ($i in 1,2) { Start-Sleep 1", "error": true},
     {"src": "Get-Date )", "error": true},
     {"src": "@'\nno terminator", "error": true},
+    {"src": "funCtion#", "error": true},
+    {"src": "function #c", "error": true},
     {"src": "<# unterminated", "error": true}
   ]
 }

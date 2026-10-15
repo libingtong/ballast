@@ -28,6 +28,9 @@ func (b *builder) argv(n int) []model.Word {
 		} else if b.chunk < 512 {
 			b.chunk *= 2
 		}
+		if b.chunk < n {
+			b.chunk = n
+		}
 		b.words = make([]model.Word, b.chunk)
 	}
 	s := b.words[:n:n]
@@ -128,9 +131,9 @@ func (w *walker) stmt(s *syntax.Stmt, c ctx) span {
 			sp.last = l.last
 		}
 	case *syntax.Block:
-		w.stmts(x.Stmts, c)
+		sp = w.stmts(x.Stmts, c)
 	case *syntax.Subshell:
-		w.stmts(x.Stmts, c)
+		sp = w.stmts(x.Stmts, c)
 	case *syntax.IfClause:
 		w.ifClause(x, c)
 	case *syntax.WhileClause:

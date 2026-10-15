@@ -3,6 +3,7 @@ package psparse
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -83,6 +84,7 @@ func lower(s string) string {
 }
 
 var fuzzSeeds = []string{
+	"funCtion#", "function #c", "function\t#", "function ",
 	"", " ", "\n", ";", "|", "&", "&&", "||", ">", ">>", "2>&1", "*>", "(", ")", "{", "}", "[", "]", "$", "$(", "${", "@", "@(", "@{", "@'", "@\"",
 	"'", "\"", "`", "<#", "#>", "#", "-", "--", "-x", "-x:", "$x = ", "$x = 1", "& ", ". ", "& $x", "%", "?", "1..", "..",
 	"foreach", "foreach (", "foreach ($", "foreach ($i in", "foreach ($i in 1,2) {", "if", "if (", "if ($a) {", "else", "do", "do {}", "do {} while", "do {} while (",
@@ -114,6 +116,9 @@ func FuzzParse(f *testing.F) {
 	f.Fuzz(func(t *testing.T, src string) {
 		cl, err := Parse(src)
 		if err != nil {
+			if errors.Is(err, errInternal) {
+				t.Fatalf("%q: %v", src, err)
+			}
 			if cl != nil {
 				t.Fatalf("%q: list with error", src)
 			}

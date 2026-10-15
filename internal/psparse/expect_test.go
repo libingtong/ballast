@@ -3,6 +3,7 @@ package psparse
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -175,6 +176,9 @@ func runExpect(t *testing.T, file string) {
 		if c.Error {
 			if err == nil {
 				t.Errorf("%q: want error, got %+v", c.Src, cl)
+			}
+			if errors.Is(err, errInternal) {
+				t.Errorf("%q: %v", c.Src, err)
 			}
 			continue
 		}

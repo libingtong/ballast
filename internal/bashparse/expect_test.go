@@ -3,6 +3,7 @@ package bashparse
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -178,6 +179,9 @@ func TestExpectJSON(t *testing.T) {
 		if c.Error {
 			if err == nil {
 				t.Errorf("%q: want parse error, got %+v", c.Src, cl)
+			}
+			if errors.Is(err, errInternal) {
+				t.Errorf("%q: %v", c.Src, err)
 			}
 			continue
 		}

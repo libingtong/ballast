@@ -1,6 +1,7 @@
 package psparse
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -29,11 +30,14 @@ var Aliases = map[string]string{
 	"?": "where-object", "where": "where-object",
 }
 
+// errInternal marks a recovered panic (a bug, never a tokenizing failure).
+var errInternal = errors.New("psparse: internal error")
+
 // Parse tokenizes src. A non-nil error means "cannot tokenize" ⇒ unknown.
 func Parse(src string) (cl *model.CommandList, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			cl, err = nil, fmt.Errorf("psparse: internal error: %v", r)
+			cl, err = nil, fmt.Errorf("%w: %v", errInternal, r)
 		}
 	}()
 	cl = &model.CommandList{Shell: model.ShellPowerShell, Nodes: make([]model.CommandNode, 0, 4)}
