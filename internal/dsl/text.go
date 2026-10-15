@@ -84,15 +84,15 @@ func stripCodeBlocks(text string) string {
 }
 
 // stripInlineCode removes `code` spans: a run of n backticks closes at the
-// next run of exactly n backticks; unmatched runs stay literal.
+// next run of exactly n backticks; unmatched runs stay literal. Linear time.
 func stripInlineCode(line string) string {
 	if strings.IndexByte(line, '`') < 0 {
 		return line
 	}
-	var b strings.Builder
+	type run struct{ start, end int }
+	var runs []run
 	for i := 0; i < len(line); {
 		if line[i] != '`' {
-			b.WriteByte(line[i])
 			i++
 			continue
 		}
@@ -100,30 +100,33 @@ func stripInlineCode(line string) string {
 		for j < len(line) && line[j] == '`' {
 			j++
 		}
-		run := j - i
-		end := -1
-		for k := j; k < len(line); {
-			if line[k] != '`' {
-				k++
-				continue
-			}
-			l := k
-			for l < len(line) && line[l] == '`' {
-				l++
-			}
-			if l-k == run {
-				end = l
-				break
-			}
-			k = l
+		runs = append(runs, run{i, j})
+		i = j
+	}
+	// next[k] is the index of the next run with the same length, or -1.
+	next := make([]int, len(runs))
+	last := map[int]int{}
+	for k := len(runs) - 1; k >= 0; k-- {
+		n := runs[k].end - runs[k].start
+		if j, ok := last[n]; ok {
+			next[k] = j
+		} else {
+			next[k] = -1
 		}
-		if end < 0 {
-			b.WriteString(line[i:j])
-			i = j
+		last[n] = k
+	}
+	var b strings.Builder
+	pos := 0
+	for k := 0; k < len(runs); {
+		if next[k] < 0 {
+			k++
 			continue
 		}
-		i = end
+		b.WriteString(line[pos:runs[k].start])
+		pos = runs[next[k]].end
+		k = next[k] + 1
 	}
+	b.WriteString(line[pos:])
 	return b.String()
 }
 
@@ -139,23 +142,22 @@ func stripQuotes(text string) string {
 		kept = append(kept, ln)
 	}
 	rs := []rune(strings.Join(kept, "\n"))
+	// lastAt[c] is the index of the last closer c: an opener after it can
+	// never close, which keeps the scan linear.
+	lastAt := map[rune]int{}
+	for i, r := range rs {
+		lastAt[r] = i
+	}
 	out := make([]rune, 0, len(rs))
 	for i := 0; i < len(rs); i++ {
 		closer, ok := quotePairs[rs[i]]
-		if !ok {
+		if !ok || lastAt[closer] <= i {
 			out = append(out, rs[i])
 			continue
 		}
-		end := -1
-		for j := i + 1; j < len(rs); j++ {
-			if rs[j] == closer {
-				end = j
-				break
-			}
-		}
-		if end < 0 {
-			out = append(out, rs[i])
-			continue
+		end := i + 1
+		for rs[end] != closer {
+			end++
 		}
 		i = end
 	}
@@ -204,11 +206,11 @@ func RuneLen(s string) int {
 	return n
 }
 
-// FlattenToolResponse renders a tool_response payload as text (the same rule
+// flattenToolResponse renders a tool_response payload as text (the same rule
 // the adapters use for Event.ToolResponseText): an object with stdout/stderr
 // becomes stdout + "\n" + stderr, a string stays as is, anything else is its
 // compact JSON.
-func FlattenToolResponse(raw json.RawMessage) string {
+func flattenToolResponse(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
 	}

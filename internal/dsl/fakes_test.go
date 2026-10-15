@@ -212,7 +212,7 @@ func (a fakeClaude) ParseEvent(native string, stdin []byte) (*model.Event, error
 		ev.LastAssistantMessage, ev.HasLastAssistantMessage = *p.LastAssistantMessage, true
 	}
 	if len(p.ToolResponse) > 0 {
-		ev.ToolResponseText = FlattenToolResponse(p.ToolResponse)
+		ev.ToolResponseText = flattenToolResponse(p.ToolResponse)
 	}
 	if p.ToolName != "" {
 		tc, _ := a.NormalizeTool(p.ToolName, p.ToolInput)

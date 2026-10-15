@@ -25,6 +25,7 @@ func TestPredicates(t *testing.T) {
 		{"path_exists false", when(`[{"path_exists":{}}]`), file, F, ""},
 		{"not path_exists", when(`[{"not":{"path_exists":{}}}]`), file, T, ""},
 
+		{"empty target is no target", when(`[{"read_this_session":{}}]`), scenario{payload: toolPayload("Edit", `{"file_path":""}`)}, U, "read_this_session:no_target"},
 		{"verify_fresh true", when(`[{"verify_fresh":{}}]`), file.with(model.Fixture{VerifyFresh: "true"}), T, ""},
 		{"verify_fresh false", when(`[{"verify_fresh":{}}]`), file.with(model.Fixture{VerifyFresh: "false"}), F, ""},
 		{"verify_fresh unknown", when(`[{"verify_fresh":{}}]`), file, U, "verify_fresh:fixture_unknown"},

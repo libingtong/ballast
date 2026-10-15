@@ -217,9 +217,9 @@ func lintStack(files []*lintFile) []model.Diagnostic {
 	return append(out, bd.list...)
 }
 
-// AnchorText returns a rule's anchor: the explicit anchor, or the first line
+// anchorText returns a rule's anchor: the explicit anchor, or the first line
 // of the inject text truncated to model.MaxAnchorRunes.
-func AnchorText(in *model.Inject) string {
+func anchorText(in *model.Inject) string {
 	if in == nil {
 		return ""
 	}
@@ -243,7 +243,7 @@ func checkInjectBudget(d *diags, rules []*model.Rule) {
 			continue
 		}
 		full += RuneLen(r.Inject.Text)
-		anchors += RuneLen(AnchorText(r.Inject))
+		anchors += RuneLen(anchorText(r.Inject))
 	}
 	if full > model.BudgetSessionStart {
 		d.err(CodeInjectBudget, "", "", "inject texts of the enabled rules total %d characters (limit %d)", full, model.BudgetSessionStart)

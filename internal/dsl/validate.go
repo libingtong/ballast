@@ -65,8 +65,8 @@ func (v *validator) file(f *model.RuleFile) {
 	}
 }
 
-// ValidRuleID reports whether id matches ^[a-z0-9-]{3,40}$.
-func ValidRuleID(id string) bool {
+// validRuleID reports whether id matches ^[a-z0-9-]{3,40}$.
+func validRuleID(id string) bool {
 	if len(id) < 3 || len(id) > 40 {
 		return false
 	}
@@ -83,7 +83,7 @@ func (v *validator) rule(i int, r *model.Rule) {
 	d := v.d
 	base := ptr("rules", i)
 	id := r.ID
-	if !ValidRuleID(id) {
+	if !validRuleID(id) {
 		d.err(CodeBadID, base+"/id", id, "rule id %q must match ^[a-z0-9-]{3,40}$", id)
 	}
 	if RuneLen(r.Description) > 500 {
@@ -331,6 +331,9 @@ func (v *validator) inputRegex(base, id string, m *model.Match, scope toolScope)
 				hint = " (valid: " + strings.Join(InputFields[bad[0]], ", ") + ")"
 			}
 			v.d.err(CodeInputFieldUnknown, kp, id, "input_regex.%s is not a tool_input field of %s%s", key, strings.Join(bad, ", "), hint)
+			// doc.go's acceptance list calls this field-not-applicable while
+			// dsl-semantics §5.3/§11 call it input-field-unknown; report both.
+			v.d.err(CodeFieldNotApplicable, kp, id, "input_regex.%s does not apply to %s", key, strings.Join(bad, ", "))
 		}
 	}
 }
@@ -386,7 +389,7 @@ func shellMatchEmpty(s *model.ShellMatch) bool {
 
 func (v *validator) text(p string, r *model.Rule, t *model.TextMatch) {
 	id := r.ID
-	if want := DefaultTextSource(r.Event); t.Source != "" && t.Source != want {
+	if want := defaultTextSource(r.Event); t.Source != "" && t.Source != want {
 		v.d.err(CodeTextSourceMismatch, p+"/source", id, "text source %q is not available on %s events (use %q)", string(t.Source), string(r.Event), string(want))
 	}
 	seen := map[string]bool{}
@@ -528,7 +531,7 @@ func (v *validator) cond(p string, r *model.Rule, c *model.Cond) {
 		v.regex(p+"/prev_prompt_regex/regex", id, c.PrevPromptRegex.Regex)
 	case c.PriorHit != nil:
 		ph := c.PriorHit
-		if !ValidRuleID(ph.Rule) {
+		if !validRuleID(ph.Rule) {
 			v.d.err(CodeSchema, p+"/prior_hit/rule", id, "prior_hit.rule %q is not a valid rule id", ph.Rule)
 		} else if !v.known[ph.Rule] {
 			v.d.warn(CodePriorHitUnknown, p+"/prior_hit/rule", id, "prior_hit refers to rule %q, which is not in the same rule set", ph.Rule)

@@ -165,18 +165,18 @@ func sortStrings2(s []string) {
 }
 
 func TestHelpers(t *testing.T) {
-	if DefaultTextSource(model.EventUserPromptSubmit) != model.TextPrompt || DefaultTextSource(model.EventStop) != model.TextLastAssistantMessage ||
-		DefaultTextSource(model.EventSubagentStop) != model.TextLastAssistantMessage || DefaultTextSource(model.EventPostToolUse) != model.TextToolResponse ||
-		DefaultTextSource(model.EventPostToolUseFailure) != model.TextError {
-		t.Error("DefaultTextSource")
+	if defaultTextSource(model.EventUserPromptSubmit) != model.TextPrompt || defaultTextSource(model.EventStop) != model.TextLastAssistantMessage ||
+		defaultTextSource(model.EventSubagentStop) != model.TextLastAssistantMessage || defaultTextSource(model.EventPostToolUse) != model.TextToolResponse ||
+		defaultTextSource(model.EventPostToolUseFailure) != model.TextError {
+		t.Error("defaultTextSource")
 	}
-	if AnchorText(nil) != "" || AnchorText(&model.Inject{Text: "line one\nline two"}) != "line one" ||
-		AnchorText(&model.Inject{Text: "t", Anchor: "mine"}) != "mine" || RuneLen(AnchorText(&model.Inject{Text: strings.Repeat("字", 100)})) != 80 {
-		t.Error("AnchorText")
+	if anchorText(nil) != "" || anchorText(&model.Inject{Text: "line one\nline two"}) != "line one" ||
+		anchorText(&model.Inject{Text: "t", Anchor: "mine"}) != "mine" || RuneLen(anchorText(&model.Inject{Text: strings.Repeat("字", 100)})) != 80 {
+		t.Error("anchorText")
 	}
 	for id, want := range map[string]bool{"abc": true, "a-b-1": true, "ab": false, "Abc": false, "a_b": false, strings.Repeat("a", 41): false, strings.Repeat("a", 40): true} {
-		if ValidRuleID(id) != want {
-			t.Errorf("ValidRuleID(%q) != %v", id, want)
+		if validRuleID(id) != want {
+			t.Errorf("validRuleID(%q) != %v", id, want)
 		}
 	}
 	if HasErrors(nil) || HasErrors([]model.Diagnostic{{Severity: model.SevWarning}}) || !HasErrors([]model.Diagnostic{{Severity: model.SevError}}) {

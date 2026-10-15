@@ -1,6 +1,9 @@
 package dsl
 
 import (
+	"bytes"
+	"encoding/json"
+	"flag"
 	"os"
 	"path/filepath"
 	"sort"
@@ -79,5 +82,36 @@ func TestSchemaExamplesLintAllClients(t *testing.T) {
 			continue
 		}
 		t.Errorf("unexpected lint error: %+v", d)
+	}
+}
+
+var updateGolden = flag.Bool("update", false, "rewrite golden files in testdata")
+
+// TestSchemaExamplesGolden compares the full test-rules report over
+// schema/examples with testdata/examples_report.golden.json
+// (go test -run Golden -update rewrites it).
+func TestSchemaExamplesGolden(t *testing.T) {
+	e, _ := newTestEngine(t)
+	rep, err := e.TestRules(schemaExamples(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := json.MarshalIndent(rep, "", " ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, '\n')
+	path := filepath.Join("testdata", "examples_report.golden.json")
+	if *updateGolden {
+		if err := os.WriteFile(path, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("test-rules report differs from %s (run with -update after reviewing the change)", path)
 	}
 }

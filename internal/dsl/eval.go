@@ -121,7 +121,7 @@ func (e *Engine) Evaluate(rs *model.CompiledRuleSet, in *model.EvalInput) (v *mo
 	}
 	c := &evalCtx{e: e, in: in, ev: ev, pc: pc, ps: e.opt.Paths}
 
-	var results []model.RuleResult
+	results := []model.RuleResult{}
 	var hits []model.RuleHit
 	for i := range rs.Rules {
 		cr := &rs.Rules[i]
@@ -321,7 +321,7 @@ func (c *evalCtx) textSource(src model.TextSource) (string, res, bool) {
 		if ev.ToolResponseText != "" || len(ev.ToolResponse) == 0 {
 			return ev.ToolResponseText, resTrue, true
 		}
-		return FlattenToolResponse(ev.ToolResponse), resTrue, true
+		return flattenToolResponse(ev.ToolResponse), resTrue, true
 	default:
 		if ev.HasLastAssistantMessage || ev.LastAssistantMessage != "" {
 			return ev.LastAssistantMessage, resTrue, true
@@ -533,13 +533,14 @@ func (c *evalCtx) bindings(p *program) (bs []binding, uncertain bool, cause stri
 	}
 	if p.path == nil {
 		if t != nil && sk == model.ShellNone {
-			if len(t.Targets) == 0 {
-				return []binding{{node: -1}}, false, ""
-			}
 			for _, raw := range t.Targets {
-				bs = append(bs, binding{node: -1, tgt: target{raw: raw, ok: true}})
+				if raw != "" {
+					bs = append(bs, binding{node: -1, tgt: target{raw: raw, ok: true}})
+				}
 			}
-			return bs, false, ""
+			if len(bs) > 0 {
+				return bs, false, ""
+			}
 		}
 		return []binding{{node: -1}}, false, ""
 	}

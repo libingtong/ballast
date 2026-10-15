@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/libingtong/ballast/internal/model"
 )
@@ -124,8 +125,8 @@ func TestFlattenToolResponse(t *testing.T) {
 		{`not json`, "not json"},
 	}
 	for _, c := range cases {
-		if got := FlattenToolResponse(json.RawMessage(c.in)); got != c.want {
-			t.Errorf("FlattenToolResponse(%s) = %q, want %q", c.in, got, c.want)
+		if got := flattenToolResponse(json.RawMessage(c.in)); got != c.want {
+			t.Errorf("flattenToolResponse(%s) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -136,5 +137,30 @@ func TestTruncateRunes(t *testing.T) {
 	}
 	if got := lastRunes(strings.Repeat("x", 300), 200); len(got) != 200 {
 		t.Errorf("lastRunes len %d", len(got))
+	}
+}
+
+// TestPreprocessIsLinear feeds adversarial inputs (many unmatched openers,
+// backtick runs of every length) that would be quadratic with a naive scan.
+func TestPreprocessIsLinear(t *testing.T) {
+	var runs strings.Builder
+	for n := 1; n < 700; n++ {
+		runs.WriteString(strings.Repeat("`", n))
+		runs.WriteString("x")
+	}
+	inputs := []string{
+		strings.Repeat("「", 1<<20),
+		strings.Repeat("\"a", 1<<19),
+		strings.Repeat("“", 1<<19) + "”",
+		runs.String(),
+		strings.Repeat("` ", 1<<19),
+		strings.Repeat("```\n", 1<<18),
+	}
+	for i, in := range inputs {
+		start := time.Now()
+		_ = Preprocess(in, []string{model.PreStripCodeBlocks, model.PreStripQuotes})
+		if d := time.Since(start); d > 3*time.Second {
+			t.Errorf("input %d took %v", i, d)
+		}
 	}
 }

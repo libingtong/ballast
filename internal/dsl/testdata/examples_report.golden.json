@@ -1,0 +1,427 @@
+{
+ "cases": [
+  {
+   "file": "01-read-before-edit.json",
+   "rule_id": "read-before-edit",
+   "example": "edit an existing file that was not read",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "01-read-before-edit.json",
+   "rule_id": "read-before-edit",
+   "example": "edit after reading",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "01-read-before-edit.json",
+   "rule_id": "read-before-edit",
+   "example": "create a new file",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "01-read-before-edit.json",
+   "rule_id": "read-before-edit",
+   "example": "codex apply_patch: one of two existing targets unread",
+   "client": "codex",
+   "expect": "hit",
+   "got": 0,
+   "pass": false,
+   "detail": "no adapter available for client codex",
+   "skipped": true
+  },
+  {
+   "file": "02-no-long-sleep.json",
+   "rule_id": "no-long-sleep",
+   "example": "plain sleep 300",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "02-no-long-sleep.json",
+   "rule_id": "no-long-sleep",
+   "example": "wrapped by timeout",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "02-no-long-sleep.json",
+   "rule_id": "no-long-sleep",
+   "example": "shell background \u0026",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "02-no-long-sleep.json",
+   "rule_id": "no-long-sleep",
+   "example": "tool-level background",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "02-no-long-sleep.json",
+   "rule_id": "no-long-sleep",
+   "example": "bounded retry loop with short sleeps",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "02-no-long-sleep.json",
+   "rule_id": "no-long-sleep",
+   "example": "quoted text is not a command",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "02-no-long-sleep.json",
+   "rule_id": "no-long-sleep",
+   "example": "dynamic duration is unknown",
+   "client": "claude-code",
+   "expect": "unknown",
+   "got": 0,
+   "pass": true,
+   "detail": "bash:dynamic_sleep"
+  },
+  {
+   "file": "02-no-long-sleep.json",
+   "rule_id": "no-long-sleep",
+   "example": "PowerShell variant",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "03-evidence-before-commit.json",
+   "rule_id": "evidence-before-commit",
+   "example": "stale evidence",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "03-evidence-before-commit.json",
+   "rule_id": "evidence-before-commit",
+   "example": "fresh evidence",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "03-evidence-before-commit.json",
+   "rule_id": "evidence-before-commit",
+   "example": "verify still running",
+   "client": "claude-code",
+   "expect": "unknown",
+   "got": 0,
+   "pass": true,
+   "detail": "verify_fresh:fixture_unknown"
+  },
+  {
+   "file": "03-evidence-before-commit.json",
+   "rule_id": "evidence-before-commit",
+   "example": "add and commit in one command (add has not run yet)",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "03-evidence-before-commit.json",
+   "rule_id": "evidence-before-commit",
+   "example": "not a commit",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "03-evidence-before-commit.json",
+   "rule_id": "evidence-before-commit",
+   "example": "PowerShell variant",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "04-no-tamper.json",
+   "rule_id": "no-tamper",
+   "example": "Edit user rules",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "04-no-tamper.json",
+   "rule_id": "no-tamper",
+   "example": "redirect into state",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "04-no-tamper.json",
+   "rule_id": "no-tamper",
+   "example": "sed -i on repo settings",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "04-no-tamper.json",
+   "rule_id": "no-tamper",
+   "example": "PowerShell Set-Content",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "04-no-tamper.json",
+   "rule_id": "no-tamper",
+   "example": "reading is fine",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "04-no-tamper.json",
+   "rule_id": "no-tamper",
+   "example": "ordinary source edit",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "04-no-tamper.json",
+   "rule_id": "no-tamper",
+   "example": "dynamic write target",
+   "client": "claude-code",
+   "expect": "unknown",
+   "got": 0,
+   "pass": true,
+   "detail": "bash:dynamic_write_target"
+  },
+  {
+   "file": "05-claim-needs-evidence.json",
+   "rule_id": "claim-needs-evidence",
+   "example": "claims done without evidence",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "05-claim-needs-evidence.json",
+   "rule_id": "claim-needs-evidence",
+   "example": "claims done with fresh evidence",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "05-claim-needs-evidence.json",
+   "rule_id": "claim-needs-evidence",
+   "example": "explicitly not done",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "05-claim-needs-evidence.json",
+   "rule_id": "claim-needs-evidence",
+   "example": "claim only inside a code block",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "05-claim-needs-evidence.json",
+   "rule_id": "claim-needs-evidence",
+   "example": "outside a repo",
+   "client": "claude-code",
+   "expect": "unknown",
+   "got": 0,
+   "pass": true,
+   "detail": "verify_fresh:not_a_repo"
+  },
+  {
+   "file": "06-chinese-plain.json",
+   "rule_id": "chinese-plain",
+   "example": "Chinese prompt, English reply",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "06-chinese-plain.json",
+   "rule_id": "chinese-plain",
+   "example": "Chinese prompt, Chinese reply",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "06-chinese-plain.json",
+   "rule_id": "chinese-plain",
+   "example": "English prompt",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "06-chinese-plain.json",
+   "rule_id": "chinese-plain",
+   "example": "reply is only code",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "no-skip-verify",
+   "example": "long flag",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "no-skip-verify",
+   "example": "combined short flags",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "no-skip-verify",
+   "example": "normal commit",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "no-curl-pipe-sh",
+   "example": "curl | sh",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "no-curl-pipe-sh",
+   "example": "curl to file",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "secret-in-output",
+   "example": "aws key in stdout",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "secret-in-output",
+   "example": "clean output",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "no-todo-stub",
+   "example": "stub in source",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "no-todo-stub",
+   "example": "stub in test file",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "no-todo-stub",
+   "example": "no stub",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "subagent-long-run",
+   "example": "busy subagent",
+   "client": "claude-code",
+   "expect": "hit",
+   "got": 2,
+   "pass": true
+  },
+  {
+   "file": "07-misc-org-style.json",
+   "rule_id": "subagent-long-run",
+   "example": "main agent",
+   "client": "claude-code",
+   "expect": "miss",
+   "got": 1,
+   "pass": true
+  }
+ ],
+ "passed": 45,
+ "failed": 0,
+ "skipped": 1
+}

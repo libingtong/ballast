@@ -7,10 +7,10 @@ import (
 	"github.com/libingtong/ballast/internal/model"
 )
 
-// EffectiveAction applies the runtime capability check (dsl-semantics
+// effectiveAction applies the runtime capability check (dsl-semantics
 // §10.1): the configured action when client c supports (event, action),
 // otherwise ActionLog.
-func EffectiveAction(c model.ClientID, ev model.EventName, a model.Action) model.Action {
+func effectiveAction(c model.ClientID, ev model.EventName, a model.Action) model.Action {
 	if a == model.ActionNone || a == model.ActionLog {
 		return model.ActionLog
 	}
@@ -33,7 +33,7 @@ func Arbitrate(c model.ClientID, ev model.EventName, results []model.RuleResult,
 	copy(v.Hits, hits)
 	for i := range v.Hits {
 		h := &v.Hits[i]
-		h.Effective = EffectiveAction(c, ev, h.Action)
+		h.Effective = effectiveAction(c, ev, h.Action)
 		v.Action = model.Stricter(v.Action, h.Effective)
 	}
 	if v.Action.Severity() >= model.ActionWarn.Severity() {

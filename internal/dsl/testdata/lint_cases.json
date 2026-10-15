@@ -43,7 +43,8 @@
     }
    },
    "want": [
-    "error:input-field-unknown@/rules/0/match/input_regex/command"
+    "error:input-field-unknown@/rules/0/match/input_regex/command",
+    "error:field-not-applicable@/rules/0/match/input_regex/command"
    ]
   },
   {
@@ -74,7 +75,8 @@
     }
    },
    "want": [
-    "error:input-field-unknown@/rules/0/match/input_regex/old_string"
+    "error:input-field-unknown@/rules/0/match/input_regex/old_string",
+    "error:field-not-applicable@/rules/0/match/input_regex/old_string"
    ]
   },
   {
@@ -130,7 +132,8 @@
     }
    },
    "want": [
-    "error:input-field-unknown@/rules/0/match/input_regex/command"
+    "error:input-field-unknown@/rules/0/match/input_regex/command",
+    "error:field-not-applicable@/rules/0/match/input_regex/command"
    ]
   },
   {

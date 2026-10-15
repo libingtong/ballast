@@ -162,8 +162,8 @@ func (p *program) RuleID() string { return p.id }
 
 var _ model.RuleProgram = (*program)(nil)
 
-// DefaultTextSource returns the default text.source of a rule event.
-func DefaultTextSource(ev model.EventName) model.TextSource {
+// defaultTextSource returns the default text.source of a rule event.
+func defaultTextSource(ev model.EventName) model.TextSource {
 	switch ev {
 	case model.EventUserPromptSubmit:
 		return model.TextPrompt
@@ -219,7 +219,7 @@ func (e *Engine) buildShell(kind model.ShellKind, m *model.ShellMatch) *shellPro
 func (e *Engine) buildText(ev model.EventName, t *model.TextMatch) *textProg {
 	tp := &textProg{source: t.Source, preprocess: t.Preprocess}
 	if tp.source == "" {
-		tp.source = DefaultTextSource(ev)
+		tp.source = defaultTextSource(ev)
 	}
 	if t.Window != nil {
 		tp.head, tp.tail = t.Window.HeadChars, t.Window.TailChars

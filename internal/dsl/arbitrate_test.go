@@ -112,14 +112,14 @@ func TestArbitrateReasonBudget(t *testing.T) {
 	}
 }
 
-func TestEffectiveAction(t *testing.T) {
-	if EffectiveAction(model.ClientClaude, model.EventPreToolUse, model.ActionNone) != model.ActionLog {
+func TestEffectiveActionHelper(t *testing.T) {
+	if effectiveAction(model.ClientClaude, model.EventPreToolUse, model.ActionNone) != model.ActionLog {
 		t.Error("none ⇒ log")
 	}
-	if EffectiveAction(model.ClientCursor, model.EventStop, model.ActionDeny) != model.ActionDeny {
+	if effectiveAction(model.ClientCursor, model.EventStop, model.ActionDeny) != model.ActionDeny {
 		t.Error("cursor stop deny is supported")
 	}
-	if EffectiveAction(model.ClientCursor, model.EventPreToolUse, model.ActionWarn) != model.ActionLog {
+	if effectiveAction(model.ClientCursor, model.EventPreToolUse, model.ActionWarn) != model.ActionLog {
 		t.Error("cursor PreToolUse warn is unsupported")
 	}
 }

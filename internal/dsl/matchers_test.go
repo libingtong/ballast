@@ -282,3 +282,68 @@ func jsonStr(s string) string {
 	}
 	return string(append(b, '"'))
 }
+
+func TestPowerShellFlags(t *testing.T) {
+	ps := func(flags string) string { return ruleJSON("PreToolUse", `{"ps":{"flags":`+flags+`}}`, "") }
+	runRows(t, newEngine(t), []row{
+		{"parameters are case-insensitive", ps(`"-Force"`), psScn("rm x -force", psList(nd("remove-item", "x", "-force"))), T, ""},
+		{"parameter with a value", ps(`"-Force"`), psScn("rm -Force:$true", psList(nd("remove-item", "-Force:$true"))), T, ""},
+		{"different parameter", ps(`"-Force"`), psScn("rm -Forced", psList(nd("remove-item", "-Forced"))), F, ""},
+		{"no combined short flags in powershell", ps(`"-n"`), psScn("x -an", psList(nd("x", "-an"))), F, ""},
+	})
+}
+
+func TestPathServiceProblems(t *testing.T) {
+	rule := ruleJSON("PreToolUse", `{"tool":"Edit","path":"**/*.go"}`, "")
+	s := editScn("/repo/a.go")
+
+	noPaths := NewEngine(Options{})
+	rr, _ := evalRuleJSON(t, noPaths, rule, s)
+	if rr.Outcome != U || rr.UnknownCause != "paths:unavailable" {
+		t.Errorf("no PathService: %v %q", rr.Outcome, rr.UnknownCause)
+	}
+	rr, _ = evalRuleJSON(t, noPaths, ruleJSON("PreToolUse", `{"tool":"Edit"}`, `[{"path_exists":{}}]`), s)
+	if rr.Outcome != U || rr.UnknownCause != "paths:unavailable" {
+		t.Errorf("no PathService, predicate: %v %q", rr.Outcome, rr.UnknownCause)
+	}
+
+	rr, _ = evalRuleJSON(t, newEngine(t), ruleJSON("PreToolUse", `{"tool":"Edit","path":"src/[a"}`, ""), s)
+	if rr.Outcome != U || rr.UnknownCause != "paths:bad_glob" {
+		t.Errorf("uncompilable glob: %v %q", rr.Outcome, rr.UnknownCause)
+	}
+}
+
+func TestPathCaseFolding(t *testing.T) {
+	rule := ruleJSON("PreToolUse", `{"tool":"Edit","path":"**/README.md"}`, "")
+	s := editScn("/repo/readme.md")
+	for _, c := range []struct {
+		name, optGOOS, ctxGOOS string
+		want                   model.Tri
+	}{
+		{"linux is case-sensitive", "linux", "", F},
+		{"context GOOS wins", "linux", "windows", T},
+		{"darwin from Options.GOOS", "darwin", "", T},
+		{"windows from Options.GOOS", "windows", "", T},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := NewEngine(Options{Paths: fakePaths{}, GOOS: c.optGOOS})
+			rr, _ := evalWith(t, e, rule, s, func(in *model.EvalInput) { in.Paths.GOOS = c.ctxGOOS })
+			if rr.Outcome != c.want {
+				t.Errorf("outcome %v, want %v", rr.Outcome, c.want)
+			}
+		})
+	}
+}
+
+func TestNameGlobsAreCaseSensitiveEverywhere(t *testing.T) {
+	// Name globs go straight to doublestar: the PathContext GOOS must not fold them.
+	e := NewEngine(Options{Paths: fakePaths{}, GOOS: "windows"})
+	rr, _ := evalWith(t, e, ruleJSON("PreToolUse", `{"tool":"edit","agent_type":"MAIN"}`, ""), editScn("/repo/a"), func(in *model.EvalInput) { in.Paths.GOOS = "windows" })
+	if rr.Outcome != F {
+		t.Errorf("name globs folded case: %v", rr.Outcome)
+	}
+	rr, _ = evalWith(t, e, ruleJSON("PreToolUse", `{"bash":{"cmd":"Git"}}`, ""), bashScn("git x", bashList(nd("git", "x"))), func(in *model.EvalInput) { in.Paths.GOOS = "windows" })
+	if rr.Outcome != F {
+		t.Errorf("cmd glob folded case: %v", rr.Outcome)
+	}
+}
