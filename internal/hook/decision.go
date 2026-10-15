@@ -90,3 +90,32 @@ func buildReason(hits []model.RuleHit, action model.Action) string {
 	}
 	return b.String()
 }
+
+// causeVerifyRunning is the unknown cause of a verify_fresh predicate whose
+// verify job is still running (plan B3).
+const causeVerifyRunning = "verify_fresh:job_running"
+
+// verifyRunningHint returns the warn-level notice for rules that evaluated to
+// unknown only because a verify job is still running, or "" when there is
+// none. Only rules configured at warn or stricter speak up (a log-tier rule
+// stays silent, shadow mode never talks to the agent), and nothing is said
+// when the client cannot carry a warn on this event.
+func verifyRunningHint(rs *model.CompiledRuleSet, caps model.CapabilitySet, ev *model.Event, v *model.Verdict) string {
+	if rs == nil || v == nil {
+		return ""
+	}
+	if _, ok := caps.Lookup(ev.Name, model.ActionWarn); !ok {
+		return ""
+	}
+	var parts []string
+	for _, r := range v.Results {
+		if r.Outcome != model.TriUnknown || r.UnknownCause != causeVerifyRunning {
+			continue
+		}
+		if cr := rs.Rule(r.RuleID); cr == nil || cr.Action.Severity() < model.ActionWarn.Severity() {
+			continue
+		}
+		parts = append(parts, "["+r.RuleID+"] verify 进行中,本次按 unknown 放行(未命中);结果会在下一次注入中回报。")
+	}
+	return strings.Join(parts, "\n")
+}

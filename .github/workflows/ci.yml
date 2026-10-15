@@ -6,7 +6,7 @@
 #   - 测试自己把 HOME / BALLAST_HOME / CLAUDE_CONFIG_DIR / CODEX_HOME / HERMES_HOME /
 #     BALLAST_INSTALL_ROOT / GIT_CONFIG_GLOBAL 等重定向到临时目录;CI 不运行真实的
 #     claude / codex / cursor / hermes 客户端,也不触碰任何真实用户配置。
-#   - scripts/accept-m1..m4.sh、scripts/bench.sh、scripts/matrix.sh 由验收脚本任务维护;
+#   - scripts/accept-m0..m4.sh、scripts/bench.sh、scripts/matrix.sh 由验收脚本任务维护;
 #     脚本尚不存在时跳过并打印 notice,存在后即成为硬性门槛。
 #   - 脚本统一用 `bash <脚本>` 调用,不依赖可执行位;Windows 用 Git Bash(shell: bash)。
 
@@ -82,6 +82,12 @@ jobs:
             echo "发现本机绝对路径,请改为相对路径或占位符"
             exit 1
           fi
+          # 取证样本里的本机目录结构与 uid 片段也要占位符化(<repo>、claude-<uid>)。
+          # 正则写成 [~] 形式,避免命中本文件自身。
+          if git grep -nIE '[~]/NewCode|claude-[0-9]+-' -- . ':!.github/workflows/ci.yml'; then
+            echo "发现本机目录结构或 uid 片段,请改为占位符(<repo>、claude-<uid>)"
+            exit 1
+          fi
 
       - name: YAML 语法检查(工作流)
         run: |
@@ -140,11 +146,16 @@ jobs:
           GOPROXY: "off"
         run: go test -count=1 -v ./internal/archtest/...
 
-      - name: 验收脚本 accept-m1 .. accept-m4
+      # accept-m0 .. m4 在三个平台上都跑。go test -race 与 bench 已有独立步骤,
+      # 这里用开关让 accept-m1 显式 SKIP 这两段,避免在 45 分钟时限内重复执行
+      # (尤其是 Windows runner)。
+      - name: 验收脚本 accept-m0 .. accept-m4
         env:
           GOPROXY: "off"
+          BALLAST_ACCEPT_SKIP_GOTEST: "1"
+          BALLAST_ACCEPT_SKIP_BENCH: "1"
         run: |
-          for n in 1 2 3 4; do
+          for n in 0 1 2 3 4; do
             script="scripts/accept-m${n}.sh"
             if [ -f "$script" ]; then
               echo "::group::${script}"

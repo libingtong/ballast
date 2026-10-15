@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/libingtong/ballast/internal/audit"
 	"github.com/libingtong/ballast/internal/config"
 	"github.com/libingtong/ballast/internal/evidence"
+	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/version"
 )
 
@@ -27,8 +29,35 @@ func runGC(a *app, c *command, args []string) int {
 		return a.usageErr(c, "unexpected argument %q", args[0])
 	}
 	var errs []error
-	if _, err := a.stateStore().GC(0); err != nil {
+	// Expired state may still hold eval counts that no Stop/SessionEnd ever
+	// flushed; they are written as eval_summary(cause=gc) so the stats
+	// denominators stay whole. State GC runs before audit GC on purpose.
+	var flushed []model.AuditRecord
+	now := a.clock.Now()
+	_, err := a.stateStore().GCFlush(0, func(k model.ScopeKey, evals map[string]model.EvalCount) {
+		rec := model.AuditRecord{
+			TS:             now.UTC(),
+			V:              model.AuditVersion,
+			Type:           model.AuditEvalSummary,
+			SessionID:      k.Session,
+			RepoInst:       k.RepoInst,
+			Tier:           model.TierT0,
+			BallastVersion: version.Version,
+			Evals:          evals,
+			Detail:         json.RawMessage(`{"cause":"gc"}`),
+		}
+		if k.Agent != "main" {
+			rec.AgentID = k.Agent
+		}
+		flushed = append(flushed, rec)
+	})
+	if err != nil {
 		errs = append(errs, fmt.Errorf("state: %w", err))
+	}
+	if len(flushed) > 0 {
+		if err := a.auditWriter().Append(flushed); err != nil {
+			errs = append(errs, fmt.Errorf("audit flush: %w", err))
+		}
 	}
 	if _, err := audit.GC(a.fs, a.lay.AuditDir, a.clock.Now(), 0); err != nil {
 		errs = append(errs, fmt.Errorf("audit: %w", err))

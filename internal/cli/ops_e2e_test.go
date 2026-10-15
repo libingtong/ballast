@@ -174,7 +174,24 @@ func TestGC(t *testing.T) {
 	if err := os.Chtimes(staleCache, longAgo, longAgo); err != nil {
 		t.Fatal(err)
 	}
+	// An expired session state with unflushed eval counts: gc must write
+	// them as eval_summary(cause=gc) before the directory goes away.
+	stale := filepath.Join(s.sb.BallastHome, "state", "repo1", "sess1", "main.json")
+	writeFile(t, stale, `{"v":1,"started_at":"2000-01-01T00:00:00Z","event_seq":1,"seen":[],"read":{},"tool_count":0,"tool_count_since_inject":0,"prompt_count":0,"last_job_report_at":"0001-01-01T00:00:00Z","last_tool_failure_at":"0001-01-01T00:00:00Z","evals":{"r1":{"evals":3,"hits":0,"would":2,"unknown":0}}}`)
+	if err := os.Chtimes(stale, longAgo, longAgo); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Dir(stale), longAgo, longAgo); err != nil {
+		t.Fatal(err)
+	}
 	s.mustExit(0, "", "", "gc")
+	if _, err := os.Stat(filepath.Dir(stale)); err == nil {
+		t.Error("gc should delete expired session state")
+	}
+	if b, err := os.ReadFile(recent); err != nil || !strings.Contains(string(b), `"type":"eval_summary"`) ||
+		!strings.Contains(string(b), `"cause":"gc"`) || !strings.Contains(string(b), `"r1":{"evals":3`) {
+		t.Errorf("gc should flush residual evals as eval_summary(cause=gc): %v %s", err, b)
+	}
 	if _, err := os.Stat(staleCache); err == nil {
 		t.Error("gc should delete unreferenced rules cache files older than 7 days")
 	}

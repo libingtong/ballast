@@ -1,6 +1,6 @@
 {
   "session_id": "71479d82-2fdf-4f0e-9e94-61d68a13cece",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/71479d82-2fdf-4f0e-9e94-61d68a13cece.jsonl",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/71479d82-2fdf-4f0e-9e94-61d68a13cece.jsonl",
   "cwd": "<probe-root>/work/updatedinput-allow",
   "prompt_id": "8103a41b-c023-4c7d-b758-062076e1ba7f",
   "hook_event_name": "SessionEnd",

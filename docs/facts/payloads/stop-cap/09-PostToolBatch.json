@@ -1,6 +1,6 @@
 {
   "session_id": "aed0e6ab-dd7a-4075-b311-1df4052de38c",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/aed0e6ab-dd7a-4075-b311-1df4052de38c.jsonl",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/aed0e6ab-dd7a-4075-b311-1df4052de38c.jsonl",
   "cwd": "<probe-root>/work/stop-cap",
   "prompt_id": "c7d1c3d8-1084-4597-bd10-6193468855c6",
   "permission_mode": "default",
@@ -12,10 +12,10 @@
     {
       "tool_name": "Read",
       "tool_input": {
-        "file_path": "~/NewCode/ballast/scripts/probe/probe.sh"
+        "file_path": "<repo>/scripts/probe/probe.sh"
       },
       "tool_use_id": "toolu_01PiqX4u1vBmDWx4wWwdfMks",
-      "tool_response": "Claude requested permissions to read from ~/NewCode/ballast/scripts/probe/probe.sh, but you haven't granted it yet."
+      "tool_response": "Claude requested permissions to read from <repo>/scripts/probe/probe.sh, but you haven't granted it yet."
     }
   ]
 }

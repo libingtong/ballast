@@ -93,8 +93,9 @@ type StateDelta struct {
 	HitRules  []string // effective or would hits → prior_hit counters
 	Evals     map[string]EvalCount
 
-	// FlushEvals: the hook flushes the counts it READ (FlushedEvals); the
-	// store subtracts them (not zeroing, so concurrent increments survive).
+	// FlushEvals: the hook flushes the counts it READ plus this delta's own
+	// Evals (FlushedEvals); the store merges Evals first, then subtracts
+	// FlushedEvals (not zeroing, so concurrent increments survive).
 	// The hook appends the eval_summary audit record ONLY when the commit
 	// reports Applied && !Duplicate && !LockTimeout; otherwise the counts
 	// stay in state for the next flush (no double counting).

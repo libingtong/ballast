@@ -1,6 +1,6 @@
 {
   "session_id": "37e6127b-5b70-4c04-ab77-3bee1444231b",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b.jsonl",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b.jsonl",
   "cwd": "<probe-root>/work/subagent",
   "prompt_id": "e7c6fb04-9b9d-4383-bee8-6ff6584a9c83",
   "hook_event_name": "SessionEnd",

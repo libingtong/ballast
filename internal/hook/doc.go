@@ -23,12 +23,17 @@
 // RepoRemoteHash = repo.RemoteHash (filled by RepoLocator.Locate; the hook
 // never parses .git/config itself), Generation, Tier, BallastVersion.
 //
-// eval_summary (frozen): on Stop/SubagentStop/SessionEnd the delta carries
-// FlushEvals + FlushedEvals (= the counts read lock-free). The eval_summary
-// record is appended ONLY when State.Commit returned Applied && !Duplicate
-// && !LockTimeout. On LockTimeout/Duplicate the record is omitted (the
-// counts were not subtracted and are flushed next time); the lock timeout
-// itself is still audited as diag.
+// eval_summary (frozen, v1.6): on Stop/SubagentStop/SessionEnd the delta
+// carries FlushEvals + FlushedEvals = the counts read lock-free PLUS this
+// event's own evaluation (delta.Evals). State.Commit merges delta.Evals first
+// and then subtracts FlushedEvals, so the flushing event leaves nothing
+// behind (SubagentStop drops the state right after; Codex/Cursor have no
+// SessionEnd). The eval_summary record is appended ONLY when State.Commit
+// returned Applied && !Duplicate && !LockTimeout. On LockTimeout/Duplicate
+// the record is omitted (nothing was merged or subtracted; the earlier
+// counts are flushed next time); the lock timeout itself is still audited as
+// diag. Counts that no flushing event ever reaches are reported by
+// `ballast gc` as eval_summary with detail.cause=gc (state.Store.GCFlush).
 //
 // Failure protocol (frozen): any error, panic, or watchdog expiry BEFORE the
 // stdout commit ⇒ stdout stays EMPTY, stderr "ballast: <msg>\n", exit 1.
@@ -98,8 +103,13 @@
 //     event the client can inject on); events that cannot carry a
 //     generation summary never consume the change.
 //   - BuildDelta has no SessionState: it only sets FlushEvals; the
-//     pipeline copies FlushedEvals from the lock-free Load afterwards (and
-//     only when the state was readable).
+//     pipeline then sets FlushedEvals = lock-free Load counts (only when the
+//     state was readable) + delta.Evals.
+//   - A rule that is unknown because its verify job is still running
+//     (cause verify_fresh:job_running) never hits, but when its configured
+//     action is warn or stricter and the (client,event) can carry a warn,
+//     the decision gains a warn-level notice (plan B3). Log-tier rules stay
+//     silent.
 //   - Verify job reports: "unreported finished jobs" are those finished
 //     after LastJobReportAt, or after the session's StartedAt when nothing
 //     was reported yet; with neither, nothing is reported (a new session is

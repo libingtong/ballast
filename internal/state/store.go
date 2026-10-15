@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -335,8 +336,15 @@ func (s *Store) dropLocked(path string) error {
 type GCStats struct {
 	ScannedSessions int
 	RemovedSessions int
+	FlushedEvals    int // agent state files whose residual eval counts were handed to the flush callback
 	Errors          int
 }
+
+// EvalFlush receives the residual per-rule eval counts of one expired agent
+// state (key components are the sanitized directory and file names). GC
+// calls it only after the session directory was removed, so a failed removal
+// never reports the same counts twice.
+type EvalFlush func(key model.ScopeKey, evals map[string]model.EvalCount)
 
 // GC removes state older than ttl (relative to Clock.Now). A session
 // directory is removed when its newest file (the directory itself when it
@@ -344,6 +352,13 @@ type GCStats struct {
 // are removed too. ttl <= 0 means TTL. A missing state directory is not an
 // error; per-entry failures are counted in Errors and the run continues.
 func (s *Store) GC(ttl time.Duration) (GCStats, error) {
+	return s.GCFlush(ttl, nil)
+}
+
+// GCFlush is GC that also reports the residual eval counts of every expired
+// agent state to flush (nil = discard), so the shadow-mode denominators of
+// sessions that never reached a flushing event are not lost (plan B2).
+func (s *Store) GCFlush(ttl time.Duration, flush EvalFlush) (GCStats, error) {
 	var st GCStats
 	if ttl <= 0 {
 		ttl = TTL
@@ -385,18 +400,61 @@ func (s *Store) GC(ttl time.Duration) (GCStats, error) {
 				remaining++
 				continue
 			}
+			var residual []residualEvals
+			if flush != nil {
+				residual = s.residualEvals(sessPath, repo.Name(), sess.Name())
+			}
 			if err := s.opt.FS.RemoveAll(sessPath); err != nil {
 				st.Errors++
 				remaining++
 				continue
 			}
 			st.RemovedSessions++
+			for _, r := range residual {
+				st.FlushedEvals++
+				flush(r.key, r.evals)
+			}
 		}
 		if remaining == 0 {
 			_ = s.opt.FS.Remove(repoPath) // fails harmlessly if a session appeared meanwhile
 		}
 	}
 	return st, nil
+}
+
+type residualEvals struct {
+	key   model.ScopeKey
+	evals map[string]model.EvalCount
+}
+
+// residualEvals reads the unflushed eval counts of every agent state file of
+// one session directory (best effort: unreadable or corrupt files are
+// skipped, files are visited in name order).
+func (s *Store) residualEvals(sessPath, repoName, sessName string) []residualEvals {
+	ents, err := s.opt.FS.ReadDir(sessPath)
+	if err != nil {
+		return nil
+	}
+	var out []residualEvals
+	for _, e := range ents {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		data, err := s.opt.FS.ReadFile(filepath.Join(sessPath, name))
+		if err != nil {
+			continue
+		}
+		rec, ok := decodeRecord(data)
+		if !ok || len(rec.EvalCounts) == 0 {
+			continue
+		}
+		out = append(out, residualEvals{
+			key:   model.ScopeKey{RepoInst: repoName, Session: sessName, Agent: strings.TrimSuffix(name, ".json")},
+			evals: maps.Clone(rec.EvalCounts),
+		})
+	}
+	return out
 }
 
 // newestMTime returns the newest modification time of the files directly

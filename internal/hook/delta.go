@@ -118,13 +118,19 @@ func verdictCounts(v *model.Verdict) ([]string, map[string]model.EvalCount) {
 	return hitRules, evals
 }
 
-func cloneEvals(m map[string]model.EvalCount) map[string]model.EvalCount {
-	if len(m) == 0 {
+// mergeEvals returns a fresh map holding the per-rule sum of a and b, or nil
+// when both are empty.
+func mergeEvals(a, b map[string]model.EvalCount) map[string]model.EvalCount {
+	if len(a)+len(b) == 0 {
 		return nil
 	}
-	out := make(map[string]model.EvalCount, len(m))
-	for k, c := range m {
-		out[k] = c
+	out := make(map[string]model.EvalCount, len(a)+len(b))
+	for _, m := range []map[string]model.EvalCount{a, b} {
+		for k, c := range m {
+			cur := out[k]
+			cur.Add(c)
+			out[k] = cur
+		}
 	}
 	return out
 }

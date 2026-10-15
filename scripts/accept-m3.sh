@@ -94,6 +94,50 @@ expect_deny "the promoted rule now denies"
 bl rules promote no-such-rule --to deny
 expect_rc "promote of an unknown rule (4)" 4
 
+section "stats denominators include the event that flushes them"
+# Plan B2: a Stop-family rule's eval_summary must count the evaluation of the
+# Stop / SubagentStop itself. Before the fix the last (or only) Stop of a
+# session, and every SubagentStop (its state is dropped right after), were
+# missing, so stats showed hits/would above evals.
+sandbox_new m3evals
+CWD="$(native "$SB_WORK")"
+cp "$REPO_ROOT/rules/default.json" "$BALLAST_HOME/rules.json"
+STOP_RULE='{"id":"stop-frob","action":"log","target":"warn","event":"Stop","match":{"text":{"source":"last_assistant_message","regex":["frobnicated"]}},"message":"shadow","inject":"Do not frobnicate.","examples":[{"name":"hit","expect":"hit","input":{"last_assistant_message":"I frobnicated it."}},{"name":"miss","expect":"miss","input":{"last_assistant_message":"all quiet"}}]}'
+SUB_RULE='{"id":"sub-frob","action":"log","target":"warn","event":"SubagentStop","match":{"text":{"source":"last_assistant_message","regex":["frobnicated"]}},"message":"shadow","inject":"Do not frobnicate.","examples":[{"name":"hit","expect":"hit","input":{"last_assistant_message":"I frobnicated it."}},{"name":"miss","expect":"miss","input":{"last_assistant_message":"all quiet"}}]}'
+"$ACCUTIL" json append "$BALLAST_HOME/rules.json" rules "$STOP_RULE"
+"$ACCUTIL" json append "$BALLAST_HOME/rules.json" rules "$SUB_RULE"
+for a in a1 a2 a3; do
+  hook claude-code SubagentStop "{\"session_id\":\"ev1\",\"cwd\":\"$CWD\",\"agent_id\":\"$a\",\"agent_type\":\"Explore\",\"last_assistant_message\":\"I frobnicated it.\"}"
+  expect_allow "SubagentStop $a (shadow rule is silent)"
+done
+hook claude-code Stop "{\"session_id\":\"ev1\",\"cwd\":\"$CWD\",\"last_assistant_message\":\"I frobnicated it.\"}"
+expect_allow "the only Stop of the session (shadow rule is silent)"
+# No SessionEnd on purpose: Codex and Cursor never send one.
+bl stats --json --since 1d
+expect_rc "stats --json before any SessionEnd" 0
+stats_field() { # RULE FIELD
+  local n idx=0
+  n="$("$ACCUTIL" json len "$BL_OUT_FILE" "")" 2>/dev/null || n=0
+  while [ "$idx" -lt "${n:-0}" ]; do
+    if [ "$("$ACCUTIL" json get "$BL_OUT_FILE" "$idx.rule")" = "$1" ]; then
+      "$ACCUTIL" json get "$BL_OUT_FILE" "$idx.$2"
+      return 0
+    fi
+    idx=$((idx + 1))
+  done
+  echo missing
+}
+for r in stop-frob sub-frob; do
+  e="$(stats_field "$r" evals)"
+  w="$(stats_field "$r" would)"
+  h="$(stats_field "$r" hits)"
+  check_int_ge "$r: evals ($e) >= hits ($h) + would ($w)" "$e" "$((h + w))"
+done
+check_eq "stop-frob: one Stop, one evaluation" "$(stats_field stop-frob evals)" "1"
+check_eq "stop-frob: and one would-hit" "$(stats_field stop-frob would)" "1"
+check_eq "sub-frob: three SubagentStops, three evaluations" "$(stats_field sub-frob evals)" "3"
+check_eq "sub-frob: and three would-hits" "$(stats_field sub-frob would)" "3"
+
 section "audit retention"
 write_file "$BALLAST_HOME/audit/2000-01.jsonl" ""
 bl gc

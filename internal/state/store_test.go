@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
@@ -669,6 +670,42 @@ func TestGC(t *testing.T) {
 	st, _ = e.store.GC(0) // 0 ⇒ default TTL
 	if st.RemovedSessions != 2 {
 		t.Errorf("after advancing: %+v", st)
+	}
+}
+
+func TestGCFlushResidualEvals(t *testing.T) {
+	e := newEnv(t)
+	now := e.clk.Now()
+	mk := func(sess, agent string, age time.Duration, evals map[string]model.EvalCount) {
+		k := model.ScopeKey{RepoInst: "repoA", Session: sess, Agent: agent}
+		mustCommit(t, e.store, k, model.StateDelta{ToolCall: true, Evals: evals})
+		setAge(t, e.store.Path(k), now, age)
+		setAge(t, e.store.Path(k)+".lock", now, age)
+	}
+	mk("stale", "main", 10*24*time.Hour, map[string]model.EvalCount{"r": {Evals: 4, Hits: 1}})
+	mk("stale", "agent-1", 10*24*time.Hour, map[string]model.EvalCount{"q": {Evals: 2, Would: 2}})
+	mk("stale", "agent-2", 10*24*time.Hour, nil) // nothing to flush
+	mk("fresh", "main", time.Hour, map[string]model.EvalCount{"r": {Evals: 9}})
+
+	got := map[model.ScopeKey]map[string]model.EvalCount{}
+	st, err := e.store.GCFlush(TTL, func(k model.ScopeKey, ev map[string]model.EvalCount) { got[k] = ev })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.RemovedSessions != 1 || st.FlushedEvals != 2 || len(got) != 2 {
+		t.Fatalf("stats=%+v got=%v", st, got)
+	}
+	want := map[model.ScopeKey]map[string]model.EvalCount{
+		{RepoInst: "repoA", Session: "stale", Agent: "main"}:    {"r": {Evals: 4, Hits: 1}},
+		{RepoInst: "repoA", Session: "stale", Agent: "agent-1"}: {"q": {Evals: 2, Would: 2}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("flushed = %v, want %v", got, want)
+	}
+	// A nil callback just discards (plain GC) and never panics.
+	e.clk.Advance(TTL)
+	if _, err := e.store.GC(0); err != nil {
+		t.Fatal(err)
 	}
 }
 

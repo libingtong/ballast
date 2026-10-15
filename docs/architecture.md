@@ -1,6 +1,6 @@
 # Ballast 架构与接口契约(冻结版 v1.5)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -518,6 +518,21 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 ---
 
 ## 14. 修订记录
+
+### v1.6(2026-10-16,第 3 轮系统审计修复)
+
+| 审计项 | 级别 | 处理 | 涉及文件 |
+|---|---|---|---|
+| 影子模式分母(B2)系统性少算:Stop/SubagentStop/SessionEnd 刷出的 eval_summary 只含本事件之前的计数,本事件自己的求值留在待刷状态;SubagentStop 之后状态被丢弃,Codex/Cursor 没有 SessionEnd,7 天 GC 也不刷 | major | **裁决:刷出的计数包含本事件**。`FlushedEvals = st.Evals()(无锁读) + delta.Evals`;`State.Commit` 的合并顺序本来就是先累加 `delta.Evals` 再减去 `FlushedEvals`,同一事务里净残留为 0(`TestMergeTable` 补用例)。状态不可读时 `FlushedEvals` 只含本事件的计数。`state.Store.GCFlush` 在删除过期会话目录之后,把每个 agent 状态里的残余计数交给回调,`ballast gc` 以 `eval_summary`(`detail.cause=gc`)写入审计;删除失败的会话不上报,避免下一次重复计数。`pipeline.json` 补两行(单次 Stop 后 `evals == hits`;SubagentStop 刷出子 agent 的求值),`accept-m3.sh` 加真实 hook 断言(`stats` 中 `evals ≥ hits+would`) | `internal/hook/pipeline.go`、`internal/hook/delta.go`、`internal/hook/doc.go`、`internal/model/state.go`、`internal/state/store.go`、`internal/cli/cmd_misc.go`、`internal/hook/testdata/pipeline.json`、`scripts/accept-m3.sh` |
+| `verify_fresh:job_running` 时 agent 收不到任何提示(计划 B3 要求"提示 verify 进行中") | minor | **采纳计划**:规则本身仍为 unknown(不命中、不拦截);当该规则配置的 action 为 warn 或更严,且 (client,event) 支持 warn 时,hook 额外输出一条 warn 级提示"[规则] verify 进行中,本次按 unknown 放行(未命中);结果会在下一次注入中回报。"log 档(影子模式)保持静默。提示不含 job id(`RuleResult` 只携带 cause) | `internal/hook/decision.go`、`internal/hook/pipeline.go`、`internal/hook/verify_running_test.go` |
+| CI 不跑 `accept-m0.sh`;`accept-m1` 内的 bench 与 `go test -race` 与独立步骤重复,Windows 有超时风险 | minor | 循环改为 `0 1 2 3 4`;`accept-m1.sh` 增加开关 `BALLAST_ACCEPT_SKIP_GOTEST=1`、`BALLAST_ACCEPT_SKIP_BENCH=1`(显式 SKIP,不静默),CI 的 accept 步骤打开两个开关,保留独立的 go test 与 bench 步骤 | `.github/workflows/ci.yml`、`scripts/accept-m1.sh`、`scripts/README.md` |
+| 取证样本残留本机仓库目录(家目录下的项目路径)与 uid 片段 | minor | 规范化为 `<repo>` 与 `claude-<uid>`;CI 卫生检查加入这两个模式(写成 `[~]` 形式避免命中自身) | `docs/facts/payloads/**`、`.github/workflows/ci.yml` |
+| install 在托管层已部署时错误信息带两层 `ballast:` 前缀 | minor | `app.errorf` 与 `newApp` 失败路径统一去掉消息内部的 `ballast: `(哨兵错误自带前缀),stderr 只留一层;`install_e2e_test.go` 加断言 | `internal/cli/cli.go`、`internal/cli/install_e2e_test.go` |
+| `proto/` 仍在树内,计划 M0c 写的是"M1 前删除" | minor | 在计划 v0.4 变更 §5 登记:**`proto/` 保留到仓库所有者决定删除**,`accept-m0.sh` 依赖它做 vet;删除时同步改 `accept-m0.sh` 的原型段 | `docs/ballast-plan.md` |
+
+已知局限(登记,未改代码):SessionEnd 的 `DropSession` 会丢弃同会话里没有收到 SubagentStop 的子 agent 状态(例如被中断的子 agent)中尚未刷出的计数;Codex/Cursor 上最后一次 Stop 之后才发生的 PreToolUse 求值要等 7 天 GC 才会以 `cause=gc` 刷出。GC 刷出的记录里 `session_id`/`repo_inst` 取自状态目录名,会话 id 含非常规字符时是其哈希形式。
+
+导出签名:未修改已有导出签名;追加 `state.Store.GCFlush`、`state.EvalFlush`、`state.GCStats.FlushedEvals`。
 
 ### v1.5(2026-10-16,第 2 轮系统审计修复)
 

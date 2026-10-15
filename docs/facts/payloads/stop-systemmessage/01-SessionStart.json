@@ -1,6 +1,6 @@
 {
   "session_id": "4ddac8c6-1182-4b26-9792-530acdbdaa96",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/4ddac8c6-1182-4b26-9792-530acdbdaa96.jsonl",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/4ddac8c6-1182-4b26-9792-530acdbdaa96.jsonl",
   "cwd": "<probe-root>/work/stop-systemmessage",
   "hook_event_name": "SessionStart",
   "source": "startup"

@@ -227,6 +227,17 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 	if adj.Action.Severity() >= model.ActionWarn.Severity() {
 		dec.Reason = adj.Reason
 	}
+	if !blocking && ruleEvent {
+		if hint := verifyRunningHint(rs, caps, ev, verdict); hint != "" {
+			// A running verify job makes the predicate unknown (no hit); tell
+			// the agent instead of staying silent. Rendered as a warn.
+			dec.Action = model.Stricter(dec.Action, model.ActionWarn)
+			if dec.Reason != "" {
+				dec.Reason += "\n"
+			}
+			dec.Reason += hint
+		}
+	}
 	if inj != nil {
 		dec.Context = inj.Text
 	}
@@ -237,8 +248,16 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 	// State.
 	reads := inv.readPaths(ev, pc, cmds, blocking)
 	delta := buildDelta(ev, rs, adj, inj, reads, ev.ReceivedAt)
-	if delta.FlushEvals && readable {
-		delta.FlushedEvals = cloneEvals(st.Evals())
+	if delta.FlushEvals {
+		// The flushed counts include THIS event's own evaluation: Commit
+		// merges delta.Evals first and then subtracts FlushedEvals, so the
+		// event that triggers the flush is never left behind (a SubagentStop
+		// state is dropped right after; Codex/Cursor have no SessionEnd).
+		var prior map[string]model.EvalCount
+		if readable {
+			prior = st.Evals()
+		}
+		delta.FlushedEvals = mergeEvals(prior, delta.Evals)
 	}
 	if err := inv.fault(FaultStateCommit); err != nil {
 		return nil, nil, err

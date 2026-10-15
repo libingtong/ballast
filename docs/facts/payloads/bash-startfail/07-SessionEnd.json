@@ -1,6 +1,6 @@
 {
   "session_id": "f98be0dc-8773-4059-a134-a8cee9506e24",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/f98be0dc-8773-4059-a134-a8cee9506e24.jsonl",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/f98be0dc-8773-4059-a134-a8cee9506e24.jsonl",
   "cwd": "<probe-root>/work/bash-startfail",
   "prompt_id": "82a2d343-26a5-4d70-a389-7b2a1821e9ac",
   "hook_event_name": "SessionEnd",

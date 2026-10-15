@@ -13,7 +13,10 @@
 #   regress.sh, fault.sh, concurrency.sh, hotreload.sh
 #   bench           (scripts/bench, when present)
 #
-# No arguments. Everything runs in temporary directories.
+# No arguments. Everything runs in temporary directories. The environment
+# switches BALLAST_ACCEPT_SKIP_GOTEST=1 and BALLAST_ACCEPT_SKIP_BENCH=1 turn
+# the go test and bench parts into explicit SKIPs for callers (CI) that run
+# them in a step of their own.
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 lib_init accept-m1
@@ -39,9 +42,15 @@ if [ "$IS_WINDOWS" = 1 ]; then
   fi
 fi
 rc=0
-# shellcheck disable=SC2086  # race_flag is empty or exactly one flag
-(cd "$REPO_ROOT" && gocmd test $race_flag -count=1 ./...) || rc=$?
-if [ "$rc" = 0 ]; then ok "$race_label"; else bad "$race_label" "exit $rc"; fi
+if [ "${BALLAST_ACCEPT_SKIP_GOTEST:-}" = 1 ]; then
+  # CI runs the full test suite in its own step right before the accept
+  # scripts; repeating it here only burns the job's time limit.
+  skip "$race_label" "BALLAST_ACCEPT_SKIP_GOTEST=1 (the caller already ran it)"
+else
+  # shellcheck disable=SC2086  # race_flag is empty or exactly one flag
+  (cd "$REPO_ROOT" && gocmd test $race_flag -count=1 ./...) || rc=$?
+  if [ "$rc" = 0 ]; then ok "$race_label"; else bad "$race_label" "exit $rc"; fi
+fi
 
 sandbox_new content
 section "lint and test-rules over every content file"
@@ -97,6 +106,10 @@ run_child "regress.sh" regress.sh
 run_child "fault.sh" fault.sh
 run_child "concurrency.sh" concurrency.sh
 run_child "hotreload.sh" hotreload.sh
-run_bench "bench (p95 <= 30 ms, every scenario)"
+if [ "${BALLAST_ACCEPT_SKIP_BENCH:-}" = 1 ]; then
+  skip "bench (p95 <= 30 ms, every scenario)" "BALLAST_ACCEPT_SKIP_BENCH=1 (the caller runs scripts/bench.sh itself)"
+else
+  run_bench "bench (p95 <= 30 ms, every scenario)"
+fi
 
 finish

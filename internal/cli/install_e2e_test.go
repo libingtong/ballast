@@ -252,7 +252,10 @@ func TestInstallErrors(t *testing.T) {
 	// A managed deployment of Ballast refuses the user-level install (1).
 	managed := filepath.Join(s.sb.ManagedDir, "managed-settings.json")
 	writeFile(t, managed, `{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"/usr/local/libexec/ballast/ballast","args":["hook","--client","claude-code","--event","PreToolUse"]}]}]}}`)
-	s.mustExit(1, "", "", "install", "--client", "claude-code", "--binary", ballastBin, "--force")
+	r = s.mustExit(1, "", "", "install", "--client", "claude-code", "--binary", ballastBin, "--force")
+	if !strings.HasPrefix(r.stderr, "ballast: managed deployment present") || strings.Contains(r.stderr, "ballast: ballast:") {
+		t.Errorf("managed refusal should carry exactly one ballast: prefix: %q", r.stderr)
+	}
 	if err := os.Remove(managed); err != nil {
 		t.Fatal(err)
 	}

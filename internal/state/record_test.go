@@ -186,6 +186,18 @@ func TestMergeTable(t *testing.T) {
 			},
 		},
 		{
+			name: "flush includes the event's own counts (accumulate first, then subtract)",
+			pre:  func(r *Record) { r.EvalCounts = map[string]model.EvalCount{"r": {Evals: 2, Would: 1}} },
+			delta: model.StateDelta{Now: at(1), FlushEvals: true,
+				Evals:        map[string]model.EvalCount{"r": {Evals: 1, Would: 1}},
+				FlushedEvals: map[string]model.EvalCount{"r": {Evals: 3, Would: 2}}},
+			check: func(t *testing.T, r *Record) {
+				if len(r.Evals()) != 0 {
+					t.Errorf("residual evals = %v", r.Evals())
+				}
+			},
+		},
+		{
 			name: "flush floors at zero",
 			pre:  func(r *Record) { r.EvalCounts = map[string]model.EvalCount{"r": {Evals: 1, Hits: 1}} },
 			delta: model.StateDelta{Now: at(1), FlushEvals: true,

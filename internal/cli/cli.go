@@ -45,7 +45,7 @@ func Main(argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	a, err := newApp(stdin, stdout, stderr)
 	if err != nil {
-		fmt.Fprintf(stderr, "ballast: %v\n", err)
+		fmt.Fprintf(stderr, "ballast: %s\n", stripBallastPrefix(err.Error()))
 		return ExitInfra
 	}
 	return cmd.run(a, cmd, args)
@@ -61,7 +61,7 @@ func runHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	deps, err := WireHook(sys.OSEnv{})
 	if err != nil {
-		fmt.Fprintf(stderr, "ballast: hook: %s\n", oneLine(err.Error()))
+		fmt.Fprintf(stderr, "ballast: hook: %s\n", oneLine(stripBallastPrefix(err.Error())))
 		return ExitHookError
 	}
 	return hook.Main(args, stdin, stdout, stderr, deps)
@@ -107,9 +107,17 @@ func newApp(in io.Reader, out, errw io.Writer) (*app, error) {
 }
 
 // errorf prints "ballast: ..." to stderr and returns code.
+//
+// Wrapped sentinel errors (model.Err*) already carry their own "ballast: "
+// prefix; it is dropped from the message so stderr shows exactly one.
 func (a *app) errorf(code int, format string, args ...any) int {
-	fmt.Fprintf(a.errw, "ballast: "+format+"\n", args...)
+	fmt.Fprintf(a.errw, "ballast: %s\n", stripBallastPrefix(fmt.Sprintf(format, args...)))
 	return code
+}
+
+// stripBallastPrefix removes every "ballast: " marker from msg.
+func stripBallastPrefix(msg string) string {
+	return strings.ReplaceAll(msg, "ballast: ", "")
 }
 
 // usageErr reports a usage problem for command usage text and returns 2.

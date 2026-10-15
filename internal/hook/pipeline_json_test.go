@@ -49,6 +49,9 @@ type pipelineCase struct {
 			DedupeKey  *string   `json:"dedupe_key"`
 			ReadPaths  *[]string `json:"read_paths"`
 			FlushEvals *bool     `json:"flush_evals"`
+			// FlushedEvals is the exact set of counts the commit flushes
+			// (prior state counts plus this event's own evaluation).
+			FlushedEvals map[string]model.EvalCount `json:"flushed_evals"`
 		} `json:"delta"`
 	} `json:"want"`
 }
@@ -202,6 +205,20 @@ func TestPipelineJSON(t *testing.T) {
 				}
 				if w.Delta.FlushEvals != nil && cc.FlushEvals != *w.Delta.FlushEvals {
 					t.Errorf("delta.flush_evals = %v, want %v", cc.FlushEvals, *w.Delta.FlushEvals)
+				}
+				if w.Delta.FlushedEvals != nil {
+					if !reflect.DeepEqual(cc.FlushedEvals, w.Delta.FlushedEvals) {
+						t.Errorf("delta.flushed_evals = %v, want %v", cc.FlushedEvals, w.Delta.FlushedEvals)
+					}
+					var sum map[string]model.EvalCount
+					for _, r := range h.audit.all() {
+						if r.Type == model.AuditEvalSummary {
+							sum = r.Evals
+						}
+					}
+					if !reflect.DeepEqual(sum, w.Delta.FlushedEvals) {
+						t.Errorf("eval_summary evals = %v, want %v", sum, w.Delta.FlushedEvals)
+					}
 				}
 				if w.Delta.ReadPaths != nil {
 					got := cc.ReadPaths

@@ -31,6 +31,7 @@
 | `BALLAST_REQUIRE_REPLAY=1` | `replay.sh` 找不到 `replay-set.txt` 时失败 |
 | `BALLAST_REPLAY_OUT` | `replay.sh` 把 JSON 报告写到这个目录(默认临时目录) |
 | `BALLAST_ACCEPT_REAL_REPLAY=1` | `accept-m3.sh` 额外对你本机的 `replay-set.txt` 跑 `replay.sh` |
+| `BALLAST_ACCEPT_SKIP_GOTEST=1` / `BALLAST_ACCEPT_SKIP_BENCH=1` | `accept-m1.sh` 把 `go test -race ./...` / 全套 bench 显式 SKIP(CI 在独立步骤里跑,避免重复耗时) |
 | `BALLAST_ACCEPT_MATRIX_REAL=1` | `accept-m2.sh` 额外跑 `matrix.sh --mode real` |
 | `BALLAST_MATRIX_ALLOW_NET=1` | `matrix.sh --mode real` 允许需要联网下载依赖的栈在本地运行 |
 

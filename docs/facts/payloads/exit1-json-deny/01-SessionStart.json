@@ -1,6 +1,6 @@
 {
   "session_id": "a26b1d18-0a83-411b-ba2f-59717df6df12",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/a26b1d18-0a83-411b-ba2f-59717df6df12.jsonl",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/a26b1d18-0a83-411b-ba2f-59717df6df12.jsonl",
   "cwd": "<probe-root>/work/exit1-json-deny",
   "hook_event_name": "SessionStart",
   "source": "startup"

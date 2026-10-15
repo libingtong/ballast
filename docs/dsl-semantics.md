@@ -289,7 +289,7 @@ evalRule(r, in):
 - 工具没有目标、规则也没有 `path`:单个空绑定,其中 `$target` 形式的路径谓词为 unknown。
 - (v1.3)Bash/PowerShell 工具、规则既无 `bash`/`ps` 也无 `path`:只有当 `when` 中(任意 `all`/`any`/`not` 深度)存在绑定当前目标的路径谓词(`read_this_session`、`path_exists`、`verify_failed_since_read` 省略 `path` 或写 `"$target"`)时,才解析命令并以非动态写入目标为 B;动态目标、解析失败、`CommandList.Unknown` 计入 U;没有写入目标且 U 为假时退回单个空绑定(`$target` 谓词 unknown)。`when` 不引用 `$target` 的规则不解析命令,只有单个空绑定,所以与目标无关的 `when` 不会让解析失败或 `eval` 变成 unknown。
 - 有 `bash`/`ps` 或 `path` 的规则,B/U 的计算与是否带 `when` 无关;不带 `when` 时 `when` 恒真,`w` 只取决于 B 是否为空与 U。
-- 结果为 unknown 时规则不命中;`RuleResult.UnknownCause` 记录第一个导致 unknown 的原因(如 `bash:parse_error`、`verify_fresh:job_running`),累加 `EvalCount.Unknown` 并在审计中留痕。
+- 结果为 unknown 时规则不命中;`RuleResult.UnknownCause` 记录第一个导致 unknown 的原因(如 `bash:parse_error`、`verify_fresh:job_running`),累加 `EvalCount.Unknown` 并在审计中留痕。`verify_fresh:job_running` 例外地会让 hook 额外输出一条 warn 级提示"verify 进行中"(仅当该规则配置的 action 为 warn 或更严时;log 档静默;规则仍不命中、不拦截)。
 
 ---
 

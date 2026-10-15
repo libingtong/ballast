@@ -611,6 +611,12 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - **需要用户在本机完成的验收**(无法在仓库内自动完成,`accept-m3.sh` 对此显式 SKIP):M3 的"replay ≥ 3 份真实 transcript、标注 ≥ 20 条"。步骤:在 `~/.ballast/replay-set.txt` 列出至少 3 份 transcript(其中至少 1 份 > 10 MB);用 `ballast replay <transcript> --format json` 与 `ballast stats --rule <id> --sample N` 取样本;在 `~/.ballast/labels/<rule_id>.jsonl` 写入 ≥ 20 条 `{"sample_id","label":"tp"|"fp","note"}`;然后 `BALLAST_ACCEPT_REAL_REPLAY=1 bash scripts/accept-m3.sh`。默认包的 known-hit 可能不够(默认规则多为 `log`、命中稀少):此时在标注集里加入 `rules/optional/` 的规则,或增加 transcript。该项在用户完成前保持"未核验"。
 - **提交作者邮箱**:公开发布前由仓库所有者确认是否接受历史中的工作邮箱;不接受就用 `git filter-repo --mailmap` 改写为 noreply 邮箱并设置仓库级 `user.email`(见 `docs/architecture.md` §13)。这是发布动作,不由实现任务代做。
 
+### 5. 第 3 轮系统审计后的修订(v0.4.2,优先于正文)
+- **B2 分母包含触发刷出的那个事件自己的求值**:Stop / SubagentStop / SessionEnd 刷出的 `eval_summary` = 刷出前状态里的计数 + 本事件的求值;从未遇到刷出事件的状态(Codex/Cursor 没有 SessionEnd 时最后一次 Stop 之后的求值、被 7 天 TTL 清掉的会话)由 `ballast gc` 以 `eval_summary`(`detail.cause=gc`)补写。`stats` 中 `evals ≥ hits + would` 成立。
+- **B3 "verify 进行中"提示**:同名 verify job 仍在运行时,`verify_fresh` 仍返回 unknown(不命中);对 action 为 warn 或更严的规则,hook 额外输出 warn 级提示,log 档保持静默。
+- **`proto/`(M0c 原型)保留到仓库所有者决定删除**,取代"M1 前删除";`accept-m0.sh` 依赖它做 vet,删除时同步调整该脚本的原型段。
+- **CI**:`accept-m0.sh` … `accept-m4.sh` 全部在三个平台上执行;`accept-m1.sh` 的 `go test -race` 与 bench 在 CI 里由独立步骤承担,用 `BALLAST_ACCEPT_SKIP_GOTEST` / `BALLAST_ACCEPT_SKIP_BENCH` 显式 SKIP。
+
 ## 已定事项(无需再裁决)
 - 合并语义:采用 B4 的方案,org 整体不可变,原问题 3 的备选方案升格为正式方案,以消除歧义。
 - ~~Codex:只预留 Adapter 接口~~ → 已被 v0.4 多客户端支持取代(用户 2026-10-16 要求)。
