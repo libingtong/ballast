@@ -127,6 +127,14 @@
 //     by "-i" as in the contract, and magic pathspecs (":(glob)...",
 //     ":!...") are left to the fallback. The fallback runs `git add -u` in
 //     Dir, so magic pathspecs mean what they would to `git commit` there.
+//   - Performance (u12c bench, pprof): with refresh, ~77% of S on a 10k-file
+//     repository was the serial leaf Lstat of the tracked entries. From
+//     prefetchMin (2048) entries on, those Lstat calls run from up to four
+//     goroutines before the unchanged serial decision loop, which consumes
+//     the results in index order (a path below a non-plain directory is
+//     dropped before its prefetched result is looked at). S on 10k files
+//     went from p50 ~20ms to ~13ms; the result is identical to the serial
+//     path and to git (prefetch_test.go).
 //   - Killing a timed-out fallback git takes down its whole process tree:
 //     the process group on unix and a Job Object on Windows. On Windows this
 //     is best effort: the job is created right after the child starts (a
