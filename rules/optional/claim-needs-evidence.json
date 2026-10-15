@@ -4,7 +4,7 @@
   "rules": [
     {
       "id": "claim-needs-evidence",
-      "description": "pinrule evidence 的回复侧检测(evidence.py:105-132)的 DSL 版:Stop 时若最终回复(去掉代码块与引用、取末尾 600 字)在 40 字内同时出现「代码任务词」与「完成词/弱声明词」,而当前工作树没有新鲜的 verify 证据,则命中。原实现的 40 字上下文窗口(evidence.py:34、62-67)用两个方向的正则表达。影子模式:action=log,target=deny。",
+      "description": "pinrule evidence 的回复侧检测(evidence.py:105-132)的 DSL 版:Stop 时若最终回复(去掉代码块与引用、取末尾 600 字)在 40 字内同时出现「代码任务词」与「完成词/弱声明词」,而当前工作树没有新鲜的 verify 证据,则命中。原实现的 40 字上下文窗口(evidence.py:34、62-67)用两个方向的正则表达;完成词本身带任务词的声明(「tests passed」「测试通过」)另用第五条正则单独匹配。影子模式:action=log,target=deny。",
       "action": "log",
       "target": "deny",
       "event": "Stop",
@@ -17,7 +17,8 @@
             "(?is)(?:\\b(?:tests?|code|fix|build|deploy|commit|merge|pull request|PR|feature|bug)\\b|测试|代码|修复|实现|实施|部署|功能|跑通|过了|跑过|装好)[^\\n]{0,40}(?:\\b(?:done|fixed|all set|all done|finished|completed|wrapped up|shipped|landed|implemented|deployed|tests? (?:are )?pass(?:ed|ing)|build (?:passes|passing|green)|tests green|all green|works now|working now)\\b|完成|搞定|搞好|做完|修复完|弄好|弄完|处理完|跑通|跑过|全部通过|测试通过)",
             "(?is)(?:\\b(?:done|fixed|all set|all done|finished|completed|wrapped up|shipped|landed|implemented|deployed|tests? (?:are )?pass(?:ed|ing)|build (?:passes|passing|green)|tests green|all green|works now|working now)\\b|完成|搞定|搞好|做完|修复完|弄好|弄完|处理完|跑通|跑过|全部通过|测试通过)[^\\n]{0,40}(?:\\b(?:tests?|code|fix|build|deploy|commit|merge|pull request|PR|feature|bug)\\b|测试|代码|修复|实现|实施|部署|功能|跑通|过了|跑过|装好)",
             "(?is)(?:\\b(?:tests?|code|fix|build|deploy|commit|merge|pull request|PR|feature|bug)\\b|测试|代码|修复|实现|实施|部署|功能|跑通|过了|跑过|装好)[^\\n]{0,40}(?:\\b(?:should work|should be (?:fine|ok|okay)|probably (?:works|fine|ok|okay)|might (?:work|be fine)|i think (?:it works|it's fine|it should)|likely (?:works|fine)|seems to work|appears to work)\\b|应该(?:可以|没问题|没事|能|差不多)|大概率|估计(?:可以|没问题|差不多)|看起来没问题|看上去没问题|似乎(?:可以|没问题)|好像(?:可以|没问题))",
-            "(?is)(?:\\b(?:should work|should be (?:fine|ok|okay)|probably (?:works|fine|ok|okay)|might (?:work|be fine)|i think (?:it works|it's fine|it should)|likely (?:works|fine)|seems to work|appears to work)\\b|应该(?:可以|没问题|没事|能|差不多)|大概率|估计(?:可以|没问题|差不多)|看起来没问题|看上去没问题|似乎(?:可以|没问题)|好像(?:可以|没问题))[^\\n]{0,40}(?:\\b(?:tests?|code|fix|build|deploy|commit|merge|pull request|PR|feature|bug)\\b|测试|代码|修复|实现|实施|部署|功能|跑通|过了|跑过|装好)"
+            "(?is)(?:\\b(?:should work|should be (?:fine|ok|okay)|probably (?:works|fine|ok|okay)|might (?:work|be fine)|i think (?:it works|it's fine|it should)|likely (?:works|fine)|seems to work|appears to work)\\b|应该(?:可以|没问题|没事|能|差不多)|大概率|估计(?:可以|没问题|差不多)|看起来没问题|看上去没问题|似乎(?:可以|没问题)|好像(?:可以|没问题))[^\\n]{0,40}(?:\\b(?:tests?|code|fix|build|deploy|commit|merge|pull request|PR|feature|bug)\\b|测试|代码|修复|实现|实施|部署|功能|跑通|过了|跑过|装好)",
+            "(?i)\\b(?:all |the )?(?:tests?|build|ci) (?:are |is )?(?:pass(?:ed|es|ing)?|green)\\b|(?:全部|所有)?(?:测试|单测|构建)(?:已经?|都|全部)?(?:通过|跑通|成功)"
           ],
           "not_regex": [
             "(?i)\\bnot (?:yet )?(?:done|completed|finished|fixed)\\b",
@@ -32,8 +33,12 @@
       "examples": [
         {"name": "claims done without evidence", "expect": "hit", "input": {"last_assistant_message": "修复已完成,全部通过。"}, "fixture": {"verify_fresh": "false"}},
         {"name": "english completion claim", "expect": "hit", "input": {"last_assistant_message": "I fixed the bug and the tests pass now."}, "fixture": {"verify_fresh": "false"}},
+        {"name": "bare test-pass claim", "expect": "hit", "input": {"last_assistant_message": "All tests passed."}, "fixture": {"verify_fresh": "false"}},
+        {"name": "chinese test-pass claim", "expect": "hit", "input": {"last_assistant_message": "测试通过了。"}, "fixture": {"verify_fresh": "false"}},
+        {"name": "chinese build claim", "expect": "hit", "input": {"last_assistant_message": "代码已提交,构建通过。"}, "fixture": {"verify_fresh": "false"}},
         {"name": "hedged claim", "expect": "hit", "input": {"last_assistant_message": "代码改好了,应该没问题。"}, "fixture": {"verify_fresh": "false"}},
         {"name": "claim with fresh evidence", "expect": "miss", "input": {"last_assistant_message": "All tests passed. The fix is done."}, "fixture": {"verify_fresh": "true"}},
+        {"name": "bare test-pass claim with fresh evidence", "expect": "miss", "input": {"last_assistant_message": "All tests passed."}, "fixture": {"verify_fresh": "true"}},
         {"name": "explicitly not done", "expect": "miss", "input": {"last_assistant_message": "The refactor is not done yet; tests still fail."}, "fixture": {"verify_fresh": "false"}},
         {"name": "small talk without a code task", "expect": "miss", "input": {"last_assistant_message": "这个方向应该可以接受。"}, "fixture": {"verify_fresh": "false"}},
         {"name": "claim only inside a code block", "expect": "miss", "input": {"last_assistant_message": "Run this:\n```\necho the fix is done\n```\nThen tell me the output."}, "fixture": {"verify_fresh": "false"}},

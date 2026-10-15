@@ -23,7 +23,7 @@
         ],
         "input_regex": {
           "new_text": [
-            "(?i)(?:#|//|--)\\s*(?:TODO|FIXME|HACK|XXX)(?:\\s*[:(]|\\s+@)|(?:#|//|--)\\s*临时",
+            "(?i)(?:#|//|--)\\s*(?:TODO|FIXME|HACK|XXX)(?:\\s*[:(]|\\s+@)|(?:#|//|--)\\s*临时(?:[^\\p{L}\\p{N}_]|$)",
             "(?i)(?:#|//|--)\\s*[^\\n]{0,60}?(?:先打个?补丁|临时方案|快速绕过|workaround|hack\\s*around|quick\\s*fix|凑数|短期\\s*目标|hack\\s+for|patch\\s+for\\s+now)"
           ]
         }
@@ -34,8 +34,10 @@
         {"name": "todo in source", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "// TODO: implement later\nreturn nil"}}},
         {"name": "patch-intent comment", "expect": "hit", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/a.py", "content": "# 临时方案,后面再改\nx = 1\n"}}},
         {"name": "codex patch adds a FIXME", "expect": "hit", "client": "codex", "input": {"tool_name": "apply_patch", "tool_input": {"input": "*** Begin Patch\n*** Update File: src/a.go\n@@\n-x\n+// FIXME: y\n*** End Patch\n"}}},
+        {"name": "temporary marker followed by punctuation", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "x := 1 // 临时\nreturn nil"}}},
+        {"name": "temporary-prefixed word is not a marker", "expect": "miss", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/a.go", "content": "// 临时文件路径\nvar p = \"\"\n"}}},
         {"name": "test file is exempt", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a_test.go", "old_string": "x", "new_string": "// TODO: more cases"}}},
-        {"name": "docs are exempt", "expect": "miss", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/docs/notes.md", "content": "TODO: write this\n"}}},
+        {"name": "docs are exempt", "expect": "miss", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/docs/notes.md", "content": "// TODO: write this\n"}}},
         {"name": "clean change", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "return nil"}}}
       ]
     },
@@ -140,7 +142,7 @@
     },
     {
       "id": "no-hack-commit-message",
-      "description": "pinrule long_term 的提交说明检测(long_term.py:58-64):git commit -m 的标题行(前 80 字)含 quick fix、hack、temp、workaround、临时、凑数。PowerShell 的 -m 及其值按 cmdlet 参数处理,不一定出现在 argv 中,所以只写 bash 变体。",
+      "description": "pinrule long_term 的提交说明检测(long_term.py:58-64):git commit 的 -m / --message 说明(前 80 字)含 quick fix、hack、temp、workaround、临时、凑数。PowerShell 的 -m 及其值按 cmdlet 参数处理,不一定出现在 argv 中,所以只写 bash 变体。",
       "action": "log",
       "target": "deny",
       "event": "PreToolUse",
@@ -148,7 +150,7 @@
         "bash": {
           "cmd": "git",
           "git_sub": "commit",
-          "args_regex": "(?i)\\s-[a-zA-Z]*m\\s+[^\\n]{0,80}?(?:quick\\s*fix|\\bhack\\b|\\btemp\\b|workaround|临时|凑数)"
+          "args_regex": "(?i)(?:\\s-[a-zA-Z]*m\\s+|\\s--message[=\\s])[^\\n]{0,80}?(?:quick\\s*fix|\\bhack\\b|\\btemp\\b|workaround|临时|凑数)|\\s-[a-zA-Z]*m(?:quick\\s*fix|hack\\b|temp\\b|workaround|临时|凑数)"
         }
       },
       "message": "提交说明里出现了 quick fix / hack / temp / workaround / 临时 / 凑数。请改成真实的长期方案,再用准确的说明提交。",
@@ -157,6 +159,9 @@
         {"name": "quick fix message", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m \"quick fix for flaky test\""}}},
         {"name": "combined flag", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -am 'temp workaround'"}}},
         {"name": "chinese marker", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m '临时绕过超时'"}}},
+        {"name": "long message flag", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit --message \"quick fix\""}}},
+        {"name": "long message flag with equals", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit --message=hack"}}},
+        {"name": "value attached to -m", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m\"temp\""}}},
         {"name": "normal message", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'fix: handle nil pointer in parser'"}}},
         {"name": "not a commit", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "echo quick fix"}}}
       ]

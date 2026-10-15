@@ -4,7 +4,7 @@
   "rules": [
     {
       "id": "no-foreground-long-task",
-      "description": "pinrule non_blocking 长任务检测(non_blocking.py:76-86)的构建/安装类命令头:cargo build|install、make install|build|all|release|deploy、mvn install|package|deploy、gradle(w) build。命令头与子命令的叉积会多放进几个不存在的组合(如 cargo deploy),无害。shell 的 & 与工具级 run_in_background 都放行。npm/yarn/pnpm/pip 见 no-foreground-install,docker 见 no-foreground-docker。",
+      "description": "pinrule non_blocking 长任务检测(non_blocking.py:76-86)的构建/安装类命令头:cargo build|install、make install|build|all|release|deploy、mvn install|package|deploy、gradle(w) build。命令头与子命令的叉积会多放进几个不存在的组合(如 cargo deploy),无害。shell 的 & 与工具级 run_in_background 都放行。npm/yarn/pnpm/pip 见 no-foreground-install,`python -m pip`/`uv pip` 见 no-foreground-pip-module,docker 见 no-foreground-docker。",
       "action": "log",
       "target": "deny",
       "event": "PreToolUse",
@@ -68,6 +68,38 @@
         {"name": "user script is not listed", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "npm run build"}}},
         {"name": "yarn build is not listed", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "yarn build"}}},
         {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "npm install"}}}
+      ]
+    },
+    {
+      "id": "no-foreground-pip-module",
+      "description": "no-foreground-install 的补充:pip 经解释器或 uv 调用的写法(`python -m pip install`、`uv pip install`),原实现对整条命令做子串匹配 `pip\\s+install`(non_blocking.py:81)所以会命中。单独成规则,避免 pip 命令头与 python/uv 命令头产生叉积。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "run_in_background": false,
+        "bash": {
+          "cmd": ["python*", "py", "uv"],
+          "args_regex": ["^(?:-\\S+\\s+)*-m\\s+pip3?\\s+install\\b", "^pip3?\\s+install\\b"],
+          "async": false
+        },
+        "ps": {
+          "cmd": ["python*", "py", "uv"],
+          "args_regex": ["^(?:-\\S+\\s+)*-m\\s+pip3?\\s+install\\b", "^pip3?\\s+install\\b"],
+          "async": false
+        }
+      },
+      "message": "依赖安装通常较慢,不要在前台阻塞等待。用 run_in_background 启动,期间继续做别的事。",
+      "inject": "依赖安装(python -m pip install、uv pip install 等)用 run_in_background 启动,不要在前台阻塞。",
+      "examples": [
+        {"name": "python -m pip install", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "python -m pip install -r req.txt"}}},
+        {"name": "versioned interpreter", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "python3.12 -m pip install x"}}},
+        {"name": "uv pip install", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "uv pip install x"}}},
+        {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "python -m pip install x"}}},
+        {"name": "shell background &", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "python -m pip install x &"}}},
+        {"name": "tool-level background", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "uv pip install x", "run_in_background": true}}},
+        {"name": "pip list is not an install", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "python -m pip list"}}},
+        {"name": "plain script", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "python3 job.py"}}}
       ]
     },
     {

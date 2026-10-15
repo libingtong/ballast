@@ -73,7 +73,7 @@
 | `node`/`ruby`/`perl -e` 内的阻塞调用 | 不识别(原实现只匹配 Python 形态,`non_blocking.py:28-34`) | DSL 等价(原实现同样没有) |
 | 裸 `wait`、`wait $pid`、`wait $!`(`non_blocking.py:43-70`) | 可选 `no-shell-wait`:`bash.cmd: wait`;`Wait-Job`/`Wait-Process` 为新增 PowerShell 变体 | DSL 等价(PowerShell 为新增) |
 | `kubectl/docker/podman/aws/gcloud/az/helm` 的 `wait` 子命令豁免(`non_blocking.py:40`、`:62-66`) | 命令名不是 `wait`,天然不命中,不需要豁免表 | DSL 等价 |
-| 长任务命令头:`docker run`、`docker compose up|run|build`、`docker build`、`cargo build|install`、`npm install|ci`、`yarn install`、`pnpm install`、`pip install`、`make install|build|all|release|deploy`、`gradle(w) build`、`mvn install|package|deploy`(`non_blocking.py:76-86`) | 拆成 `no-foreground-long-task`(cargo/make/mvn/gradle)、`no-foreground-install`(npm/yarn/pnpm/pip)、`no-foreground-docker`(docker),拆分是为了让命令头与子命令不产生有害的叉积(例如 `yarn build` 不应命中)。`args_regex` 允许子命令前出现 `-x` 形式的全局选项 | DSL 等价(命令头清单一致) |
+| 长任务命令头:`docker run`、`docker compose up|run|build`、`docker build`、`cargo build|install`、`npm install|ci`、`yarn install`、`pnpm install`、`pip install`、`make install|build|all|release|deploy`、`gradle(w) build`、`mvn install|package|deploy`(`non_blocking.py:76-86`) | 拆成 `no-foreground-long-task`(cargo/make/mvn/gradle)、`no-foreground-install`(npm/yarn/pnpm/pip/pip3)、`no-foreground-pip-module`(`python* -m pip install`、`py -m pip install`、`uv pip install`)、`no-foreground-docker`(docker),拆分是为了让命令头与子命令不产生有害的叉积(例如 `yarn build` 不应命中)。`args_regex` 允许子命令前出现 `-x` 形式的全局选项。原实现对整条命令做子串匹配,所以 `pip install` 出现在任意位置(如 `bash -c "pip install x"` 的字符串里)也会命中;DSL 版只看命令节点,字符串里的不命中 | DSL 等价(命令头清单一致;子串匹配改为节点匹配,属有意收窄) |
 | `npm run`、`yarn build` 等用户脚本不拦(`non_blocking.py:87-89`) | 同样不拦(`no-foreground-install` 的示例覆盖) | DSL 等价 |
 | 子命令前的全局选项会使 `\bcargo\s+build` 失配 | `args_regex` 的前缀 `(?:-\S+\s+)*` 容忍 `cargo --locked build`;带值的全局选项(如 `make -C dir install`)仍不识别 | 有意改变(略宽) |
 | `docker run -d`、`compose up -d` 也拦 | 同样拦(命令头匹配,不区分是否分离运行),已写进规则描述 | DSL 等价 |
@@ -88,7 +88,7 @@
 | 同一条命令里先跑过测试(`pytest && git commit`)即豁免(`evidence.py:45-52`、`:89-96`) | 证据必须走 verify,不再从命令链推断 | 舍弃 |
 | `--collect-only`、`--help` 等假证据标志不算(`evidence.py:53-59`、`:95`) | 证据不再来自 Agent 自己的命令,该问题不复存在 | 舍弃(随上一条) |
 | commit 前链 `git add && git commit` | PreToolUse 时 add 尚未执行,C 取当前索引;message 提示"`git add` 与 `git commit` 分两次执行"(dsl-semantics §14) | 有意改变 |
-| 回复侧:完成词(`evidence.py:19-22`,`data/signals/completion_words/{zh,en}.txt`)与弱声明词(`evidence.py:24-26`,`data/signals/weak_claims/{zh,en}.txt`)出现在"代码任务词"(`evidence.py:29-33`)前后 40 字内,且无近期测试证据时命中(`evidence.py:34`、`:62-67`、`:105-132`) | `claim-needs-evidence`:Stop 事件,`text` 的四条正则(任务词→完成词、完成词→任务词、任务词→弱声明、弱声明→任务词,各自 `[^\n]{0,40}`)加 `verify_fresh` | DSL 等价(词表为原词表的子集:有意改变) |
+| 回复侧:完成词(`evidence.py:19-22`,`data/signals/completion_words/{zh,en}.txt`)与弱声明词(`evidence.py:24-26`,`data/signals/weak_claims/{zh,en}.txt`)出现在"代码任务词"(`evidence.py:29-33`)前后 40 字内,且无近期测试证据时命中(`evidence.py:34`、`:62-67`、`:105-132`) | `claim-needs-evidence`:Stop 事件,`text` 的四条正则(任务词→完成词、完成词→任务词、任务词→弱声明、弱声明→任务词,各自 `[^\n]{0,40}`)加 `verify_fresh` | DSL 等价(词表为原词表的子集:有意改变)。第五条正则单独匹配自带任务语境的完成声明(`tests passed`、`build green`、`测试通过`、`构建通过`):这些完成词本身含任务词,前四条要求两段互不重叠的文本,单独出现时永远不命中,而原实现的 40 字窗口包含匹配本身,所以会命中 |
 | 回复正文不做预处理 | `strip_code_blocks`、`strip_quotes`,取末尾 600 字(与 `schema/examples/05-claim-needs-evidence.json` 一致) | 有意改变(更准) |
 | 回复中明确说"没完成"不算 | `not_regex` 有序豁免:`not done`、`未完成`、`还没`、`尚未` 等 | 有意改变(新增) |
 | 命中后只拦一次(`evidence.py:120`、`:132` 的 `break`) | 一次求值一个结果,不适用 | DSL 等价 |
@@ -136,8 +136,8 @@
 | (原实现没有)`-n` 与合并短选项如 `-anm` | `no-skip-verify` 新增 | 有意改变(新增) |
 | `git push|merge|rebase|tag` 带 `--no-verify`、`--force`、`--skip-hooks`(`long_term.py:70-74`) | 可选 `no-git-force-skip`;`--force` 是精确标志匹配,`--force-with-lease` 不命中 | DSL 等价 |
 | `--force(?!-with-lease)` 前瞻(`long_term.py:72`) | 标志精确匹配代替前瞻 | 有意改变(RE2) |
-| commit 说明标题行(前 80 字)含 `quick fix/hack/temp/workaround/临时/凑数`(`long_term.py:58-64`) | 可选 `no-hack-commit-message`:`args_regex` 匹配 `-m` 之后 80 字内;不要求位于引号内或第一行;只写 bash 变体(PowerShell 的 `-m` 按参数处理,不一定在 argv 中) | 有意改变 |
-| TODO/FIXME/HACK/XXX 注释(`long_term.py:83`)、打补丁意图注释(`long_term.py:88-95`) | 可选 `no-todo-marker`:`input_regex.new_text`(Edit/MultiEdit/Write/NotebookEdit 以及 `apply_patch` 的新增行) | DSL 等价 |
+| commit 说明标题行(前 80 字)含 `quick fix/hack/temp/workaround/临时/凑数`(`long_term.py:58-64`) | 可选 `no-hack-commit-message`:`args_regex` 匹配 `-m`、`-am` 之类合并短选项、`-m"值"` 紧贴写法与 `--message`(含 `=`)之后 80 字内;不要求位于引号内或第一行;只写 bash 变体(PowerShell 的 `-m` 按参数处理,不一定在 argv 中) | 有意改变 |
+| TODO/FIXME/HACK/XXX 注释(`long_term.py:83`)、打补丁意图注释(`long_term.py:88-95`) | 可选 `no-todo-marker`:`input_regex.new_text`(Edit/MultiEdit/Write/NotebookEdit 以及 `apply_patch` 的新增行)。原 `临时\b` 在 Unicode 语义下对「临时」后紧跟汉字不命中(`// 临时文件路径`),RE2 的 `\b` 是 ASCII 语义,这里改写为 `临时(?:[^\p{L}\p{N}_]\|$)` 保持同样行为 | DSL 等价(RE2 改写) |
 | 长 ID 字面写在 `if` 分支,要求 ≥ 12 字符且含数字(`long_term.py:25-32`,用到前瞻 `(?=...)` 与反向引用 `\1`) | 可选 `no-hardcoded-list`:RE2 改写,按数字位置展开成 12 个分支 | 有意改变(RE2 改写,语义等价) |
 | 带黑白名单语义的变量名赋字面量列表(`long_term.py:33-42`) | `no-hardcoded-list` | DSL 等价 |
 | 全大写常量名加 5 个以上字符串的列表(`long_term.py:43-52`) | `no-hardcoded-list` | DSL 等价 |
