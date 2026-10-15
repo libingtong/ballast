@@ -1,0 +1,67 @@
+{
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "state_delta": {
+    "DedupeKey": "",
+    "Now": "2026-10-16T10:00:00Z",
+    "Summary": {
+      "seq": 0,
+      "ts": "2026-10-16T10:00:00Z",
+      "ev": "Stop"
+    },
+    "ToolCall": false,
+    "Prompt": false,
+    "PromptTail": "",
+    "ReadPaths": null,
+    "HitRules": null,
+    "Evals": null,
+    "FlushEvals": true,
+    "FlushedEvals": {
+      "r": {
+        "evals": 3,
+        "hits": 0,
+        "would": 0,
+        "unknown": 0
+      }
+    },
+    "AnchorEmitted": false,
+    "FullEmitted": false,
+    "ReportedJobs": null,
+    "JobReportAt": "0001-01-01T00:00:00Z",
+    "Generation": "",
+    "RuleDigest": null,
+    "LastAssistantText": "",
+    "ToolFailure": false
+  },
+  "audit": [
+    {
+      "ts": "2026-10-16T10:00:00Z",
+      "v": 1,
+      "type": "diag",
+      "client": "claude-code",
+      "session_id": "s1",
+      "repo_inst": "0123456789abcdef",
+      "repo_remote_hash": "fedcba9876543210",
+      "event": "Stop",
+      "native_event": "Stop",
+      "generation": "gen1",
+      "tier": "T0",
+      "ballast_version": "9.9.9-test",
+      "detail": {
+        "diag": "lock_timeout",
+        "wait_us": 20000
+      }
+    }
+  ],
+  "calls": [
+    "parse",
+    "locate",
+    "load",
+    "state.load",
+    "evaluate",
+    "inject",
+    "commit",
+    "audit"
+  ]
+}

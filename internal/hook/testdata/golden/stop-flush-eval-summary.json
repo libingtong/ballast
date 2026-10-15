@@ -1,0 +1,84 @@
+{
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "state_delta": {
+    "DedupeKey": "",
+    "Now": "2026-10-16T10:00:00Z",
+    "Summary": {
+      "seq": 0,
+      "ts": "2026-10-16T10:00:00Z",
+      "ev": "Stop"
+    },
+    "ToolCall": false,
+    "Prompt": false,
+    "PromptTail": "",
+    "ReadPaths": null,
+    "HitRules": null,
+    "Evals": null,
+    "FlushEvals": true,
+    "FlushedEvals": {
+      "q": {
+        "evals": 2,
+        "hits": 0,
+        "would": 2,
+        "unknown": 0
+      },
+      "r": {
+        "evals": 3,
+        "hits": 1,
+        "would": 0,
+        "unknown": 1
+      }
+    },
+    "AnchorEmitted": false,
+    "FullEmitted": false,
+    "ReportedJobs": null,
+    "JobReportAt": "0001-01-01T00:00:00Z",
+    "Generation": "",
+    "RuleDigest": null,
+    "LastAssistantText": "",
+    "ToolFailure": false
+  },
+  "audit": [
+    {
+      "ts": "2026-10-16T10:00:00Z",
+      "v": 1,
+      "type": "eval_summary",
+      "event_seq": 1,
+      "client": "claude-code",
+      "session_id": "s1",
+      "repo_inst": "0123456789abcdef",
+      "repo_remote_hash": "fedcba9876543210",
+      "event": "Stop",
+      "native_event": "Stop",
+      "generation": "gen1",
+      "tier": "T0",
+      "ballast_version": "9.9.9-test",
+      "evals": {
+        "q": {
+          "evals": 2,
+          "hits": 0,
+          "would": 2,
+          "unknown": 0
+        },
+        "r": {
+          "evals": 3,
+          "hits": 1,
+          "would": 0,
+          "unknown": 1
+        }
+      }
+    }
+  ],
+  "calls": [
+    "parse",
+    "locate",
+    "load",
+    "state.load",
+    "evaluate",
+    "inject",
+    "commit",
+    "audit"
+  ]
+}

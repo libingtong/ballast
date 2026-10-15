@@ -1,0 +1,102 @@
+{
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "state_delta": {
+    "DedupeKey": "PreToolUse:t9",
+    "Now": "2026-10-16T10:00:00Z",
+    "Summary": {
+      "seq": 0,
+      "ts": "2026-10-16T10:00:00Z",
+      "ev": "PreToolUse",
+      "tool": "Bash",
+      "text": "Bash: rm -rf build",
+      "hits": [
+        "r"
+      ]
+    },
+    "ToolCall": true,
+    "Prompt": false,
+    "PromptTail": "",
+    "ReadPaths": null,
+    "HitRules": [
+      "r"
+    ],
+    "Evals": {
+      "r": {
+        "evals": 1,
+        "hits": 0,
+        "would": 1,
+        "unknown": 0
+      }
+    },
+    "FlushEvals": false,
+    "FlushedEvals": null,
+    "AnchorEmitted": false,
+    "FullEmitted": false,
+    "ReportedJobs": null,
+    "JobReportAt": "0001-01-01T00:00:00Z",
+    "Generation": "",
+    "RuleDigest": null,
+    "LastAssistantText": "",
+    "ToolFailure": false
+  },
+  "audit": [
+    {
+      "ts": "2026-10-16T10:00:00Z",
+      "v": 1,
+      "type": "hit",
+      "event_seq": 1,
+      "client": "codex",
+      "session_id": "cx",
+      "tool_use_id": "t9",
+      "repo_inst": "0123456789abcdef",
+      "repo_remote_hash": "fedcba9876543210",
+      "event": "PreToolUse",
+      "native_event": "PreToolUse",
+      "tool": "Bash",
+      "rule_id": "r",
+      "rule_layer": "user",
+      "generation": "gen1",
+      "action": "ask",
+      "target": "ask",
+      "decision": "would_ask",
+      "tier": "T0",
+      "ballast_version": "9.9.9-test"
+    },
+    {
+      "ts": "2026-10-16T10:00:00Z",
+      "v": 1,
+      "type": "diag",
+      "event_seq": 1,
+      "client": "codex",
+      "session_id": "cx",
+      "tool_use_id": "t9",
+      "repo_inst": "0123456789abcdef",
+      "repo_remote_hash": "fedcba9876543210",
+      "event": "PreToolUse",
+      "native_event": "PreToolUse",
+      "tool": "Bash",
+      "generation": "gen1",
+      "tier": "T0",
+      "ballast_version": "9.9.9-test",
+      "detail": {
+        "action": "ask",
+        "client": "codex",
+        "diag": "capability_degraded",
+        "event": "PreToolUse",
+        "rule_id": "r"
+      }
+    }
+  ],
+  "calls": [
+    "parse",
+    "locate",
+    "load",
+    "state.load",
+    "evaluate",
+    "inject",
+    "commit",
+    "audit"
+  ]
+}
