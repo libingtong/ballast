@@ -222,8 +222,14 @@ func (t *jsonHooksTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManif
 	if err != nil {
 		return nil, err
 	}
+	sf := structFlags(m, t.client, t.path)
+	noteStruct(sf, t.client, t.path, flagJSONHooks, hooks != nil, len(recs) > 0, "")
 	if t.client == model.ClientCursor && root.get("version") == nil {
 		root.setFront("version", newInt(1))
+		if cur != nil {
+			// Added to the user's file: uninstall takes it back (v1.3).
+			noteStruct(sf, t.client, t.path, flagJSONVersion, false, false, "")
+		}
 	}
 	ensureHooks := func() {
 		if hooks == nil {
@@ -306,6 +312,7 @@ func (t *jsonHooksTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManif
 
 	res.After = doc.bytes()
 	res.Files = []model.ManagedFile{{Client: t.client, Path: t.path, Hash: sha256Hex(res.After), Created: res.Created}}
+	res.Flags = flagList(sf)
 	return res, nil
 }
 
@@ -358,11 +365,18 @@ func (t *jsonHooksTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanRes
 			res.Entries = append(res.Entries, r)
 		}
 	}
-	if hooks != nil && hooks.isEmptyContainer() {
+	sf := structFlags(m, t.client, t.path)
+	if hooks != nil && hooks.isEmptyContainer() && createdByBallast(sf, flagJSONHooks) {
 		root.del("hooks")
+	}
+	if f, ok := sf[flagJSONVersion]; ok && f.SetByBallast {
+		if h := root.get("hooks"); (h == nil || h.isEmptyContainer()) && root.get("version").isInt(1) {
+			root.del("version")
+		}
 	}
 	if len(res.Entries) > 0 && prior != nil {
 		res.Files = []model.ManagedFile{*prior}
+		res.Flags = flagList(sf) // still needed by a later uninstall
 	}
 	if prior != nil && prior.Created && t.rootIsEmpty(root) {
 		res.After = nil

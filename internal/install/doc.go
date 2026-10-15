@@ -45,6 +45,20 @@
 // removed; features.hooks is left on and reported. Load/parse failure ⇒
 // non-zero exit (never pinrule's silent `return 0`).
 //
+// Structural flags (contract v1.3, internal/install/structflags.go): Plan
+// records in ManagedFlag (keys "json:hooks", "json:version",
+// "yaml:hooks", "yaml:hooks.<event>", "dir:kept") whether each container it
+// fills existed before the first install (with its original YAML text) or
+// was created by Ballast; re-installs carry the record over. Uninstall then
+// deletes an emptied container only when Ballast created it (or nothing is
+// recorded, the pre-v1.3 behaviour) and otherwise restores it: a user's
+// empty "hooks": {} object, "hooks: {}" / "hooks: # note" header and
+// "pre_tool_call: []" key come back; the Cursor "version": 1 that install
+// added to an existing hooks.json is removed again once no hooks remain.
+// Directories emptied by deleting a created file are pruned up to, but not
+// including, the nearest directory that existed before install ("dir:kept");
+// a client root created by a --force install is pruned as well.
+//
 // Managed deployment: if any Claude managed settings file
 // (<ManagedDir>/managed-settings.json or managed-settings.d/*.json) contains
 // a hook whose command basename is "ballast" (or "ballast.exe") with first

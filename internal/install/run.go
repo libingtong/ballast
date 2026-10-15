@@ -202,6 +202,7 @@ func planInstall(opt Options, clients []Client) (*installPlan, error) {
 			if err != nil {
 				return nil, err
 			}
+			noteKeptDir(opt.FS, old, c.ID(), p, cur)
 			done = append(done, p)
 			planned = append(planned, plannedFile{c.ID(), p})
 			rep.Plans = append(rep.Plans, p)
@@ -281,6 +282,11 @@ func planUninstall(opt Options) (*uninstallPlan, error) {
 			p, err := t.Remove(cur, old)
 			if err != nil {
 				return nil, err
+			}
+			if kept := keptDir(old, path); kept != "" && p.After != nil && len(p.Files) > 0 {
+				// The file stays recorded (user-modified entries kept): so
+				// does what a later uninstall needs to prune correctly.
+				p.Flags = append(p.Flags, model.ManagedFlag{Client: c.ID(), File: path, Key: flagDirKept, Value: kept})
 			}
 			planned = append(planned, plannedFile{c.ID(), p})
 			rep.Plans = append(rep.Plans, p)
@@ -390,7 +396,7 @@ func finish(opt Options, rep *Report, old, next *model.InstallManifest, createdD
 		return nil, fmt.Errorf("write manifest: %w", err)
 	}
 	for _, path := range createdDeleted {
-		pruneEmptyDirs(opt, path)
+		pruneEmptyDirs(opt, path, keptDir(old, path))
 	}
 	return rep, nil
 }
@@ -422,7 +428,9 @@ func restorePlan(opt Options, p *PlanResult) error {
 // pruneEmptyDirs removes the (now empty) directories above a deleted file,
 // but only those strictly inside a client's config directory: the directory
 // itself is how the client is detected and may have existed before install.
-func pruneEmptyDirs(opt Options, file string) {
+// kept (flagDirKept, contract v1.3) is the nearest directory that existed
+// before install created the file; it and its ancestors are never removed.
+func pruneEmptyDirs(opt Options, file, kept string) {
 	lay := opt.Layout
 	var roots []string
 	for _, c := range model.AllClients {
@@ -430,6 +438,7 @@ func pruneEmptyDirs(opt Options, file string) {
 			roots = append(roots, filepath.Clean(d))
 		}
 	}
+	kept = filepath.Clean(kept)
 	dir := filepath.Dir(file)
 	for {
 		within := false
@@ -437,8 +446,16 @@ func pruneEmptyDirs(opt Options, file string) {
 			if strings.HasPrefix(dir, r+string(filepath.Separator)) {
 				within = true
 			}
+			// A client root that install itself created (--force; the
+			// nearest pre-existing directory lies above it) goes too.
+			if dir == r && kept != "." && strings.HasPrefix(r, kept+string(filepath.Separator)) {
+				within = true
+			}
 		}
 		if !within {
+			return
+		}
+		if kept != "." && len(dir) <= len(kept) {
 			return
 		}
 		if err := opt.FS.Remove(dir); err != nil {

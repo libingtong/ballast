@@ -27,4 +27,24 @@ var (
 	ErrSettingsParse = errors.New("ballast: client settings parse error")
 	// ErrManagedPresent: Ballast is already deployed via managed settings.
 	ErrManagedPresent = errors.New("ballast: managed deployment present")
+
+	// Installer sentinels (contract v1.3; moved from internal/install, which
+	// re-exports them under their old names, so the values are identical).
+	// The CLI maps them to the exit codes of docs/architecture.md §7.
+
+	// ErrInstallUsage: invalid install Options (no client, unknown client,
+	// relative --binary). Exit 2.
+	ErrInstallUsage = errors.New("ballast install: usage error")
+	// ErrClientNotDetected: an explicitly requested client is not present
+	// and --force was not given. Exit 2.
+	ErrClientNotDetected = errors.New("ballast install: client not detected")
+	// ErrBinaryUnstable: the auto-resolved executable lives under a
+	// temporary or build directory. Exit 2.
+	ErrBinaryUnstable = errors.New("ballast install: binary path is not stable")
+	// ErrOrgWriteDenied: `org render --write` without --i-am-admin or root.
+	// Exit 4.
+	ErrOrgWriteDenied = errors.New("ballast org render: write not permitted")
+	// ErrInstallLocked: another install/uninstall holds the install lock.
+	// Exit 5.
+	ErrInstallLocked = errors.New("ballast install: another install is in progress")
 )

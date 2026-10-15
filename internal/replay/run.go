@@ -75,16 +75,17 @@ type runner struct {
 	// per-session facts
 	cwdBySession   map[string]string
 	writeBySession map[string][]time.Time // sorted file-tool write times
+	evidence       map[string][]model.VerifyRecord
+	evidenceFile   []model.VerifyRecord
+	projects       map[string]projectEntry // by project root
+	pathCtx        map[string]model.PathContext
+	homeRaw        string
+	homeNorm       string
+
 	// subWritesNoted: sub-agent file writes were pre-scanned into
 	// writeBySession; inSubagentFile: a sub-agent file is being replayed
 	// (its writes must not be noted twice).
 	subWritesNoted, inSubagentFile bool
-	evidence                       map[string][]model.VerifyRecord
-	evidenceFile                   []model.VerifyRecord
-	projects                       map[string]projectEntry // by project root
-	pathCtx                        map[string]model.PathContext
-	homeRaw                        string
-	homeNorm                       string
 
 	items, skipped int
 	order          []string
