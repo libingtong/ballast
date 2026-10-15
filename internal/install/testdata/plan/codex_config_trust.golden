@@ -1,0 +1,29 @@
+model = "gpt"
+
+[features]
+hooks = true
+other = 1
+
+[hooks.state.'/home/u/.codex/hooks.json:permission_request:0:0']
+enabled = true
+trusted_hash = "sha256:1ac07751d771d766369dbccd45313bf5d1a0ab1d003a57f70a82176563ede02c"
+
+[hooks.state.'/home/u/.codex/hooks.json:post_tool_use:0:0']
+enabled = true
+trusted_hash = "sha256:1672263a8a2f5c6a05c0001bbe1566434284ad826afe6d121f73d3da34c071aa"
+
+[hooks.state.'/home/u/.codex/hooks.json:pre_tool_use:0:0']
+enabled = true
+trusted_hash = "sha256:4c52bb0133a2ba33b43c322753624ddde3c79f0579230fa261ce0d698626f419"
+
+[hooks.state.'/home/u/.codex/hooks.json:session_start:0:0']
+enabled = true
+trusted_hash = "sha256:e4863c004401db9901c5aba8cea9d2241c8b724afff23e82a2d7e5ac3a24cfa1"
+
+[hooks.state.'/home/u/.codex/hooks.json:stop:0:0']
+enabled = true
+trusted_hash = "sha256:132bc65d5c6a22d2663f65f404e3ed181f98e8195c018055018eada9222c18fe"
+
+[hooks.state.'/home/u/.codex/hooks.json:user_prompt_submit:0:0']
+enabled = true
+trusted_hash = "sha256:cb96b9f5ca5c57caf4c7a44dcca1b36f9112c7ed422c43fe1303da4a736a7fd1"

@@ -1,0 +1,174 @@
+{
+  "model": "opus",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/audit"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PreToolUse"
+            ]
+          }
+        ]
+      }
+    ],
+    "Notification": [],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "SessionStart"
+            ]
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "UserPromptSubmit"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PostToolUse"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PostToolUseFailure"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "PostToolBatch"
+            ]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "Stop"
+            ]
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "SubagentStop"
+            ]
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "SessionEnd"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "A": "1"
+  }
+}
