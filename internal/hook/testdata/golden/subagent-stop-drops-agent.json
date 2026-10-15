@@ -1,0 +1,48 @@
+{
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "state_delta": {
+    "DedupeKey": "",
+    "Now": "2026-10-16T10:00:00Z",
+    "Summary": {
+      "seq": 0,
+      "ts": "2026-10-16T10:00:00Z",
+      "ev": "SubagentStop"
+    },
+    "ToolCall": false,
+    "Prompt": false,
+    "PromptTail": "",
+    "ReadPaths": null,
+    "HitRules": null,
+    "Evals": null,
+    "FlushEvals": true,
+    "FlushedEvals": null,
+    "AnchorEmitted": false,
+    "FullEmitted": false,
+    "ReportedJobs": null,
+    "JobReportAt": "0001-01-01T00:00:00Z",
+    "Generation": "",
+    "RuleDigest": null,
+    "LastAssistantText": "",
+    "ToolFailure": false
+  },
+  "audit": [],
+  "calls": [
+    "parse",
+    "locate",
+    "load",
+    "state.load",
+    "evaluate",
+    "inject",
+    "commit",
+    "drop_agent"
+  ],
+  "dropped": [
+    {
+      "repo_inst": "0123456789abcdef",
+      "session": "s1",
+      "agent": "a1"
+    }
+  ]
+}

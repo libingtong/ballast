@@ -1,0 +1,44 @@
+{
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "state_delta": {
+    "DedupeKey": "PostToolUse:t1",
+    "Now": "2026-10-16T10:00:00Z",
+    "Summary": {
+      "seq": 0,
+      "ts": "2026-10-16T10:00:00Z",
+      "ev": "PostToolUse",
+      "tool": "Bash",
+      "text": "Bash: sed -n 1,80p src/a.go"
+    },
+    "ToolCall": false,
+    "Prompt": false,
+    "PromptTail": "",
+    "ReadPaths": [
+      "/repo/src/a.go"
+    ],
+    "HitRules": null,
+    "Evals": null,
+    "FlushEvals": false,
+    "FlushedEvals": null,
+    "AnchorEmitted": false,
+    "FullEmitted": false,
+    "ReportedJobs": null,
+    "JobReportAt": "0001-01-01T00:00:00Z",
+    "Generation": "",
+    "RuleDigest": null,
+    "LastAssistantText": "",
+    "ToolFailure": false
+  },
+  "audit": [],
+  "calls": [
+    "parse",
+    "locate",
+    "load",
+    "state.load",
+    "evaluate",
+    "inject",
+    "commit"
+  ]
+}

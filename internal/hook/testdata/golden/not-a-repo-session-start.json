@@ -1,0 +1,58 @@
+{
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "state_delta": {
+    "DedupeKey": "",
+    "Now": "2026-10-16T10:00:00Z",
+    "Summary": {
+      "seq": 0,
+      "ts": "2026-10-16T10:00:00Z",
+      "ev": "SessionStart"
+    },
+    "ToolCall": false,
+    "Prompt": false,
+    "PromptTail": "",
+    "ReadPaths": null,
+    "HitRules": null,
+    "Evals": null,
+    "FlushEvals": false,
+    "FlushedEvals": null,
+    "AnchorEmitted": false,
+    "FullEmitted": false,
+    "ReportedJobs": null,
+    "JobReportAt": "0001-01-01T00:00:00Z",
+    "Generation": "",
+    "RuleDigest": null,
+    "LastAssistantText": "",
+    "ToolFailure": false
+  },
+  "audit": [
+    {
+      "ts": "2026-10-16T10:00:00Z",
+      "v": 1,
+      "type": "diag",
+      "event_seq": 1,
+      "client": "claude-code",
+      "session_id": "s1",
+      "repo_inst": "norepo-f9be197a95b070f4",
+      "event": "SessionStart",
+      "native_event": "SessionStart",
+      "generation": "gen1",
+      "tier": "T0",
+      "ballast_version": "9.9.9-test",
+      "detail": {
+        "diag": "not_a_repo"
+      }
+    }
+  ],
+  "calls": [
+    "parse",
+    "locate",
+    "load",
+    "state.load",
+    "inject",
+    "commit",
+    "audit"
+  ]
+}

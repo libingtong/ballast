@@ -6,5 +6,13 @@ package hook
 const EnvFault = "BALLAST_FAULT"
 
 func faultsFromEnv(getenv func(string) (string, bool)) FaultInjector {
-	panic("unimplemented: hook.faultsFromEnv (ballast_fault build)")
+	v, ok := getenv(EnvFault)
+	if !ok || v == "" {
+		return nil
+	}
+	p, m, err := parseFaultSpec(v)
+	if err != nil {
+		return nil
+	}
+	return singleFault{point: p, mode: m}
 }

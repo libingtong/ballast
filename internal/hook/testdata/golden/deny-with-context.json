@@ -1,0 +1,94 @@
+{
+  "exit": 0,
+  "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"[r] no\"}}\n",
+  "stderr": "",
+  "state_delta": {
+    "DedupeKey": "PreToolUse:tu1",
+    "Now": "2026-10-16T10:00:00Z",
+    "Summary": {
+      "seq": 0,
+      "ts": "2026-10-16T10:00:00Z",
+      "ev": "PreToolUse",
+      "tool": "Bash",
+      "text": "Bash: git status",
+      "hits": [
+        "r"
+      ]
+    },
+    "ToolCall": true,
+    "Prompt": false,
+    "PromptTail": "",
+    "ReadPaths": null,
+    "HitRules": [
+      "r"
+    ],
+    "Evals": {
+      "r": {
+        "evals": 1,
+        "hits": 1,
+        "would": 0,
+        "unknown": 0
+      }
+    },
+    "FlushEvals": false,
+    "FlushedEvals": null,
+    "AnchorEmitted": false,
+    "FullEmitted": false,
+    "ReportedJobs": null,
+    "JobReportAt": "0001-01-01T00:00:00Z",
+    "Generation": "",
+    "RuleDigest": null,
+    "LastAssistantText": "",
+    "ToolFailure": false
+  },
+  "audit": [
+    {
+      "ts": "2026-10-16T10:00:00Z",
+      "v": 1,
+      "type": "hit",
+      "event_seq": 1,
+      "client": "claude-code",
+      "session_id": "s1",
+      "tool_use_id": "tu1",
+      "repo_inst": "0123456789abcdef",
+      "repo_remote_hash": "fedcba9876543210",
+      "event": "PreToolUse",
+      "native_event": "PreToolUse",
+      "tool": "Bash",
+      "rule_id": "r",
+      "rule_layer": "user",
+      "generation": "gen1",
+      "action": "deny",
+      "target": "deny",
+      "decision": "deny",
+      "matched": "bash node 0: git status",
+      "context": [
+        {
+          "seq": 4,
+          "ts": "2026-10-16T09:59:00Z",
+          "ev": "UserPromptSubmit"
+        },
+        {
+          "seq": 5,
+          "ts": "2026-10-16T09:59:59Z",
+          "ev": "PostToolUse",
+          "tool": "Read",
+          "text": "Read: src/a.go"
+        }
+      ],
+      "tier": "T0",
+      "ballast_version": "9.9.9-test"
+    }
+  ],
+  "calls": [
+    "parse",
+    "locate",
+    "load",
+    "state.load",
+    "evaluate",
+    "inject",
+    "commit",
+    "audit",
+    "render"
+  ]
+}
