@@ -1,0 +1,10 @@
+/bin/
+/dist/
+/proto/bin/
+*.test
+*.out
+coverage.*
+.DS_Store
+/.omc/
+/.claude/settings.local.json
+/tmp/
