@@ -326,7 +326,11 @@ func (v *validator) inputRegex(base, id string, m *model.Match, scope toolScope)
 			}
 		}
 		if len(bad) > 0 {
-			v.d.err(CodeInputFieldUnknown, kp, id, "input_regex.%s is not a tool_input field of %s (valid: %s)", key, strings.Join(bad, ", "), strings.Join(InputFields[bad[0]], ", "))
+			hint := ""
+			if len(bad) == 1 {
+				hint = " (valid: " + strings.Join(InputFields[bad[0]], ", ") + ")"
+			}
+			v.d.err(CodeInputFieldUnknown, kp, id, "input_regex.%s is not a tool_input field of %s%s", key, strings.Join(bad, ", "), hint)
 		}
 	}
 }

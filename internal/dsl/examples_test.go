@@ -62,3 +62,22 @@ func TestSchemaExamplesLint(t *testing.T) {
 		}
 	}
 }
+
+// TestSchemaExamplesLintAllClients lints the claude-code-only examples against
+// every client. `secret-in-output` (PostToolUse warn, no clients list) has no
+// supported cell on Hermes (architecture §4.1), so `lint --client all` over
+// schema/examples reports it; that is a contract inconsistency reported to the
+// architect, not a lint bug. Everything else must be clean.
+func TestSchemaExamplesLintAllClients(t *testing.T) {
+	e, _ := newTestEngine(t)
+	for _, d := range e.Lint(schemaExamples(t), LintOptions{Clients: model.AllClients}) {
+		if d.Severity != model.SevError {
+			continue
+		}
+		if d.RuleID == "secret-in-output" && d.Client == model.ClientHermes && d.Code == CodeActionUnsupported {
+			t.Logf("known contract issue: %s %s %s", d.File, d.RuleID, d.Message)
+			continue
+		}
+		t.Errorf("unexpected lint error: %+v", d)
+	}
+}

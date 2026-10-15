@@ -100,6 +100,9 @@ func CheckCapabilities(r *model.Rule, c model.ClientID) []model.Diagnostic {
 			Message: fmt.Sprintf(format, args...),
 		}
 	}
+	if !r.Event.IsRuleEvent() {
+		return nil // reported as bad-event by validation
+	}
 	caps := model.Capabilities(c)
 	if !caps.HasRuleEvent(r.Event) {
 		return []model.Diagnostic{mk(model.SevWarning, CodeEventUnavailable, "/event",
