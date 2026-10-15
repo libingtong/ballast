@@ -54,6 +54,28 @@
     {"client": "hermes", "native": "pre_llm_call", "decision": {"action": "", "context": "Ballast rules"},
      "stdout": "{\"context\":\"Ballast rules\"}\n"},
     {"client": "hermes", "native": "post_tool_call", "decision": {"action": "", "context": "ignored"}, "stdout": ""},
-    {"client": "hermes", "native": "pre_tool_call", "decision": {"action": "ask", "reason": "x"}, "error": true}
+    {"client": "hermes", "native": "pre_tool_call", "decision": {"action": "ask", "reason": "x"}, "error": true},
+
+    {"client": "claude-code", "native": "SubagentStop", "decision": {"action": "deny", "reason": "[r] go on"},
+     "stdout": "{\"decision\":\"block\",\"reason\":\"[r] go on\"}\n"},
+    {"client": "claude-code", "native": "PostToolUseFailure", "decision": {"action": "warn", "reason": "[r] hm"},
+     "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUseFailure\",\"additionalContext\":\"[r] hm\"}}\n"},
+    {"client": "claude-code", "native": "Stop", "decision": {"action": "ask", "reason": "x"}, "error": true},
+    {"client": "claude-code", "native": "PreToolUse", "decision": {"action": "deny", "reason": "<a> & b"},
+     "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"<a> & b\"}}\n"},
+    {"client": "codex", "native": "UserPromptSubmit", "decision": {"action": "warn", "reason": "[r] hm", "context": "c"},
+     "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[r] hm\\n\\nc\"}}\n"},
+    {"client": "codex", "native": "Stop", "decision": {"action": "warn", "reason": "x"}, "error": true},
+    {"client": "cursor", "native": "beforeReadFile", "decision": {"action": "ask", "reason": "[r] sure?"},
+     "stdout": "{\"permission\":\"ask\",\"user_message\":\"[r] sure?\",\"agent_message\":\"[r] sure?\"}\n"},
+    {"client": "cursor", "native": "postToolUse", "decision": {"action": "warn", "reason": "[r] hm"},
+     "stdout": "{\"additional_context\":\"[r] hm\"}\n"},
+    {"client": "cursor", "native": "beforeSubmitPrompt", "decision": {"action": "warn", "reason": "[r] hm"},
+     "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[r] hm\"}}\n"},
+    {"client": "cursor", "native": "stop", "decision": {"action": "warn", "reason": "x"}, "error": true},
+    {"client": "cursor", "native": "afterAgentResponse", "decision": {"action": ""}, "stdout": ""},
+    {"client": "hermes", "native": "pre_llm_call", "decision": {"action": "warn", "reason": "[r] hm", "context": "c"},
+     "stdout": "{\"context\":\"[r] hm\\n\\nc\"}\n"},
+    {"client": "hermes", "native": "post_tool_call", "decision": {"action": "warn", "reason": "x"}, "error": true}
   ]
 }
