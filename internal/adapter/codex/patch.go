@@ -58,6 +58,15 @@ func ParseApplyPatch(envelope string) (PatchSummary, error) {
 
 	for _, line := range strings.Split(envelope, "\n") {
 		line = strings.TrimSuffix(line, "\r")
+		// Inside an Update section a line starting with a space is a context
+		// line, never a marker (even if its text reads "*** End Patch"):
+		// accepting it would let file content end the envelope early or
+		// forge extra targets. Lenient markers are only honoured at section
+		// boundaries (no open section, Add/Delete section, or a first
+		// character other than a space such as a tab).
+		if cur != nil && cur.op == hdrUpdate && strings.HasPrefix(line, " ") {
+			continue
+		}
 		// Markers are recognized after trimming surrounding blanks and
 		// collapsing blanks inside the marker keyword (Codex trims hunk
 		// header lines); +/- content lines keep the raw line.

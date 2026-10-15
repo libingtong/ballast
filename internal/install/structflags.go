@@ -37,6 +37,16 @@ func isStructFlag(key string) bool {
 	return strings.HasPrefix(key, "json:") || strings.HasPrefix(key, "yaml:") || strings.HasPrefix(key, "dir:")
 }
 
+// hasFlagKey reports whether flags already holds a flag with the given key.
+func hasFlagKey(flags []model.ManagedFlag, key string) bool {
+	for _, f := range flags {
+		if f.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
 // keptDir returns the flagDirKept value recorded for file, if any.
 func keptDir(m *model.InstallManifest, file string) string {
 	if m == nil {
@@ -57,10 +67,8 @@ func noteKeptDir(fsys sys.FS, m *model.InstallManifest, c model.ClientID, p *Pla
 	if p == nil || p.After == nil {
 		return
 	}
-	for _, f := range p.Flags {
-		if f.Key == flagDirKept {
-			return
-		}
+	if hasFlagKey(p.Flags, flagDirKept) {
+		return
 	}
 	kept := keptDir(m, p.Path)
 	if kept == "" {

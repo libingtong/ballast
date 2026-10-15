@@ -283,9 +283,10 @@ func planUninstall(opt Options) (*uninstallPlan, error) {
 			if err != nil {
 				return nil, err
 			}
-			if kept := keptDir(old, path); kept != "" && p.After != nil && len(p.Files) > 0 {
+			if kept := keptDir(old, path); kept != "" && p.After != nil && len(p.Files) > 0 && !hasFlagKey(p.Flags, flagDirKept) {
 				// The file stays recorded (user-modified entries kept): so
-				// does what a later uninstall needs to prune correctly.
+				// does what a later uninstall needs to prune correctly. The
+				// structural Remove may already have carried the flag over.
 				p.Flags = append(p.Flags, model.ManagedFlag{Client: c.ID(), File: path, Key: flagDirKept, Value: kept})
 			}
 			planned = append(planned, plannedFile{c.ID(), p})

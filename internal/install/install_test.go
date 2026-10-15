@@ -644,6 +644,18 @@ func TestUninstallKeepsAndReportsUserModifiedEntries(t *testing.T) {
 	if len(m.Entries) != 2 {
 		t.Errorf("manifest keeps %d records, want the 2 modified ones", len(m.Entries))
 	}
+	assertNoDuplicateFlags(t, m)
+	for _, file := range []string{e.claudeSettings(), e.hermesConfig()} {
+		kept := 0
+		for _, f := range m.Flags {
+			if f.File == file && f.Key == flagDirKept {
+				kept++
+			}
+		}
+		if kept != 1 {
+			t.Errorf("dir:kept flags for %s after partial uninstall = %d, want exactly 1", filepath.Base(file), kept)
+		}
+	}
 	// a second uninstall warns again and changes nothing
 	before := dirSnapshot(t, e.sb.Home)
 	rep = mustUninstall(t, opt)
@@ -655,6 +667,17 @@ func TestUninstallKeepsAndReportsUserModifiedEntries(t *testing.T) {
 	delete(after, e.lay.Manifest)
 	if !equalMaps(stripBackups(before, e), stripBackups(after, e)) {
 		t.Error("second uninstall changed files")
+	}
+}
+
+func assertNoDuplicateFlags(t *testing.T, m *model.InstallManifest) {
+	t.Helper()
+	seen := map[model.ManagedFlag]bool{}
+	for _, f := range m.Flags {
+		if seen[f] {
+			t.Errorf("duplicate manifest flag %+v", f)
+		}
+		seen[f] = true
 	}
 }
 

@@ -125,7 +125,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | `jobs/<repo_inst>/<name>/<job_id>.log` | U8 | runner 合并输出 | 追加 |
 | `audit/YYYY-MM.jsonl`、`audit/YYYY-MM.N.jsonl` | U5 | 每行一个 `model.AuditRecord`,≤8 KiB | `O_APPEND` 单次 write |
 | `cache/stat.json` | U4 | `{key(stat 指纹+版本) → generation}` | 原子,失败不算异常 |
-| `cache/rules-<generation>-<key[:8]>.json` | U4 | `{sources, rules([]LoadedRule), settings, notices}`;key = stat 指纹键,避免同 generation 的不同仓库互相覆盖(v1.3) | 原子,失败不算异常 |
+| `cache/rules-<generation>-<key[:8]>.json` | U4 | `{sources, rules([]LoadedRule), settings, notices}`;key = stat 指纹键,避免同 generation 的不同仓库互相覆盖(v1.3) | 原子,失败不算异常;不自动回收(已知局限:升级前的 `rules-<gen>.json` 与各仓库历史 generation 的缓存文件需用户手动清理 `~/.ballast/cache/rules-*.json`,删除后下次加载自动重建) |
 | `cache/lkg/<layer>-<sha256(abs path)[:12]>.json` | U4 | 该层最近一次合法的原始字节 | 原子 |
 | `backups/<UTC yyyymmddThhmmssZ>-<rand6>/` | U10 | 被改写文件的原样副本(文件名为原绝对路径,分隔符转 `%2F`) | 目录 0700、文件 0600,保留最近 10 个 |
 | `reviews/<rule_id>.json` | U9 | `stats.Review` | 原子 |
