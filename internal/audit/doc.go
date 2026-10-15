@@ -28,6 +28,25 @@
 // Retention (GC, run by `ballast gc`): audit files whose month ended more
 // than 90 days ago are deleted.
 //
+// Implementation notes:
+//   - Append stamps a missing TS with Clock.Now, writes TS in UTC and fills a
+//     zero V with model.AuditVersion. A batch that spans a month boundary
+//     needs one write per month; otherwise it is exactly one write.
+//   - The minimal fallback line also carries "truncated":true (a key that is
+//     not part of model.AuditRecord; the Reader ignores it, Lint exempts such
+//     lines from per-type required-field checks).
+//   - Scan selects Since <= TS < Until. ScanStats.Lines counts non-blank
+//     lines, Corrupt non-object/unparsable/oversize (>1 MiB) lines, Skipped
+//     unknown "v". Location.File is Dir joined with the file name.
+//   - Lint required fields: hit ⇒ rule_id, decision; eval_summary ⇒ evals;
+//     rule_dropped, rule_shadowed, promote ⇒ rule_id; verify ⇒ verify;
+//     diag ⇒ detail.
+//   - GC returns the full paths it removed; a file goes when its month ended
+//     more than the retention ago.
+//   - ClipRunes returns at most n runes: a cut result ends with the ellipsis,
+//     which counts towards n. MarshalLine clips Matched to
+//     model.MaxMatchedRunes after redaction.
+//
 // Acceptance (U5): 8 concurrent writers × 1000 records ⇒ every line parses
 // (no interleaving); 64 MiB rotation creates .1; corrupt tail tolerated;
 // `ballast audit lint` reports schema violations with file:line; Writer

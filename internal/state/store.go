@@ -1,6 +1,14 @@
 package state
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/libingtong/ballast/internal/layout"
@@ -23,7 +31,8 @@ const (
 	RecordVersion     = 1
 )
 
-// Options configures a Store.
+// Options configures a Store. Nil FS, Clock and IDs default to the real
+// implementations.
 type Options struct {
 	Layout layout.Layout
 	FS     sys.FS
@@ -39,26 +48,143 @@ type Store struct {
 var _ ports.StateStore = (*Store)(nil)
 
 // New returns a Store.
-func New(opt Options) *Store { return &Store{opt: opt} }
+func New(opt Options) *Store {
+	if opt.FS == nil {
+		opt.FS = sys.OSFS{}
+	}
+	if opt.Clock == nil {
+		opt.Clock = sys.RealClock{}
+	}
+	if opt.IDs == nil {
+		opt.IDs = sys.RandomID{}
+	}
+	return &Store{opt: opt}
+}
 
 // Load implements ports.StateStore.
 func (s *Store) Load(key model.ScopeKey) (model.SessionState, model.StateLoadInfo, error) {
-	panic("unimplemented: state.Store.Load")
+	rec, info, err := s.read(s.Path(key))
+	return rec, info, err
+}
+
+// read loads and decodes the state file at path. It never returns a nil
+// record: absent, corrupt and unreadable files all yield an empty one.
+func (s *Store) read(path string) (*Record, model.StateLoadInfo, error) {
+	data, err := s.opt.FS.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return NewRecord(), model.StateLoadInfo{Readable: true}, nil
+		}
+		return NewRecord(), model.StateLoadInfo{}, err
+	}
+	info := model.StateLoadInfo{Exists: true, Readable: true, Bytes: len(data)}
+	rec, ok := decodeRecord(data)
+	if !ok {
+		info.Corrupt = true
+		rec = NewRecord()
+	}
+	return rec, info, nil
 }
 
 // Commit implements ports.StateStore.
 func (s *Store) Commit(key model.ScopeKey, d *model.StateDelta) (model.StateCommitInfo, error) {
-	panic("unimplemented: state.Store.Commit")
+	var info model.StateCommitInfo
+	if d == nil {
+		return info, nil
+	}
+	delta := *d
+	if delta.Now.IsZero() {
+		delta.Now = s.opt.Clock.Now()
+	}
+	path := s.Path(key)
+
+	lf, err := s.openLock(path)
+	if err != nil {
+		return info, err
+	}
+	defer lf.Close() // closing also drops the OS lock should unlock fail
+
+	unlock, waited, err := TryLock(lf, LockBudget, s.opt.Clock)
+	info.LockWait = waited
+	if err != nil {
+		if errors.Is(err, model.ErrLockTimeout) {
+			info.LockTimeout = true
+			return info, nil
+		}
+		return info, err
+	}
+	defer func() { _ = unlock() }()
+
+	rec, load, err := s.read(path)
+	if err != nil {
+		return info, err
+	}
+	info.Corrupt = load.Corrupt
+
+	info.Applied, info.Duplicate = rec.Merge(&delta)
+	info.EventSeq = rec.Seq
+	if !info.Applied {
+		return info, nil
+	}
+	data, err := rec.encode()
+	if err != nil {
+		info.Applied = false
+		return info, err
+	}
+	if err := s.writeAtomic(path, data); err != nil {
+		info.Applied = false
+		return info, err
+	}
+	return info, nil
+}
+
+// openLock opens (creating when needed) the lock sibling of path.
+func (s *Store) openLock(path string) (sys.File, error) {
+	lp := path + ".lock"
+	f, err := s.opt.FS.OpenFile(lp, os.O_CREATE|os.O_RDWR, 0o600)
+	if err == nil || !errors.Is(err, fs.ErrNotExist) {
+		return f, err
+	}
+	if err := s.opt.FS.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	return s.opt.FS.OpenFile(lp, os.O_CREATE|os.O_RDWR, 0o600)
+}
+
+// writeAtomic replaces path via a temp file and rename, without fsync. On
+// Windows the rename can fail while a lock-free reader still has the file
+// open (Go opens without FILE_SHARE_DELETE), so it is retried briefly.
+func (s *Store) writeAtomic(path string, data []byte) error {
+	tries := 1
+	if runtime.GOOS == "windows" {
+		tries = 8
+	}
+	var err error
+	for i := 0; i < tries; i++ {
+		if err = sys.WriteFileAtomic(s.opt.FS, s.opt.IDs, path, data, 0o600, false); err == nil {
+			return nil
+		}
+		if i+1 < tries {
+			time.Sleep(time.Millisecond)
+		}
+	}
+	return err
 }
 
 // DropAgent implements ports.StateStore.
 func (s *Store) DropAgent(key model.ScopeKey) error {
-	panic("unimplemented: state.Store.DropAgent")
+	path := s.Path(key)
+	for _, p := range []string{path, path + ".lock"} {
+		if err := s.opt.FS.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 // DropSession implements ports.StateStore.
 func (s *Store) DropSession(key model.ScopeKey) error {
-	panic("unimplemented: state.Store.DropSession")
+	return s.opt.FS.RemoveAll(filepath.Dir(s.Path(key)))
 }
 
 // GCStats reports a GC run.
@@ -68,9 +194,95 @@ type GCStats struct {
 	Errors          int
 }
 
-// GC removes state older than ttl (relative to Clock.Now).
+// GC removes state older than ttl (relative to Clock.Now). A session
+// directory is removed when its newest file (the directory itself when it
+// holds no file) was modified more than ttl ago; repo directories left empty
+// are removed too. ttl <= 0 means TTL. A missing state directory is not an
+// error; per-entry failures are counted in Errors and the run continues.
 func (s *Store) GC(ttl time.Duration) (GCStats, error) {
-	panic("unimplemented: state.Store.GC")
+	var st GCStats
+	if ttl <= 0 {
+		ttl = TTL
+	}
+	cutoff := s.opt.Clock.Now().Add(-ttl)
+	root := s.opt.Layout.StateDir
+	repos, err := s.opt.FS.ReadDir(root)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return st, nil
+		}
+		return st, err
+	}
+	for _, repo := range repos {
+		if !repo.IsDir() {
+			continue
+		}
+		repoPath := filepath.Join(root, repo.Name())
+		sessions, err := s.opt.FS.ReadDir(repoPath)
+		if err != nil {
+			st.Errors++
+			continue
+		}
+		remaining := 0
+		for _, sess := range sessions {
+			if !sess.IsDir() {
+				remaining++
+				continue
+			}
+			st.ScannedSessions++
+			sessPath := filepath.Join(repoPath, sess.Name())
+			newest, err := s.newestMTime(sessPath, sess)
+			if err != nil {
+				st.Errors++
+				remaining++
+				continue
+			}
+			if !newest.Before(cutoff) {
+				remaining++
+				continue
+			}
+			if err := s.opt.FS.RemoveAll(sessPath); err != nil {
+				st.Errors++
+				remaining++
+				continue
+			}
+			st.RemovedSessions++
+		}
+		if remaining == 0 {
+			_ = s.opt.FS.Remove(repoPath) // fails harmlessly if a session appeared meanwhile
+		}
+	}
+	return st, nil
+}
+
+// newestMTime returns the newest modification time of the files directly
+// inside dir, or of dir itself when it contains no file.
+func (s *Store) newestMTime(dir string, self fs.DirEntry) (time.Time, error) {
+	ents, err := s.opt.FS.ReadDir(dir)
+	if err != nil {
+		return time.Time{}, err
+	}
+	var newest time.Time
+	for _, e := range ents {
+		fi, err := e.Info()
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return time.Time{}, err
+		}
+		if fi.ModTime().After(newest) {
+			newest = fi.ModTime()
+		}
+	}
+	if newest.IsZero() {
+		fi, err := self.Info()
+		if err != nil {
+			return time.Time{}, err
+		}
+		newest = fi.ModTime()
+	}
+	return newest, nil
 }
 
 // Path returns the state file path for key (components sanitized).
@@ -81,122 +293,35 @@ func (s *Store) Path(key model.ScopeKey) string {
 // SanitizeComponent returns c when it matches ^[A-Za-z0-9_-]{1,64}$,
 // otherwise "h" + hex(sha256(c))[:16]. Empty ⇒ "h" + hash of "".
 func SanitizeComponent(c string) string {
-	panic("unimplemented: state.SanitizeComponent")
+	if safeComponent(c) {
+		return c
+	}
+	sum := sha256.Sum256([]byte(c))
+	return "h" + hex.EncodeToString(sum[:])[:16]
 }
 
-// Record is the on-disk state (JSON, v=1) and implements model.SessionState.
-type Record struct {
-	V                int                        `json:"v"`
-	StartedAtT       time.Time                  `json:"started_at"`
-	Seq              int64                      `json:"event_seq"`
-	SeenKeys         []string                   `json:"seen"`
-	ReadAt           map[string]time.Time       `json:"read"`
-	Tools            int                        `json:"tool_count"`
-	ToolsSinceInject int                        `json:"tool_count_since_inject"`
-	Prompts          int                        `json:"prompt_count"`
-	PromptTail       string                     `json:"prev_prompt_tail,omitempty"`
-	Hits             map[string]int             `json:"prior_hits,omitempty"`
-	Gen              string                     `json:"generation,omitempty"`
-	Digest           map[string]model.Action    `json:"rule_digest,omitempty"`
-	FullDone         bool                       `json:"full_injected,omitempty"`
-	Reported         []string                   `json:"reported_jobs,omitempty"`
-	JobReportAt      time.Time                  `json:"last_job_report_at"`
-	AssistantText    string                     `json:"last_assistant_text,omitempty"`
-	ToolFailureAt    time.Time                  `json:"last_tool_failure_at"`
-	Ring             []model.EventSummary       `json:"ring,omitempty"`
-	EvalCounts       map[string]model.EvalCount `json:"evals,omitempty"`
-}
-
-var _ model.SessionState = (*Record)(nil)
-
-// NewRecord returns an empty v1 record.
-func NewRecord() *Record { return &Record{V: RecordVersion} }
-
-// Merge applies d to r (pure; used under the lock and by tests).
-func (r *Record) Merge(d *model.StateDelta) (applied, duplicate bool) {
-	panic("unimplemented: state.Record.Merge")
-}
-
-// Seen implements model.SessionState.
-func (r *Record) Seen(k string) bool {
-	if k == "" {
+func safeComponent(c string) bool {
+	if c == "" || len(c) > 64 {
 		return false
 	}
-	for _, x := range r.SeenKeys {
-		if x == k {
-			return true
+	for i := 0; i < len(c); i++ {
+		b := c[i]
+		switch {
+		case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9', b == '_', b == '-':
+		default:
+			return false
 		}
 	}
-	return false
+	return true
 }
 
-// HasRead implements model.SessionState.
-func (r *Record) HasRead(p string) bool { _, ok := r.ReadAt[p]; return ok }
-
-// LastReadAt implements model.SessionState.
-func (r *Record) LastReadAt(p string) (time.Time, bool) { t, ok := r.ReadAt[p]; return t, ok }
-
-// StartedAt implements model.SessionState.
-func (r *Record) StartedAt() (time.Time, bool) { return r.StartedAtT, !r.StartedAtT.IsZero() }
-
-// ToolCount implements model.SessionState.
-func (r *Record) ToolCount() int { return r.Tools }
-
-// ToolCountSinceInject implements model.SessionState.
-func (r *Record) ToolCountSinceInject() int { return r.ToolsSinceInject }
-
-// PromptCount implements model.SessionState.
-func (r *Record) PromptCount() int { return r.Prompts }
-
-// PrevPromptTail implements model.SessionState.
-func (r *Record) PrevPromptTail() string { return r.PromptTail }
-
-// PriorHits implements model.SessionState.
-func (r *Record) PriorHits(id string) int { return r.Hits[id] }
-
-// Generation implements model.SessionState.
-func (r *Record) Generation() string { return r.Gen }
-
-// RuleDigest implements model.SessionState.
-func (r *Record) RuleDigest() map[string]model.Action { return r.Digest }
-
-// FullInjected implements model.SessionState.
-func (r *Record) FullInjected() bool { return r.FullDone }
-
-// ReportedJob implements model.SessionState.
-func (r *Record) ReportedJob(id string) bool {
-	for _, x := range r.Reported {
-		if x == id {
-			return true
-		}
+// decodeRecord parses a state file. ok is false for unparsable data or a
+// version other than RecordVersion.
+func decodeRecord(data []byte) (*Record, bool) {
+	r := new(Record) // V stays 0 unless the file says otherwise
+	if err := json.Unmarshal(data, r); err != nil || r.V != RecordVersion {
+		return nil, false
 	}
-	return false
+	r.enforceCaps()
+	return r, true
 }
-
-// LastJobReportAt implements model.SessionState.
-func (r *Record) LastJobReportAt() time.Time { return r.JobReportAt }
-
-// LastAssistantText implements model.SessionState.
-func (r *Record) LastAssistantText() string { return r.AssistantText }
-
-// LastToolFailureAt implements model.SessionState.
-func (r *Record) LastToolFailureAt() (time.Time, bool) {
-	return r.ToolFailureAt, !r.ToolFailureAt.IsZero()
-}
-
-// Recent implements model.SessionState.
-func (r *Record) Recent(n int) []model.EventSummary {
-	if n <= 0 || len(r.Ring) == 0 {
-		return nil
-	}
-	if n > len(r.Ring) {
-		n = len(r.Ring)
-	}
-	return r.Ring[len(r.Ring)-n:]
-}
-
-// Evals implements model.SessionState.
-func (r *Record) Evals() map[string]model.EvalCount { return r.EvalCounts }
-
-// EventSeq implements model.SessionState.
-func (r *Record) EventSeq() int64 { return r.Seq }

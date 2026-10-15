@@ -1,0 +1,2 @@
+{"ts":"2026-09-10T08:00:00Z","v":1,"type":"hit","rule_id":"r-sep1","decision":"deny","event":"PreToolUse","tool":"Edit"}
+{"ts":"2026-09-20T08:00:00Z","v":1,"type":"hit","rule_id":"r-sep2","decision":"deny","event":"PreToolUse","tool":"Edit"}
