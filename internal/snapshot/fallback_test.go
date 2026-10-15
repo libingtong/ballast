@@ -97,7 +97,7 @@ func TestFallbackEnvironmentAndSteps(t *testing.T) {
 	opt.Git = fg
 	filt := mustFilter(t, "**/*.md", "docs/**")
 
-	id, err := fallbackTree(opt, f.repo, true, []string{"src", "bin/run.sh"}, filt)
+	id, err := fallbackTree(opt, f.repo, true, "", []string{"src", "bin/run.sh"}, filt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestFallbackStepSelection(t *testing.T) {
 			fg := &fakeGit{}
 			opt := f.opts(true)
 			opt.Git = fg
-			if _, err := fallbackTree(opt, f.repo, tc.refresh, tc.paths, tc.filter); err != nil {
+			if _, err := fallbackTree(opt, f.repo, tc.refresh, "", tc.paths, tc.filter); err != nil {
 				t.Fatal(err)
 			}
 			var got []string
@@ -217,7 +217,7 @@ func TestFallbackErrors(t *testing.T) {
 		opt.Env = pollutedEnv(f.env, tmp)
 		boom := errors.New("boom")
 		opt.Git = &fakeGit{handler: func(context.Context, gitCall) ([]byte, error) { return nil, boom }}
-		_, err := fallbackTree(opt, f.repo, true, nil, nil)
+		_, err := fallbackTree(opt, f.repo, true, "", nil, nil)
 		if !errors.Is(err, boom) || errors.Is(err, model.ErrDeadline) {
 			t.Errorf("err = %v", err)
 		}
@@ -228,7 +228,7 @@ func TestFallbackErrors(t *testing.T) {
 	t.Run("garbage from write-tree", func(t *testing.T) {
 		opt := f.opts(true)
 		opt.Git = &fakeGit{handler: func(context.Context, gitCall) ([]byte, error) { return []byte("not a tree\n"), nil }}
-		if _, err := fallbackTree(opt, f.repo, false, nil, nil); err == nil {
+		if _, err := fallbackTree(opt, f.repo, false, "", nil, nil); err == nil {
 			t.Error("expected an error")
 		}
 	})
@@ -238,7 +238,7 @@ func TestFallbackErrors(t *testing.T) {
 		opt.Git = fg
 		repo := *f.repo
 		repo.IndexPath = filepath.Join(t.TempDir(), "nonexistent")
-		if _, err := fallbackTree(opt, &repo, false, nil, nil); err != nil {
+		if _, err := fallbackTree(opt, &repo, false, "", nil, nil); err != nil {
 			t.Fatal(err)
 		}
 		if v, _ := fg.calls[0].envVal("GIT_INDEX_FILE"); v == "" {
@@ -264,7 +264,7 @@ func TestFallbackDeadline(t *testing.T) {
 		opt.Git = &fakeGit{handler: blocking}
 		opt.Deadline = time.Now().Add(80 * time.Millisecond)
 		start := time.Now()
-		_, err := fallbackTree(opt, f.repo, true, nil, nil)
+		_, err := fallbackTree(opt, f.repo, true, "", nil, nil)
 		if !errors.Is(err, model.ErrDeadline) {
 			t.Fatalf("err = %v, want ErrDeadline", err)
 		}
@@ -280,7 +280,7 @@ func TestFallbackDeadline(t *testing.T) {
 		opt := f.opts(true)
 		opt.Git = fg
 		opt.Deadline = time.Now().Add(-time.Second)
-		if _, err := fallbackTree(opt, f.repo, true, nil, nil); !errors.Is(err, model.ErrDeadline) {
+		if _, err := fallbackTree(opt, f.repo, true, "", nil, nil); !errors.Is(err, model.ErrDeadline) {
 			t.Fatalf("err = %v", err)
 		}
 		if len(fg.calls) != 0 {
@@ -294,11 +294,11 @@ func TestFallbackDeadline(t *testing.T) {
 		opt.Clock = clock
 		opt.Git = fg
 		opt.Deadline = clock.Now().Add(time.Hour)
-		if _, err := fallbackTree(opt, f.repo, false, nil, nil); err != nil {
+		if _, err := fallbackTree(opt, f.repo, false, "", nil, nil); err != nil {
 			t.Fatal(err)
 		}
 		clock.Advance(2 * time.Hour)
-		if _, err := fallbackTree(opt, f.repo, false, nil, nil); !errors.Is(err, model.ErrDeadline) {
+		if _, err := fallbackTree(opt, f.repo, false, "", nil, nil); !errors.Is(err, model.ErrDeadline) {
 			t.Fatalf("err = %v", err)
 		}
 	})
@@ -365,11 +365,16 @@ func TestNativeErrorsSkipFallback(t *testing.T) {
 
 func TestExecGitRunsGit(t *testing.T) {
 	requireGit(t)
-	out, err := ExecGit{}.Run(context.Background(), t.TempDir(), os.Environ(), "--version")
+	sb, env := sandboxEnv(t)
+	dir := filepath.Join(sb.Root, "work")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out, err := ExecGit{}.Run(context.Background(), dir, env.Environ(), "--version")
 	if err != nil || !strings.HasPrefix(string(out), "git version") {
 		t.Errorf("out=%q err=%v", out, err)
 	}
-	_, err = ExecGit{}.Run(context.Background(), t.TempDir(), os.Environ(), "no-such-subcommand")
+	_, err = ExecGit{}.Run(context.Background(), dir, env.Environ(), "no-such-subcommand")
 	if err == nil || !strings.Contains(err.Error(), "no-such-subcommand") {
 		t.Errorf("err = %v", err)
 	}

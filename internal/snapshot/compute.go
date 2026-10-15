@@ -27,6 +27,7 @@ type request struct {
 	specs   []pathPattern // with refresh: only entries matching one of these
 	limited bool          // specs restrict the refresh
 	args    []string      // the same pathspecs as strings (git fallback)
+	dir     string        // directory for the fallback's add -u ("" ⇒ repo root)
 	// forceFallback is a reason that makes the native path give up at once.
 	forceFallback string
 }
@@ -73,7 +74,7 @@ func compute(opt Options, repo *model.RepoInfo, req request, f *Filter) (model.T
 	if err == nil || !errors.Is(err, model.ErrFallback) || !opt.AllowFallback {
 		return id, err
 	}
-	return fallbackTree(opt, repo, req.refresh, req.args, f)
+	return fallbackTree(opt, repo, req.refresh, req.dir, req.args, f)
 }
 
 // nativeTree computes F(...) in process.
@@ -260,9 +261,6 @@ func (r *refresher) dirPlainUncached(dir string) (bool, error) {
 
 // refreshOne updates e in place; keep is false when git would drop it.
 func (r *refresher) refreshOne(e *IndexEntry) (keep bool, err error) {
-	if e.Mode == modeGitlink {
-		return false, fallbackf("submodule entry %s", e.Path)
-	}
 	if e.Flags&flagAssumeValid != 0 {
 		return true, nil // git add -u leaves assume-unchanged entries alone
 	}
@@ -288,13 +286,26 @@ func (r *refresher) refreshOne(e *IndexEntry) (keep bool, err error) {
 		return false, fallbackf("lstat %s: %v", e.Path, err)
 	}
 	st := statOf(fi)
+	if e.Mode == modeGitlink && st.kind != fs.ModeDir {
+		return false, fallbackf("submodule %s replaced by a non-directory", e.Path)
+	}
 	if st.kind == fs.ModeSymlink && !r.set.symlinks {
 		return false, fallbackf("core.symlinks=false with symlink %s", e.Path)
 	}
 	switch st.kind {
 	case 0, fs.ModeSymlink:
 	case fs.ModeDir:
-		return false, nil // a directory where a file was tracked: removal
+		if e.Mode == modeGitlink {
+			return r.refreshGitlink(e, abs)
+		}
+		// A directory where a file was tracked is a removal, unless it is
+		// a repository: git then records it as a gitlink of its HEAD.
+		if has, err := r.hasDotGit(abs); err != nil {
+			return false, fallbackf("lstat %s/.git: %v", e.Path, err)
+		} else if has {
+			return false, fallbackf("tracked path %s replaced by a nested repository", e.Path)
+		}
+		return false, nil
 	default:
 		return false, fallbackf("special file %s", e.Path)
 	}
@@ -326,6 +337,33 @@ func (r *refresher) refreshOne(e *IndexEntry) (keep bool, err error) {
 		e.Mode = modeRegular
 	}
 	return true, nil
+}
+
+// refreshGitlink handles a gitlink entry whose path is a directory. Git
+// keeps the recorded commit unless the directory is a checked-out repository
+// (it then records that HEAD), so an uninitialised submodule is unchanged
+// and a repository present on disk is left to git.
+func (r *refresher) refreshGitlink(e *IndexEntry, abs string) (bool, error) {
+	has, err := r.hasDotGit(abs)
+	if err != nil {
+		return false, fallbackf("lstat %s/.git: %v", e.Path, err)
+	}
+	if has {
+		return false, fallbackf("checked-out submodule %s", e.Path)
+	}
+	return true, nil
+}
+
+// hasDotGit reports whether dir contains a .git entry (file or directory).
+func (r *refresher) hasDotGit(dir string) (bool, error) {
+	_, err := r.fs.Lstat(filepath.Join(dir, ".git"))
+	switch {
+	case err == nil:
+		return true, nil
+	case isMissing(err):
+		return false, nil
+	}
+	return false, err
 }
 
 // safeWorktreePath rejects index paths that could leave the work tree or
@@ -441,56 +479,98 @@ func (r *refresher) streamBlob(abs, rel string) ([20]byte, error) {
 	return out, nil
 }
 
+// resolved is the result of resolveSpecs.
+type resolved struct {
+	args []string      // pathspecs for the git fallback, valid from cwd
+	pats []pathPattern // the native form: repo-root relative
+	// native is false when some spec is magic (":(glob)...") and only git
+	// can interpret it.
+	native bool
+	// cwd is where the fallback runs `git add -u`: the directory the
+	// pathspecs were written in, so magic specs mean what they mean to
+	// `git commit` run there. Empty ⇒ the repo root.
+	cwd string
+}
+
 // resolveSpecs turns the pathspecs of a `git commit <paths>` into repo-root
 // relative specs. dir is the directory they were written in (empty ⇒ the
-// repo root, the only base the caller knows without -C). native is false
-// when some spec is magic (":(top)...") and only git can interpret it.
-func resolveSpecs(fsys sys.FS, repo *model.RepoInfo, dir string, paths []string) (args []string, pats []pathPattern, native bool, err error) {
+// repo root, the only base the caller knows without -C).
+func resolveSpecs(fsys sys.FS, repo *model.RepoInfo, dir string, paths []string) (*resolved, error) {
 	if len(paths) == 0 {
-		return nil, nil, false, errors.New("snapshot: paths form without paths")
+		return nil, errors.New("snapshot: paths form without paths")
 	}
+	roots := []string{repo.Toplevel}
+	if real, err := fsys.EvalSymlinks(repo.Toplevel); err == nil && real != repo.Toplevel {
+		roots = append(roots, real)
+	}
+	inside := func(target string) (string, bool) {
+		for _, root := range roots {
+			if rel, ok := relInside(root, target); ok {
+				return rel, true
+			}
+		}
+		return "", false
+	}
+	out := &resolved{native: true}
 	prefix := ""
 	if dir != "" {
-		real := dir
-		if r, e := fsys.EvalSymlinks(dir); e == nil {
-			real = r
-		}
-		rel, ok := relInside(repo.Toplevel, real)
+		real := realPath(fsys, dir)
+		rel, ok := inside(real)
 		if !ok {
-			return nil, nil, false, fmt.Errorf("snapshot: commit directory %s is outside %s", dir, repo.Toplevel)
+			return nil, fmt.Errorf("snapshot: commit directory %s is outside %s", dir, repo.Toplevel)
 		}
 		if rel != "." {
 			prefix = rel + "/"
+			out.cwd = real
 		}
 	}
-	native = true
 	for _, p := range paths {
 		if p == "" {
-			return nil, nil, false, errors.New("snapshot: empty pathspec")
+			return nil, errors.New("snapshot: empty pathspec")
 		}
 		pre := prefix
 		if filepath.IsAbs(p) {
-			rel, ok := relInside(repo.Toplevel, p)
+			rel, ok := inside(realPath(fsys, p))
 			if !ok {
-				return nil, nil, false, fmt.Errorf("snapshot: pathspec %s is outside %s", p, repo.Toplevel)
+				return nil, fmt.Errorf("snapshot: pathspec %s is outside %s", p, repo.Toplevel)
 			}
 			p, pre = rel, ""
 		} else if filepath.Separator != '/' {
 			p = filepath.ToSlash(p)
 		}
 		if strings.HasPrefix(p, ":") {
-			native = false
-			args = append(args, p)
+			out.native = false
+			out.args = append(out.args, p)
 			continue
 		}
-		n, e := normalizeSpec(pre + p)
-		if e != nil {
-			return nil, nil, false, e
+		n, err := normalizeSpec(pre + p)
+		if err != nil {
+			return nil, err
 		}
-		args = append(args, n)
-		pats = append(pats, newPathPattern(n, false))
+		out.pats = append(out.pats, newPathPattern(n, false))
+		// n is repo-root relative; ":(top)" keeps it so when git runs in
+		// a subdirectory, and "." stands for the root (git rejects "").
+		switch {
+		case prefix != "":
+			n = ":(top)" + n
+		case n == "":
+			n = "."
+		}
+		out.args = append(out.args, n)
 	}
-	return args, pats, native, nil
+	return out, nil
+}
+
+// realPath resolves symlinks in p; when p itself does not exist (a deleted
+// file named by an absolute pathspec) its parent is resolved instead.
+func realPath(fsys sys.FS, p string) string {
+	if r, err := fsys.EvalSymlinks(p); err == nil {
+		return r
+	}
+	if r, err := fsys.EvalSymlinks(filepath.Dir(p)); err == nil {
+		return filepath.Join(r, filepath.Base(p))
+	}
+	return p
 }
 
 // relInside returns target relative to root in slash form ("." for root

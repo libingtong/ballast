@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"syscall"
@@ -249,6 +250,26 @@ func TestPathsFormDirAndPathspecs(t *testing.T) {
 			t.Error("expected an error")
 		}
 	})
+	t.Run("magic pathspec is read from Dir", func(t *testing.T) {
+		for _, paths := range [][]string{
+			{":(glob)*.go"},
+			{"c.go", ":(glob)inner/*.go"},
+			{":!c.go", "."},
+		} {
+			form := model.CommitForm{Kind: model.CommitPaths, Paths: paths, Dir: sub}
+			if _, err := call(form); !errors.Is(err, model.ErrFallback) {
+				t.Fatalf("%v native: %v", paths, err)
+			}
+			got, err := TreeC(f.opts(true), f.repo, form, nil)
+			want, rerr := f.referenceIn(sub, true, paths, nil)
+			if rerr != nil {
+				t.Fatal(rerr)
+			}
+			if err != nil || got != want {
+				t.Errorf("%v: %s err=%v", paths, describe(got, want), err)
+			}
+		}
+	})
 	t.Run("magic pathspec needs git", func(t *testing.T) {
 		form := model.CommitForm{Kind: model.CommitPaths, Paths: []string{":(top)src/a.go"}}
 		if _, err := call(form); !errors.Is(err, model.ErrFallback) {
@@ -452,4 +473,70 @@ func FuzzExemptNeverPanics(f *testing.F) {
 		ents := []IndexEntry{{Path: name, Mode: modeRegular}}
 		_ = fl.removeExempt(ents)
 	})
+}
+
+func TestPathsFormThroughSymlinkedPaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs symlinks")
+	}
+	f := newFixture(t)
+	baseRepo(f)
+	f.write("src/sub/c.go", "package c2\n")
+	f.remove("docs/guide.md")
+	alias := filepath.Join(f.sb.Root, "alias")
+	if err := os.Symlink(f.dir, alias); err != nil {
+		t.Skipf("symlink: %v", err)
+	}
+	call := func(form model.CommitForm) (model.TreeID, error) { return TreeC(f.opts(false), f.repo, form, nil) }
+	tests := []struct {
+		name string
+		form model.CommitForm
+		ref  []string
+	}{
+		{"absolute path of a deleted file", model.CommitForm{Kind: model.CommitPaths, Paths: []string{filepath.Join(alias, "docs", "guide.md")}}, []string{"docs/guide.md"}},
+		{"absolute path of an existing file", model.CommitForm{Kind: model.CommitPaths, Paths: []string{filepath.Join(alias, "src", "sub", "c.go")}}, []string{"src/sub/c.go"}},
+		{"Dir behind a symlink", model.CommitForm{Kind: model.CommitPaths, Paths: []string{"c.go"}, Dir: filepath.Join(alias, "src", "sub")}, []string{"src/sub/c.go"}},
+	}
+	for _, tc := range tests {
+		got, err := call(tc.form)
+		want := f.reference(true, tc.ref, nil)
+		if err != nil || got != want {
+			t.Errorf("%s: %s err=%v", tc.name, describe(got, want), err)
+		}
+	}
+}
+
+func TestResolveSpecsArgs(t *testing.T) {
+	f := newFixture(t)
+	baseRepo(f)
+	sub := filepath.Join(f.dir, "src", "sub")
+	tests := []struct {
+		name  string
+		dir   string
+		paths []string
+		args  []string
+		cwd   string
+		nat   bool
+	}{
+		{"root dot", "", []string{"."}, []string{"."}, "", true},
+		{"root plain", "", []string{"./src//a.go"}, []string{"src/a.go"}, "", true},
+		{"root magic", "", []string{":(glob)x"}, []string{":(glob)x"}, "", false},
+		{"subdir plain", sub, []string{"c.go"}, []string{":(top)src/sub/c.go"}, sub, true},
+		{"subdir dot", sub, []string{"."}, []string{":(top)src/sub/"}, sub, true},
+		{"subdir parent", sub, []string{".."}, []string{":(top)src/"}, sub, true},
+		{"subdir magic", sub, []string{":!c.go"}, []string{":!c.go"}, sub, false},
+		{"subdir mixed", sub, []string{"c.go", ":(glob)*.go"}, []string{":(top)src/sub/c.go", ":(glob)*.go"}, sub, false},
+		{"absolute from subdir", sub, []string{filepath.Join(f.dir, "docs")}, []string{":(top)docs"}, sub, true},
+		{"Dir is the root", f.dir, []string{"src"}, []string{"src"}, "", true},
+	}
+	for _, tc := range tests {
+		rs, err := resolveSpecs(sys.OSFS{}, f.repo, tc.dir, tc.paths)
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if !reflect.DeepEqual(rs.args, tc.args) || rs.cwd != tc.cwd || rs.native != tc.nat {
+			t.Errorf("%s: args=%q cwd=%q native=%v, want %q %q %v", tc.name, rs.args, rs.cwd, rs.native, tc.args, tc.cwd, tc.nat)
+		}
+	}
 }

@@ -28,18 +28,26 @@ type GitRunner interface {
 type ExecGit struct{}
 
 // Run implements GitRunner. env is the complete child environment. When ctx
-// ends, the whole process group of the child is killed (git may spawn
-// helpers that would otherwise outlive it and keep the pipes open).
+// ends, the child's whole process tree is killed (git may spawn helpers that
+// would otherwise outlive it and keep the pipes open): the process group on
+// unix, a Job Object on Windows.
 func (ExecGit) Run(ctx context.Context, dir string, env []string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = env
 	cmd.SysProcAttr = newProcAttr()
-	cmd.Cancel = func() error { return killProcessTree(cmd.Process) }
+	var tree procTree
+	cmd.Cancel = func() error { return tree.kill(cmd.Process) }
 	cmd.WaitDelay = 200 * time.Millisecond
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Start()
+	if err == nil {
+		tree.attach(cmd.Process)
+		err = cmd.Wait()
+		tree.close()
+	}
+	out := stdout.Bytes()
 	if err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if len(msg) > 512 {
@@ -120,10 +128,12 @@ func tempRoot(env sys.Env, repo *model.RepoInfo) string {
 // ':(glob)<exempt>'... → git write-tree. refresh selects add -u; paths
 // restricts it. Deadline exceeded ⇒ model.ErrDeadline.
 //
-// paths are repo-root relative pathspecs. `git rm` runs with -f: without it
-// git refuses to drop an exempt file whose staged content differs from both
-// HEAD and the work tree, which would make the snapshot fail for no reason.
-func fallbackTree(opt Options, repo *model.RepoInfo, refresh bool, paths []string, f *Filter) (model.TreeID, error) {
+// paths are pathspecs valid from dir, the directory `git add -u` runs in
+// (empty ⇒ the repo root; GIT_WORK_TREE tells git where the work tree is).
+// `git rm` runs with -f: without it git refuses to drop an exempt file whose
+// staged content differs from both HEAD and the work tree, which would make
+// the snapshot fail for no reason.
+func fallbackTree(opt Options, repo *model.RepoInfo, refresh bool, dir string, paths []string, f *Filter) (model.TreeID, error) {
 	opt = opt.withDefaults()
 	ctx := context.Background()
 	if !opt.Deadline.IsZero() {
@@ -143,9 +153,9 @@ func fallbackTree(opt Options, repo *model.RepoInfo, refresh bool, paths []strin
 		return "", err
 	}
 	env := gitEnv(opt.Env.Environ(), repo, indexCopy, opt.Env.GOOS() == "windows")
-	run := func(args ...string) ([]byte, error) {
+	run := func(cwd string, args ...string) ([]byte, error) {
 		args = append([]string{"-c", "core.fsmonitor=false"}, args...)
-		out, err := opt.Git.Run(ctx, repo.Toplevel, env, args...)
+		out, err := opt.Git.Run(ctx, cwd, env, args...)
 		if err != nil && ctx.Err() != nil {
 			return nil, errDeadline()
 		}
@@ -155,21 +165,25 @@ func fallbackTree(opt Options, repo *model.RepoInfo, refresh bool, paths []strin
 		return out, err
 	}
 	if refresh {
+		addDir := dir
+		if addDir == "" {
+			addDir = repo.Toplevel
+		}
 		args := []string{"add", "-u"}
 		if len(paths) > 0 {
 			args = append(append(args, "--"), paths...)
 		}
-		if _, err := run(args...); err != nil {
+		if _, err := run(addDir, args...); err != nil {
 			return "", err
 		}
 	}
 	if !f.empty() {
 		args := append([]string{"rm", "--cached", "-r", "-q", "-f", "--ignore-unmatch", "--"}, f.pathspecArgs()...)
-		if _, err := run(args...); err != nil {
+		if _, err := run(repo.Toplevel, args...); err != nil {
 			return "", err
 		}
 	}
-	out, err := run("write-tree")
+	out, err := run(repo.Toplevel, "write-tree")
 	if err != nil {
 		return "", err
 	}

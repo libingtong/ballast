@@ -165,12 +165,60 @@ func scenarios() []scenario {
 			f.git("add", "-N", "src/new.go")
 		}},
 		{name: "unmerged entries", fallback: true, plainFalls: true, mutate: func(f *fixture) { makeConflict(f) }},
-		{name: "gitlink removed by deeper exempt pattern", fallback: true, exempt: []string{"vendor/sub/**"}, mutate: addGitlink},
-		{name: "gitlink removed by deeper literal exempt", fallback: true, exempt: []string{"vendor/sub/x.txt"}, mutate: addGitlink},
-		{name: "gitlink removed by exact exempt", fallback: true, exempt: []string{"vendor/sub"}, mutate: addGitlink},
-		{name: "gitlink removed by star exempt", fallback: true, exempt: []string{"vendor/*"}, mutate: addGitlink},
-		{name: "gitlink kept by unrelated exempt", fallback: true, exempt: []string{"vendor/other/**", "docs/**"}, mutate: addGitlink},
-		{name: "gitlink kept by sibling prefix exempt", fallback: true, exempt: []string{"vendor/sub2/**"}, mutate: addGitlink},
+		{name: "gitlink removed by deeper exempt pattern", exempt: []string{"vendor/sub/**"}, mutate: addGitlink},
+		{name: "gitlink removed by deeper literal exempt", exempt: []string{"vendor/sub/x.txt"}, mutate: addGitlink},
+		{name: "gitlink removed by exact exempt", exempt: []string{"vendor/sub"}, mutate: addGitlink},
+		{name: "gitlink removed by star exempt", exempt: []string{"vendor/*"}, mutate: addGitlink},
+		{name: "gitlink kept by unrelated exempt", exempt: []string{"vendor/other/**", "docs/**"}, mutate: addGitlink},
+		{name: "gitlink kept by sibling prefix exempt", exempt: []string{"vendor/sub2/**"}, mutate: addGitlink},
+		{name: "file replaced by nested repository", fallback: true, mutate: func(f *fixture) {
+			f.remove("src/b.go")
+			nestedRepo(f, "src/b.go")
+		}},
+		{name: "symlink replaced by nested repository", unixOnly: true, fallback: true, mutate: func(f *fixture) {
+			f.remove("link")
+			nestedRepo(f, "link")
+		}},
+		{name: "file replaced by directory holding a gitfile", fallback: true, mutate: func(f *fixture) {
+			f.remove("src/b.go")
+			f.write("src/b.go/.git", "gitdir: ../.git\n")
+		}},
+		{name: "gitlink with missing directory", mutate: func(f *fixture) {
+			addGitlinks(f, "vendor/sub")
+			f.write("vendor/keep.txt", "k\n")
+			f.git("add", "vendor/keep.txt")
+		}},
+		{name: "gitlink with uninitialised directory", mutate: func(f *fixture) {
+			addGitlinks(f, "vendor/sub")
+			if err := os.MkdirAll(f.path("vendor/sub"), 0o755); err != nil {
+				f.t.Fatal(err)
+			}
+			f.write("src/a.go", "package ui\n")
+		}},
+		{name: "gitlink with uninitialised directory and files", mutate: func(f *fixture) {
+			addGitlinks(f, "vendor/sub")
+			f.write("vendor/sub/untracked.txt", "u\n")
+			f.write("src/a.go", "package ui\n")
+		}},
+		{name: "gitlink with uninitialised directory exempt", exempt: []string{"vendor/**"}, mutate: func(f *fixture) {
+			addGitlinks(f, "vendor/sub")
+			f.write("vendor/sub/untracked.txt", "u\n")
+		}},
+		{name: "checked-out submodule", fallback: true, mutate: func(f *fixture) {
+			nestedRepo(f, "vendor/sub")
+			f.git("add", "vendor/sub")
+			f.git("commit", "-qm", "add submodule")
+			f.gitIn(f.path("vendor/sub"), nil, "commit", "-q", "--allow-empty", "-m", "moved on")
+		}},
+		{name: "checked-out submodule unchanged", fallback: true, mutate: func(f *fixture) {
+			nestedRepo(f, "vendor/sub")
+			f.git("add", "vendor/sub")
+			f.git("commit", "-qm", "add submodule")
+		}},
+		{name: "gitlink replaced by file", fallback: true, mutate: func(f *fixture) {
+			addGitlinks(f, "vendor/sub")
+			f.write("vendor/sub", "now a file\n")
+		}},
 		{name: "ordering around slash", mutate: func(f *fixture) {
 			for _, n := range []string{"a-b", "a_b", "a+b", "a!b", "a~b", "a,b", "a=b", "a@b"} {
 				f.write(n, "x\n")
@@ -200,7 +248,7 @@ func scenarios() []scenario {
 			f.write("gen/d07/e3/f.txt", "changed\n")
 			f.remove("gen/d13")
 		}},
-		{name: "gitlink entry", fallback: true, exempt: docsExempt, mutate: func(f *fixture) {
+		{name: "gitlink entry", exempt: docsExempt, mutate: func(f *fixture) {
 			f.git("update-index", "--add", "--cacheinfo", "160000,0123456789012345678901234567890123456789,vendor/sub")
 			f.write("src/a.go", "package g\n")
 		}},
@@ -285,6 +333,27 @@ func addGitlink(f *fixture) {
 	f.write("src/a.go", "package g2\n")
 }
 
+// addGitlinks records gitlinks (without any work tree directory) at paths.
+func addGitlinks(f *fixture, paths ...string) {
+	f.t.Helper()
+	for _, p := range paths {
+		f.git("update-index", "--add", "--cacheinfo", "160000,0123456789012345678901234567890123456789,"+p)
+	}
+}
+
+// nestedRepo creates a git repository with one commit at rel.
+func nestedRepo(f *fixture, rel string) {
+	f.t.Helper()
+	if err := os.MkdirAll(f.path(rel), 0o755); err != nil {
+		f.t.Fatal(err)
+	}
+	dir := f.path(rel)
+	f.gitIn(dir, nil, "init", "-q", "-b", "main")
+	f.write(rel+"/inner.txt", "inner\n")
+	f.gitIn(dir, nil, "add", "inner.txt")
+	f.gitIn(dir, nil, "commit", "-qm", "inner")
+}
+
 func makeConflict(f *fixture) {
 	f.t.Helper()
 	f.git("checkout", "-q", "-b", "other")
@@ -341,7 +410,7 @@ func checkAllForms(t *testing.T, f *fixture, sc scenario) {
 			return TreeC(o, f.repo, model.CommitForm{Kind: model.CommitPlain}, filt)
 		}},
 	}
-	for _, ps := range [][]string{{"src/a.go"}, {"src"}, {"src/sub", "docs"}, {"README.md", "bin/run.sh", "link"}, {"*.go"}, {"src/sub/"}} {
+	for _, ps := range [][]string{{"src/a.go"}, {"src"}, {"src/sub", "docs"}, {"README.md", "bin/run.sh", "link"}, {"*.go"}, {"src/sub/"}, {"."}} {
 		ps := ps
 		forms = append(forms, form{"C paths " + strings.Join(ps, ","), true, ps, func(o Options) (model.TreeID, error) {
 			return TreeC(o, f.repo, model.CommitForm{Kind: model.CommitPaths, Paths: ps}, filt)

@@ -84,12 +84,12 @@ func TreeC(opt Options, repo *model.RepoInfo, form model.CommitForm, f *Filter) 
 		if repo == nil {
 			return "", errors.New("snapshot: nil repo")
 		}
-		args, pats, native, err := resolveSpecs(opt.withDefaults().FS, repo, form.Dir, form.Paths)
+		rs, err := resolveSpecs(opt.withDefaults().FS, repo, form.Dir, form.Paths)
 		if err != nil {
 			return "", err
 		}
-		req := request{refresh: true, limited: true, specs: pats, args: args}
-		if !native {
+		req := request{refresh: true, limited: true, specs: rs.pats, args: rs.args, dir: rs.cwd}
+		if !rs.native {
 			req.forceFallback = "magic pathspec"
 		}
 		return compute(opt, repo, req, f)

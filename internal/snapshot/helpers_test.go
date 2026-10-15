@@ -88,6 +88,10 @@ func newFixture(t testing.TB, opts ...fixtureOpt) *fixture {
 	f.git("config", "user.name", "t")
 	f.git("config", "core.autocrlf", "false")
 	f.git("config", "core.fsmonitor", "false")
+	// A big commit crosses gc.auto; a detached background gc would race the
+	// temp-dir cleanup.
+	f.git("config", "gc.auto", "0")
+	f.git("config", "maintenance.auto", "false")
 	f.relocate()
 	return f
 }
@@ -225,6 +229,13 @@ func (f *fixture) reference(refresh bool, paths []string, exempt []string) model
 // the test (git itself cannot snapshot some states, e.g. unmerged entries).
 func (f *fixture) referenceErr(refresh bool, paths []string, exempt []string) (model.TreeID, error) {
 	f.t.Helper()
+	return f.referenceIn(f.dir, refresh, paths, exempt)
+}
+
+// referenceIn is referenceErr with `git add -u` run in dir (a directory of
+// the work tree), where relative and magic pathspecs are read.
+func (f *fixture) referenceIn(dir string, refresh bool, paths []string, exempt []string) (model.TreeID, error) {
+	f.t.Helper()
 	tmp := f.t.TempDir()
 	cp := filepath.Join(tmp, "index")
 	if data, err := os.ReadFile(f.repo.IndexPath); err == nil {
@@ -240,7 +251,7 @@ func (f *fixture) referenceErr(refresh bool, paths []string, exempt []string) (m
 		if len(paths) > 0 {
 			args = append(append(args, "--"), paths...)
 		}
-		if out, err := f.gitErr(f.dir, ex, args...); err != nil {
+		if out, err := f.gitErr(dir, ex, args...); err != nil {
 			return "", fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, out)
 		}
 	}

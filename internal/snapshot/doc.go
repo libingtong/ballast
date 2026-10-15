@@ -97,8 +97,22 @@
 //   - Options.Env (default sys.OSEnv) locates the global/system git config
 //     and attributes (HOME, XDG_CONFIG_HOME, GIT_CONFIG_GLOBAL,
 //     GIT_CONFIG_SYSTEM, GIT_CONFIG_NOSYSTEM) and the fallback's TMPDIR.
+//   - Gitlinks (submodules; mode 160000) are handled like git's add -u: a
+//     missing directory is a removal and a directory without ".git"
+//     (uninitialised submodule) keeps the recorded commit. A checked-out
+//     submodule (".git" present), a gitlink replaced by a non-directory and
+//     a tracked file or symlink replaced by a directory holding ".git" (git
+//     records the nested repository's HEAD as a gitlink) fall back; these
+//     are fallback conditions beyond the list above.
 //   - TreeC paths form: pathspecs are relative to CommitForm.Dir when set
-//     (else the repo root), absolute paths inside the repo are accepted,
-//     "--only" is approximated by "-i" as in the contract, and magic
-//     pathspecs (":(top)...") are left to the fallback.
+//     (else the repo root), absolute paths inside the repo are accepted
+//     (symlinks in them and in Dir are resolved), "--only" is approximated
+//     by "-i" as in the contract, and magic pathspecs (":(glob)...",
+//     ":!...") are left to the fallback. The fallback runs `git add -u` in
+//     Dir, so magic pathspecs mean what they would to `git commit` there.
+//   - Killing a timed-out fallback git takes down its whole process tree:
+//     the process group on unix and a Job Object on Windows. On Windows this
+//     is best effort: the job is created right after the child starts (a
+//     helper spawned in between escapes), and when it cannot be created only
+//     the git process itself is killed.
 package snapshot
