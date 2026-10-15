@@ -30,7 +30,7 @@
 | 主题 | pinrule | Ballast | 类别 |
 |---|---|---|---|
 | 命令文本处理 | 先用正则剥掉引号字面、heredoc、`$()` 提升等再扫描(`pinrule/checks/common.py:87-156`) | `mvdan.cc/sh` AST 展开为命令节点:`echo "sleep 300"`、注释、heredoc 正文根本不是节点,不需要剥离 | DSL 等价 |
-| 宿主语言 `-c` 豁免 | `python/node/ruby/perl -c|-e` 内的字面不当作 shell(`common.py:48-64`,`is_python_c_command`) | 节点的命令名是 `python`,`-c` 后的字符串只是参数,不会被当作 `sleep` 等命令;需要检查时用 `args_regex` 显式匹配(见 `no-lang-sleep`) | DSL 等价 |
+| 宿主语言 `-c` 豁免 | `python/node/ruby/perl -c\|-e` 内的字面不当作 shell(`common.py:48-64`,`is_python_c_command`) | 节点的命令名是 `python`,`-c` 后的字符串只是参数,不会被当作 `sleep` 等命令;需要检查时用 `args_regex` 显式匹配(见 `no-lang-sleep`) | DSL 等价 |
 | 描述上下文豁免 | 文档、数据/配置、测试目录、测试文件名、`/tmp`、探针名下的写入整体豁免(`pinrule/checks/description_context.py:26-86`) | `match.path` 的列表级取反 glob(`rules/optional/long-term.json` 中 `no-todo-marker` 的 `path` 取反项,逐项对应 `description_context.py:57-80`;`examples/testset.json` 用同一组) | DSL 等价 |
 | 正则方言 | Python `re`,含反向引用与前瞻 | 统一 RE2;`bad-regex` 在 lint 阶段拒绝。含前瞻/反向引用的模式已改写(见 §3.6) | 有意改变 |
 | 异常与无法判定 | 检查函数抛异常时静默吞掉(`pinrule/checks/__init__.py:77-85`) | 三值逻辑:无法判定为 unknown,规则不命中,并累加 unknown 诊断计数与审计 | DSL 等价(更可观测) |
@@ -73,7 +73,7 @@
 | `node`/`ruby`/`perl -e` 内的阻塞调用 | 不识别(原实现只匹配 Python 形态,`non_blocking.py:28-34`) | DSL 等价(原实现同样没有) |
 | 裸 `wait`、`wait $pid`、`wait $!`(`non_blocking.py:43-70`) | 可选 `no-shell-wait`:`bash.cmd: wait`;`Wait-Job`/`Wait-Process` 为新增 PowerShell 变体 | DSL 等价(PowerShell 为新增) |
 | `kubectl/docker/podman/aws/gcloud/az/helm` 的 `wait` 子命令豁免(`non_blocking.py:40`、`:62-66`) | 命令名不是 `wait`,天然不命中,不需要豁免表 | DSL 等价 |
-| 长任务命令头:`docker run`、`docker compose up|run|build`、`docker build`、`cargo build|install`、`npm install|ci`、`yarn install`、`pnpm install`、`pip install`、`make install|build|all|release|deploy`、`gradle(w) build`、`mvn install|package|deploy`(`non_blocking.py:76-86`) | 拆成 `no-foreground-long-task`(cargo/make/mvn/gradle)、`no-foreground-install`(npm/yarn/pnpm/pip/pip3)、`no-foreground-pip-module`(`python* -m pip install`、`py -m pip install`、`uv pip install`)、`no-foreground-docker`(docker),拆分是为了让命令头与子命令不产生有害的叉积(例如 `yarn build` 不应命中)。`args_regex` 允许子命令前出现 `-x` 形式的全局选项。原实现对整条命令做子串匹配,所以 `pip install` 出现在任意位置(如 `bash -c "pip install x"` 的字符串里)也会命中;DSL 版只看命令节点,字符串里的不命中 | DSL 等价(命令头清单一致;子串匹配改为节点匹配,属有意收窄) |
+| 长任务命令头:`docker run`、`docker compose up\|run\|build`、`docker build`、`cargo build\|install`、`npm install\|ci`、`yarn install`、`pnpm install`、`pip install`、`make install\|build\|all\|release\|deploy`、`gradle(w) build`、`mvn install\|package\|deploy`(`non_blocking.py:76-86`) | 拆成 `no-foreground-long-task`(cargo/make/mvn/gradle)、`no-foreground-install`(npm/yarn/pnpm/pip/pip3)、`no-foreground-pip-module`(`python* -m pip install`、`py -m pip install`、`uv pip install`)、`no-foreground-docker`(docker),拆分是为了让命令头与子命令不产生有害的叉积(例如 `yarn build` 不应命中)。`args_regex` 允许子命令前出现 `-x` 形式的全局选项。原实现对整条命令做子串匹配,所以 `pip install` 出现在任意位置(如 `echo "pip install x"`、`git commit -m "pip install 修复"` 的字符串参数里)也会命中;DSL 版只看命令节点,字符串参数里的不命中(`bash -c "pip install x"` 会被递归解析出 pip 节点,两边都命中) | DSL 等价(命令头清单一致;子串匹配改为节点匹配,属有意收窄) |
 | `npm run`、`yarn build` 等用户脚本不拦(`non_blocking.py:87-89`) | 同样不拦(`no-foreground-install` 的示例覆盖) | DSL 等价 |
 | 子命令前的全局选项会使 `\bcargo\s+build` 失配 | `args_regex` 的前缀 `(?:-\S+\s+)*` 容忍 `cargo --locked build`;带值的全局选项(如 `make -C dir install`)仍不识别 | 有意改变(略宽) |
 | `docker run -d`、`compose up -d` 也拦 | 同样拦(命令头匹配,不区分是否分离运行),已写进规则描述 | DSL 等价 |
@@ -103,7 +103,7 @@
 | 重定向写入排除 `/dev/null` 等丢弃路径(`bypass_pinrule.py:107-111`) | bashparse 的 `Writes` 同样排除 `/dev/null` | DSL 等价 |
 | `python -c` 内的 `>` 是比较运算符,跳过重定向检测(`bypass_pinrule.py:113-114`、`:168`、`:178`) | AST 不会把字符串里的 `>` 当重定向 | DSL 等价 |
 | Python 写接口:`.write_text`、`.write`、`json.dump`、`os.system`、`shutil`…(`bypass_pinrule.py:90-105`) | 不识别语言内写入(dsl-semantics §14);T0 本来就不是安全边界,T1 由沙箱 `denyWrite` 兜底 | 舍弃 |
-| 官方 CLI(`pinrule init|reset|stats…`)命令头豁免(`bypass_pinrule.py:117`、`:155-157`) | 不需要:`ballast verify`、`ballast rules promote` 等不会产生 shell 写入目标。计划中的"只放行 ballast 绝对路径"也因此不必实现 | 有意改变 |
+| 官方 CLI(`pinrule init\|reset\|stats…`)命令头豁免(`bypass_pinrule.py:117`、`:155-157`) | 不需要:`ballast verify`、`ballast rules promote` 等不会产生 shell 写入目标。计划中的"只放行 ballast 绝对路径"也因此不必实现 | 有意改变 |
 | `PINRULE_HOME` 重定向时把实际路径加入检测(`bypass_pinrule.py:42-73`) | `BALLAST_HOME` 仅用于测试;规则写死 `~/.ballast/**`,自定义 `BALLAST_HOME` 不在覆盖范围 | 有意改变(已知局限) |
 | 保护客户端 hook 配置 | 新增:`~/.claude/settings*.json`、`**/.claude/settings*.json`、`~/.codex/{hooks.json,config.toml}`、`~/.cursor/hooks.json`、`~/.cursor/rules/ballast.mdc`、`~/.hermes/config.yaml`(原实现没有) | 有意改变(新增) |
 | 第二路:最近一条 Bash 是测试命令且失败(`recent_bash[-1].is_test_cmd and output_failed`),又 `Edit` 了没读过的文件(`bypass_pinrule.py:129-147`) | `read-after-test-fail`:`verify_failed_since_read` 加 `path_exists`;信号来自 verify 记录(outcome 为 fail/timeout/signal)而不是对 Bash 输出的猜测 | 有意改变 |
@@ -119,7 +119,7 @@
 | 词表第三类"协作等候/暂停"(`user_stop_hints/zh.txt:46-66`、`en.txt:27-51`) | 不迁移:"等一下""hold on"这类词太泛,会让规则大面积失效 | 舍弃 |
 | 只看回复末尾 80 字(`keep_pushing.py:68`、`:105`) | `window: {tail_chars: 80}` | DSL 等价 |
 | Agent 自己声明饱和或卡点,整条豁免(`keep_pushing.py:107-112`;词表 `data/signals/agent_saturation/{zh,en}.txt`) | `not_regex` 中的饱和/卡点/接力词(子集);只看末尾 80 字窗口,原实现看整条回复 | 有意改变 |
-| 推进信号在末尾 80 字里,且其后不是"吧/行不/算了"(`keep_pushing.py:65`、`:114-121`;词表 `data/signals/push_signals/{zh,en}.py`) | `not_regex` 中的"主语+动词"与短语(子集),中文正则末尾加 `(?:[^吧行算]|$)` 近似"推卸语气"过滤 | DSL 等价(近似) |
+| 推进信号在末尾 80 字里,且其后不是"吧/行不/算了"(`keep_pushing.py:65`、`:114-121`;词表 `data/signals/push_signals/{zh,en}.py`) | `not_regex` 中的"主语+动词"与短语(子集),中文正则末尾加 `(?:[^吧行算]\|$)` 近似"推卸语气"过滤 | DSL 等价(近似) |
 | 整段含推进规划且末尾没有停顿语,豁免(`keep_pushing.py:123-134`) | 无需:Ballast 只在末尾出现停顿语时才命中,该分支只影响"默认命中" | 舍弃(随默认命中) |
 | 末尾有问号,豁免(`keep_pushing.py:136-138`) | `not_regex: ["[?？]"]` | DSL 等价 |
 | 显式交还决定,豁免(`keep_pushing.py:140-144`;词表 `data/signals/explicit_handoff/{zh,en}.txt`) | `not_regex` 中的"请决定/等你确认/please decide"等 | DSL 等价 |
@@ -134,9 +134,9 @@
 |---|---|---|
 | `git commit` 带 `--no-verify`(`long_term.py:70-74`) | 默认 `no-skip-verify`:`git_sub: commit`,`flags: [--no-verify, -n]`;`git -C ../x commit` 等全局参数被跳过 | DSL 等价 |
 | (原实现没有)`-n` 与合并短选项如 `-anm` | `no-skip-verify` 新增 | 有意改变(新增) |
-| `git push|merge|rebase|tag` 带 `--no-verify`、`--force`、`--skip-hooks`(`long_term.py:70-74`) | 可选 `no-git-force-skip`;`--force` 是精确标志匹配,`--force-with-lease` 不命中 | DSL 等价 |
+| `git push\|merge\|rebase\|tag` 带 `--no-verify`、`--force`、`--skip-hooks`(`long_term.py:70-74`) | 可选 `no-git-force-skip`;`--force` 是精确标志匹配,`--force-with-lease` 不命中 | DSL 等价 |
 | `--force(?!-with-lease)` 前瞻(`long_term.py:72`) | 标志精确匹配代替前瞻 | 有意改变(RE2) |
-| commit 说明标题行(前 80 字)含 `quick fix/hack/temp/workaround/临时/凑数`(`long_term.py:58-64`) | 可选 `no-hack-commit-message`:`args_regex` 匹配 `-m`、`-am` 之类合并短选项、`-m"值"` 紧贴写法与 `--message`(含 `=`)之后 80 字内;不要求位于引号内或第一行;只写 bash 变体(PowerShell 的 `-m` 按参数处理,不一定在 argv 中) | 有意改变 |
+| commit 说明标题行(前 80 字)含 `quick fix/hack/temp/workaround/临时/凑数`(`long_term.py:58-64`) | 可选 `no-hack-commit-message`:`args_regex` 匹配 `-m`、`-am` 之类合并短选项、`-m"值"` 紧贴写法与 `--message`(含 `=`)之后 80 字内;不要求位于引号内或第一行;bash 与 ps 变体使用同一个正则(外部可执行文件 git 的参数在 PowerShell 下同样保留在 argv 中) | 有意改变 |
 | TODO/FIXME/HACK/XXX 注释(`long_term.py:83`)、打补丁意图注释(`long_term.py:88-95`) | 可选 `no-todo-marker`:`input_regex.new_text`(Edit/MultiEdit/Write/NotebookEdit 以及 `apply_patch` 的新增行)。原 `临时\b` 在 Unicode 语义下对「临时」后紧跟汉字不命中(`// 临时文件路径`),RE2 的 `\b` 是 ASCII 语义,这里改写为 `临时(?:[^\p{L}\p{N}_]\|$)` 保持同样行为 | DSL 等价(RE2 改写) |
 | 长 ID 字面写在 `if` 分支,要求 ≥ 12 字符且含数字(`long_term.py:25-32`,用到前瞻 `(?=...)` 与反向引用 `\1`) | 可选 `no-hardcoded-list`:RE2 改写,按数字位置展开成 12 个分支 | 有意改变(RE2 改写,语义等价) |
 | 带黑白名单语义的变量名赋字面量列表(`long_term.py:33-42`) | `no-hardcoded-list` | DSL 等价 |
@@ -154,7 +154,7 @@
 |---|---|---|
 | 反喂:`gold_cases/gold_data/eval_cases/test_cases` 的 `append/extend/update/write*`(`testset.py:33`) | `no-testset-leakage` | DSL 等价 |
 | 评测明细回流:`detail*.json` 后 80 字内写文件(`testset.py:38`) | `no-testset-leakage` | DSL 等价 |
-| `cp ... eval|test|gold ... train|fit|memory`(`testset.py:43`) | `no-testset-cross-copy`:`cp/mv/rsync`(PowerShell 为 `copy-item/move-item`)的 `args_regex`;原实现只覆盖 `cp` | 有意改变(范围略宽) |
+| `cp ... eval\|test\|gold ... train\|fit\|memory`(`testset.py:43`) | `no-testset-cross-copy`:`cp/mv/rsync`(PowerShell 为 `copy-item/move-item`)的 `args_regex`;原实现只覆盖 `cp` | 有意改变(范围略宽) |
 | `cat ... detail*.json ... >>`(`testset.py:48`) | `no-testset-detail-append`:`bash.cmd: cat` 加 `args_regex` 和 `writes`;`>` 与 `>>` 都算写入 | 有意改变(范围略宽) |
 | `if turn_idx >= 400` 一类切分边界硬编码(`testset.py:53`) | `no-testset-leakage` | DSL 等价 |
 | 长 hash 作为分支条件或赋给 `case_id`(`testset.py:60-64`) | `no-testset-leakage` | DSL 等价 |
