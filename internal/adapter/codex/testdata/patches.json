@@ -48,6 +48,17 @@
     {"name": "not an envelope", "malformed": true,
      "envelope": "just some text",
      "want": {}},
-    {"name": "empty", "malformed": true, "envelope": "", "want": {}}
+    {"name": "empty", "malformed": true, "envelope": "", "want": {}},
+    {"name": "indented markers",
+     "envelope": "*** Begin Patch\n  *** Update File: secret.env\n@@\n-a\n+x\n\t*** Move to: moved.env \n  *** End Patch\n",
+     "want": {"Targets": ["secret.env", "moved.env"], "Moves": {"secret.env": "moved.env"},
+              "Edits": [{"path": "moved.env", "old_string": "a", "new_string": "x"}]}},
+    {"name": "extra blanks inside marker keyword",
+     "envelope": "*** Begin Patch\n***  Update File: a.env\n+x\n***   Add  File:  b.env\n+y\n*** End  Patch\n",
+     "want": {"Targets": ["a.env", "b.env"], "Adds": ["b.env"],
+              "Edits": [{"path": "a.env", "new_string": "x"}, {"path": "b.env", "new_string": "y"}]}},
+    {"name": "marker text inside content lines is content",
+     "envelope": "*** Begin Patch\n*** Update File: a.go\n-*** Update File: x.go\n+*** Delete File: y.go\n*** End Patch\n",
+     "want": {"Targets": ["a.go"], "Edits": [{"path": "a.go", "old_string": "*** Update File: x.go", "new_string": "*** Delete File: y.go"}]}}
   ]
 }

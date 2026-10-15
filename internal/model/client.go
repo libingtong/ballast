@@ -93,7 +93,9 @@ type NativeEvent struct {
 	// (Cursor beforeShellExecution → "Bash", beforeReadFile → "Read",
 	// beforeMCPExecution → "mcp__*"); empty when the payload names the tool.
 	ToolHint string
-	// Install is true when `ballast install` registers this event.
+	// Install is true when `ballast install` registers this event. Rows
+	// with Install=false are parse-only: adapters accept the native name
+	// (payload samples exist) but installers and doctor MUST skip them.
 	Install bool
 	// Verified is false when the payload/behaviour has not been captured by a
 	// probe (M0a-style). Unverified events still install but `doctor` lists them.
@@ -114,6 +116,12 @@ var NativeEventTable = map[ClientID][]NativeEvent{
 		{Native: "Stop", Event: EventStop, Roles: []Role{RoleGate, RoleLifecycle}, Install: true, Verified: true},
 		{Native: "SubagentStop", Event: EventSubagentStop, Roles: []Role{RoleGate, RoleLifecycle}, Install: true, Verified: true},
 		{Native: "SessionEnd", Event: EventSessionEnd, Roles: []Role{RoleLifecycle}, Install: true, Verified: true},
+		// Parse-only rows (contract v1.3): captured in docs/facts/payloads,
+		// so adapters must parse them, but `ballast install` never registers
+		// them (Install=false) and no rule can name them.
+		{Native: "PreCompact", Event: EventPreCompact, Roles: []Role{RoleAudit}, Install: false, Verified: true},
+		{Native: "PostCompact", Event: EventPostCompact, Roles: []Role{RoleAudit}, Install: false, Verified: true},
+		{Native: "SubagentStart", Event: EventSubagentStart, Roles: []Role{RoleAudit}, Install: false, Verified: true},
 	},
 	ClientCodex: {
 		{Native: "SessionStart", Event: EventSessionStart, Roles: []Role{RoleInject}, Install: true, Verified: false},

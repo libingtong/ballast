@@ -144,11 +144,20 @@ func (b *auditBuilder) transcriptRef() string {
 	}
 	home = strings.TrimRight(strings.ReplaceAll(home, `\`, "/"), "/")
 	q := strings.ReplaceAll(p, `\`, "/")
-	if strings.HasPrefix(q, home+"/") {
-		return "~/" + q[len(home)+1:]
+	prefix := home + "/"
+	if len(q) <= len(prefix) {
+		return p
+	}
+	head := q[:len(prefix)]
+	// Windows and macOS volumes are case-insensitive: "C:/Users/Dylan" and
+	// "c:/users/dylan" are the same home (contract v1.3).
+	if head == prefix || caseInsensitiveFS(b.deps.Env.GOOS()) && strings.EqualFold(head, prefix) {
+		return "~/" + q[len(prefix):]
 	}
 	return p
 }
+
+func caseInsensitiveFS(goos string) bool { return goos == "windows" || goos == "darwin" }
 
 func noticeType(k model.NoticeKind) model.AuditType {
 	switch k {

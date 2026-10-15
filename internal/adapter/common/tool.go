@@ -9,8 +9,8 @@ import (
 	"github.com/libingtong/ballast/internal/model"
 )
 
-// NewToolCall starts a ToolCall for rawName/input: Name, RawName, Input and
-// Fields are set. The returned Fields view is nil when input is absent or not
+// NewToolCall starts a ToolCall for rawName/input: Name, RawName, Input
+// (only when input is valid JSON) and Fields are set. The returned Fields view is nil when input is absent or not
 // an object; a non-object, non-null input yields model.ErrBadInput (the
 // ToolCall is still usable).
 func NewToolCall(rawName, name string, input json.RawMessage) (model.ToolCall, Fields, error) {
@@ -19,7 +19,11 @@ func NewToolCall(rawName, name string, input json.RawMessage) (model.ToolCall, F
 	if len(input) == 0 || string(input) == "null" {
 		return tc, nil, nil
 	}
-	tc.Input = append(json.RawMessage(nil), input...)
+	// Input keeps only valid JSON so the ToolCall stays marshalable for
+	// direct callers (replay/audit); the parse error is still returned.
+	if json.Valid(input) {
+		tc.Input = append(json.RawMessage(nil), input...)
+	}
 	tc.Fields = FlattenStrings(input)
 	if input[0] != '{' {
 		return tc, nil, fmt.Errorf("%w: tool_input of %q is not an object", model.ErrBadInput, rawName)

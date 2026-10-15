@@ -169,7 +169,11 @@ type Injector interface {
 }
 
 // Spawner (U8 runner) starts a detached child process (GC, verify runner)
-// that survives the hook's exit and never blocks it.
+// that survives the hook's exit and never blocks it. env is the child's
+// complete environment (nil ⇒ inherit the caller's); logPath "" ⇒ the
+// child's stdout/stderr go to the null device, otherwise they are appended
+// to logPath (parent directories created). stdin is always the null device
+// (contract v1.3).
 type Spawner interface {
 	SpawnDetached(argv []string, env []string, logPath string) (pid int, err error)
 }
