@@ -48,7 +48,7 @@ func (l *Loader) Load(req model.LoadRequest) (*model.CompiledRuleSet, error) {
 	if l.opt.Compiler == nil {
 		return nil, fmt.Errorf("config: no rule compiler configured")
 	}
-	paths, stats, err := l.statLayers(req)
+	paths, stats, statDenied, err := l.statLayers(req)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,8 @@ func (l *Loader) Load(req model.LoadRequest) (*model.CompiledRuleSet, error) {
 		}
 	}
 	var lkgFailed bool
-	layers, err := l.readLayers(paths, stats, loadMode{writeLKG: !l.opt.NoCache, report: true, lkgFailed: &lkgFailed})
+	uncacheable := statDenied
+	layers, err := l.readLayers(paths, stats, loadMode{writeLKG: !l.opt.NoCache, report: true, lkgFailed: &lkgFailed, uncacheable: &uncacheable})
 	if err != nil {
 		return nil, err
 	}
@@ -82,8 +83,9 @@ func (l *Loader) Load(req model.LoadRequest) (*model.CompiledRuleSet, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A failed LKG write leaves the cache unwritten so the next load retries.
-	if !l.opt.NoCache && !lkgFailed {
+	// A failed LKG write or an unusable layer leaves the cache unwritten so
+	// the next load retries (a fixed permission changes no stat key).
+	if !l.opt.NoCache && !lkgFailed && !uncacheable {
 		l.cacheStore(idx, key, res, gen, sources)
 	}
 	return rs, nil
@@ -252,7 +254,7 @@ type ExplainRule struct {
 
 // Explain loads all layers WITHOUT the cache and reports every rule's fate.
 func (l *Loader) Explain(req model.LoadRequest) (*ExplainReport, error) {
-	paths, stats, err := l.statLayers(req)
+	paths, stats, _, err := l.statLayers(req)
 	if err != nil {
 		return nil, err
 	}

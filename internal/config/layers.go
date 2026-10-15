@@ -24,6 +24,12 @@ func isUnusable(err error) bool {
 	return errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EISDIR)
 }
 
+// isDir reports whether path is an existing directory.
+func isDir(fsys sys.FS, path string) bool {
+	fi, err := fsys.Stat(path)
+	return err == nil && fi.IsDir()
+}
+
 // loadMode tunes readLayers.
 type loadMode struct {
 	writeLKG bool // refresh LKG files for valid layers
@@ -31,15 +37,21 @@ type loadMode struct {
 	// lkgFailed, when non-nil, is set if an LKG write failed, so the caller
 	// can skip the cache and retry on the next load.
 	lkgFailed *bool
+	// uncacheable, when non-nil, is set if a layer was unusable (unreadable,
+	// a directory): such a failure is not captured by the stat key, so the
+	// result must not be cached or a later fix (chmod) would never be seen.
+	uncacheable *bool
 }
 
 // statLayers resolves the layer paths and stats them. A repo layer that is
 // the same file as the org or user layer (cwd == $HOME outside git) is
 // reported as missing so that file is not loaded twice.
-func (l *Loader) statLayers(req model.LoadRequest) ([]LayerPath, []model.StatKey, error) {
+// The last result reports that a stat was refused (the key is synthetic).
+func (l *Loader) statLayers(req model.LoadRequest) ([]LayerPath, []model.StatKey, bool, error) {
 	fsys := l.fs()
 	paths := LayerPaths(l.opt.Layout, req)
 	stats := make([]model.StatKey, len(paths))
+	denied := false
 	for i, p := range paths {
 		if p.Layer == model.LayerRepo && p.Path != "" {
 			c := filepath.Clean(p.Path)
@@ -50,14 +62,15 @@ func (l *Loader) statLayers(req model.LoadRequest) ([]LayerPath, []model.StatKey
 		st, err := StatFile(fsys, paths[i].Path)
 		if err != nil {
 			if !isUnusable(err) {
-				return nil, nil, err
+				return nil, nil, false, err
 			}
 			// Stat itself was refused: readLayers reports the layer invalid.
 			st = model.StatKey{Path: paths[i].Path, Exists: true}
+			denied = true
 		}
 		stats[i] = st
 	}
-	return paths, stats, nil
+	return paths, stats, denied, nil
 }
 
 func (l *Loader) fs() sys.FS {
@@ -125,8 +138,14 @@ func (l *Loader) readLayers(paths []LayerPath, stats []model.StatKey, mode loadM
 			continue
 		case isUnusable(err):
 			cause = "unreadable: " + err.Error()
+		case isDir(fsys, p.Path):
+			// Platforms differ in the error for reading a directory.
+			cause = "unreadable: " + err.Error()
 		default:
 			return nil, fmt.Errorf("config: read %s: %w", p.Path, err)
+		}
+		if err != nil && mode.uncacheable != nil {
+			*mode.uncacheable = true
 		}
 		if cause == "" {
 			lr.Source.Status = model.LayerOK

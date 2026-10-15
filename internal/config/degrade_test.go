@@ -74,7 +74,9 @@ func TestLoadUnusableLayerKeepsOrgRules(t *testing.T) {
 			e := newEnv(t)
 			e.write(model.LayerOrg, rulesJSON("", on("org-rule")))
 			tc.break_(e, tc.layer)
-			for i := 0; i < 2; i++ { // second pass is a cache hit
+			// Unusable layers are never cached (a fixed permission changes no
+			// stat key), except that a directory is still a stable state.
+			for i := 0; i < 2; i++ {
 				rs := e.load()
 				if !reflect.DeepEqual(ids(rs), []string{"org-rule"}) {
 					t.Fatalf("pass %d: rules = %v", i, ids(rs))
@@ -90,6 +92,84 @@ func TestLoadUnusableLayerKeepsOrgRules(t *testing.T) {
 				t.Errorf("stderr = %q", e.stderr.String())
 			}
 		})
+	}
+}
+
+// winDirFS reports reading a directory the way Windows does: neither EISDIR
+// nor a permission error.
+type winDirFS struct{ sys.FS }
+
+func (f winDirFS) ReadFile(n string) ([]byte, error) {
+	if fi, err := f.FS.Stat(n); err == nil && fi.IsDir() {
+		return nil, &fs.PathError{Op: "read", Path: n, Err: errors.New("Incorrect function.")}
+	}
+	return f.FS.ReadFile(n)
+}
+
+func TestLoadDirectoryWithForeignReadError(t *testing.T) {
+	e := newEnv(t)
+	e.write(model.LayerOrg, rulesJSON("", on("org-rule")))
+	if err := os.MkdirAll(e.path(model.LayerUser), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	e.opt.FS = winDirFS{FS: sys.OSFS{}}
+	rs := e.load()
+	if !reflect.DeepEqual(ids(rs), []string{"org-rule"}) {
+		t.Fatalf("rules = %v", ids(rs))
+	}
+	if s := source(rs, model.LayerUser); s.Status != model.LayerInvalid || s.Error == "" {
+		t.Errorf("source = %+v", s)
+	}
+}
+
+// Fixing a permission changes no stat key, so a layer that was unreadable
+// must be read again on the next load.
+func TestLoadRecoversAfterPermissionFixed(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("file permissions are not enforced here")
+	}
+	e := newEnv(t)
+	e.write(model.LayerOrg, rulesJSON("", on("org-rule")))
+	p := e.path(model.LayerOrg)
+	if err := os.Chmod(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(p, 0o600) })
+	rs := e.load()
+	if len(rs.Rules) != 0 || source(rs, model.LayerOrg).Status != model.LayerInvalid {
+		t.Fatalf("unreadable: rules = %v, source = %+v", ids(rs), source(rs, model.LayerOrg))
+	}
+	if err := os.Chmod(p, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.stderr.Reset()
+	rs = e.load()
+	if !reflect.DeepEqual(ids(rs), []string{"org-rule"}) || source(rs, model.LayerOrg).Status != model.LayerOK {
+		t.Fatalf("fixed: rules = %v, source = %+v", ids(rs), source(rs, model.LayerOrg))
+	}
+	if e.stderr.Len() != 0 || len(rs.Notices) != 0 {
+		t.Errorf("stale diagnostics: stderr = %q, notices = %v", e.stderr.String(), rs.Notices)
+	}
+	before := e.comp.parses.Load()
+	e.load()
+	if e.comp.parses.Load() != before {
+		t.Error("a healthy load must be cached again")
+	}
+}
+
+// A refused stat yields a synthetic stat key; the result must not be cached
+// under it, or the recovered layer would stay hidden.
+func TestLoadRecoversAfterStatDenied(t *testing.T) {
+	e := newEnv(t)
+	e.write(model.LayerOrg, rulesJSON("", on("org-rule")))
+	good := e.opt.FS
+	e.opt.FS = statFailFS{FS: sys.OSFS{}, sub: e.path(model.LayerOrg), err: syscall.EACCES}
+	if rs := e.load(); len(rs.Rules) != 0 {
+		t.Fatalf("denied: rules = %v", ids(rs))
+	}
+	e.opt.FS = good
+	if rs := e.load(); !reflect.DeepEqual(ids(rs), []string{"org-rule"}) {
+		t.Fatalf("recovered: rules = %v", ids(rs))
 	}
 }
 

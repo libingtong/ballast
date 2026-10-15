@@ -73,13 +73,11 @@ func (ly layout) fitCut(items []string, budget int) (string, int, bool) {
 			return s, k, false
 		}
 	}
-	// Not even the first item plus the omitted line fits: cut the first item
-	// and keep the omitted line, unless that leaves no room for the item.
-	if len(items) > 1 {
-		omit := "\n" + ly.omitLine(len(items)-1)
-		if room := budget - runeLen(omit); room >= runeLen(ly.prefix)+2 {
-			return cutRunes(ly.prefix+items[0], room) + omit, 1, true
-		}
+	// Not even the first item plus the omitted line fits. A line is cut only
+	// when it alone exceeds the budget; otherwise keep it whole and leave the
+	// rest to the caller (the omitted line is what no longer fits).
+	if first := ly.prefix + items[0]; runeLen(first) <= budget {
+		return first, 1, false
 	}
 	return cutRunes(ly.prefix+items[0], budget), 1, true
 }
