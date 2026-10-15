@@ -1,6 +1,10 @@
 package dsl
 
-import "github.com/libingtong/ballast/internal/model"
+import (
+	"fmt"
+
+	"github.com/libingtong/ballast/internal/model"
+)
 
 // Diagnostic codes (stable; documented in docs/dsl-semantics.md §11).
 const (
@@ -68,7 +72,7 @@ type LintOptions struct {
 // Lint validates inputs and returns all diagnostics (errors and warnings),
 // sorted by file, pointer.
 func (e *Engine) Lint(inputs []LintInput, opt LintOptions) []model.Diagnostic {
-	panic("unimplemented: dsl.Engine.Lint")
+	return e.lint(inputs, opt)
 }
 
 // HasErrors reports whether any diagnostic is an error.
@@ -83,8 +87,47 @@ func HasErrors(ds []model.Diagnostic) bool {
 
 // CheckCapabilities checks one rule against one client's matrix (exported
 // for `rules promote`, which must re-check the new action).
+//
+// Pointers in the returned diagnostics are relative to the rule
+// ("/event", "/action", "/target"); Lint prefixes them with "/rules/<i>".
 func CheckCapabilities(r *model.Rule, c model.ClientID) []model.Diagnostic {
-	panic("unimplemented: dsl.CheckCapabilities")
+	if r == nil || !r.AppliesTo(c) {
+		return nil
+	}
+	mk := func(sev model.Severity, code, pointer, format string, args ...any) model.Diagnostic {
+		return model.Diagnostic{
+			Severity: sev, Code: code, Pointer: pointer, RuleID: r.ID, Client: c,
+			Message: fmt.Sprintf(format, args...),
+		}
+	}
+	caps := model.Capabilities(c)
+	if !caps.HasRuleEvent(r.Event) {
+		return []model.Diagnostic{mk(model.SevWarning, CodeEventUnavailable, "/event",
+			"event %s does not exist on %s; the rule never fires there", r.Event, c)}
+	}
+	var out []model.Diagnostic
+	if a := r.EffectiveAction(); a.Valid() && a != model.ActionLog {
+		cell, ok := caps.Lookup(r.Event, a)
+		switch {
+		case !ok:
+			out = append(out, mk(model.SevError, CodeActionUnsupported, "/action",
+				"action %s is not supported on %s for %s events (strictest supported: %s)", a, c, r.Event, caps.StrictestSupported(r.Event)))
+		case !cell.Verified:
+			out = append(out, mk(model.SevWarning, CodeActionUnverified, "/action",
+				"action %s on %s for %s events has not been verified against the real client", a, c, r.Event))
+		}
+		if ok && c == model.ClientCursor && r.Event.IsStopFamily() && a == model.ActionDeny {
+			out = append(out, mk(model.SevWarning, CodeCursorStopFollowup, "/action",
+				"Cursor %s deny sends a follow-up message and continues the run instead of blocking the stop", r.Event))
+		}
+	}
+	if t := r.Target; t.Valid() && t != model.ActionLog {
+		if _, ok := caps.Lookup(r.Event, t); !ok {
+			out = append(out, mk(model.SevWarning, CodeTargetUnsupported, "/target",
+				"target %s is not supported on %s for %s events; promoting the rule would fail", t, c, r.Event))
+		}
+	}
+	return out
 }
 
 // InputFields is the frozen registry of tool_input fields per canonical
