@@ -1,0 +1,2346 @@
+[
+  {
+    "src": "for i in 1 2 3; do curl -f localhost:8080 && break; sleep 1; done",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "curl"
+            },
+            {
+              "lit": "-f"
+            },
+            {
+              "lit": "localhost:8080"
+            }
+          ],
+          "name": "curl",
+          "loop": {
+            "kind": "for_list",
+            "n": 3,
+            "bounded": 2,
+            "depth": 1
+          }
+        },
+        {
+          "argv": [
+            {
+              "lit": "break"
+            }
+          ],
+          "name": "break",
+          "loop": {
+            "kind": "for_list",
+            "n": 3,
+            "bounded": 2,
+            "depth": 1
+          }
+        },
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "1"
+            }
+          ],
+          "name": "sleep",
+          "loop": {
+            "kind": "for_list",
+            "n": 3,
+            "bounded": 2,
+            "depth": 1
+          },
+          "sleep": {
+            "seconds": 1,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "sleep 300",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "300"
+            }
+          ],
+          "name": "sleep",
+          "sleep": {
+            "seconds": 300,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "while true; do sleep 300; done",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "true"
+            }
+          ],
+          "name": "true",
+          "loop": {
+            "kind": "while",
+            "n": -1,
+            "bounded": 1,
+            "depth": 1
+          }
+        },
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "300"
+            }
+          ],
+          "name": "sleep",
+          "loop": {
+            "kind": "while",
+            "n": -1,
+            "bounded": 1,
+            "depth": 1
+          },
+          "sleep": {
+            "seconds": 300,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "sleep 300 &",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "300"
+            }
+          ],
+          "name": "sleep",
+          "async": true,
+          "sleep": {
+            "seconds": 300,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "env X=1 sleep 300",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "300"
+            }
+          ],
+          "name": "sleep",
+          "wrappers": [
+            "env"
+          ],
+          "sleep": {
+            "seconds": 300,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "timeout 400 sleep 300",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "300"
+            }
+          ],
+          "name": "sleep",
+          "wrappers": [
+            "timeout"
+          ],
+          "sleep": {
+            "seconds": 300,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "bash -c 'sleep 300'",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "bash"
+            },
+            {
+              "lit": "-c"
+            },
+            {
+              "lit": "sleep 300"
+            }
+          ],
+          "name": "bash"
+        },
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "300"
+            }
+          ],
+          "name": "sleep",
+          "depth": 1,
+          "sleep": {
+            "seconds": 300,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "echo \"sleep 300\"",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "echo"
+            },
+            {
+              "lit": "sleep 300"
+            }
+          ],
+          "name": "echo"
+        }
+      ]
+    }
+  },
+  {
+    "src": "# sleep 300",
+    "want": {
+      "shell": "bash",
+      "nodes": []
+    }
+  },
+  {
+    "src": "cat <<EOF\nsleep 300\nEOF",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "cat"
+            }
+          ],
+          "name": "cat",
+          "redirects": [
+            {
+              "op": "\u003c\u003c",
+              "target": {
+                "lit": "EOF"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "for i in 1 2 3; do sleep 30; done",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "30"
+            }
+          ],
+          "name": "sleep",
+          "loop": {
+            "kind": "for_list",
+            "n": 3,
+            "bounded": 2,
+            "depth": 1
+          },
+          "sleep": {
+            "seconds": 30,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "git -C ../x commit -m m",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "git"
+            },
+            {
+              "lit": "-C"
+            },
+            {
+              "lit": "../x"
+            },
+            {
+              "lit": "commit"
+            },
+            {
+              "lit": "-m"
+            },
+            {
+              "lit": "m"
+            }
+          ],
+          "name": "git",
+          "git": {
+            "sub": "commit",
+            "cwd": "../x",
+            "args": [
+              {
+                "lit": "-m"
+              },
+              {
+                "lit": "m"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "sudo -u root nice -n 5 nohup make",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "make"
+            }
+          ],
+          "name": "make",
+          "wrappers": [
+            "sudo",
+            "nice",
+            "nohup"
+          ],
+          "sudo": true
+        }
+      ]
+    }
+  },
+  {
+    "src": "time -p sleep 3",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "3"
+            }
+          ],
+          "name": "sleep",
+          "wrappers": [
+            "time"
+          ],
+          "sleep": {
+            "seconds": 3,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "command -v git",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "command"
+            },
+            {
+              "lit": "-v"
+            },
+            {
+              "lit": "git"
+            }
+          ],
+          "name": "command"
+        }
+      ]
+    }
+  },
+  {
+    "src": "exec >log.txt",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "exec"
+            }
+          ],
+          "name": "exec",
+          "redirects": [
+            {
+              "op": "\u003e",
+              "target": {
+                "lit": "log.txt"
+              }
+            }
+          ],
+          "writes": [
+            {
+              "path": "log.txt",
+              "via": "redirect"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "a | b |& c",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "a"
+            }
+          ],
+          "name": "a"
+        },
+        {
+          "argv": [
+            {
+              "lit": "b"
+            }
+          ],
+          "name": "b"
+        },
+        {
+          "argv": [
+            {
+              "lit": "c"
+            }
+          ],
+          "name": "c"
+        }
+      ],
+      "pipes": [
+        {
+          "from": 0,
+          "to": 1
+        },
+        {
+          "from": 1,
+          "to": 2
+        }
+      ]
+    }
+  },
+  {
+    "src": "{ echo a; echo b; } > out.txt 2>/dev/null",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "echo"
+            },
+            {
+              "lit": "a"
+            }
+          ],
+          "name": "echo",
+          "redirects": [
+            {
+              "op": "\u003e",
+              "target": {
+                "lit": "out.txt"
+              }
+            },
+            {
+              "op": "\u003e",
+              "fd": "2",
+              "target": {
+                "lit": "/dev/null"
+              }
+            }
+          ],
+          "writes": [
+            {
+              "path": "out.txt",
+              "via": "redirect"
+            }
+          ]
+        },
+        {
+          "argv": [
+            {
+              "lit": "echo"
+            },
+            {
+              "lit": "b"
+            }
+          ],
+          "name": "echo",
+          "redirects": [
+            {
+              "op": "\u003e",
+              "target": {
+                "lit": "out.txt"
+              }
+            },
+            {
+              "op": "\u003e",
+              "fd": "2",
+              "target": {
+                "lit": "/dev/null"
+              }
+            }
+          ],
+          "writes": [
+            {
+              "path": "out.txt",
+              "via": "redirect"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "(sleep 1; sleep 2) &",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "1"
+            }
+          ],
+          "name": "sleep",
+          "async": true,
+          "sleep": {
+            "seconds": 1,
+            "known": true
+          }
+        },
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "2"
+            }
+          ],
+          "name": "sleep",
+          "async": true,
+          "sleep": {
+            "seconds": 2,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "echo $(date) `uname` <(ls) | tee out",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "echo"
+            },
+            {
+              "lit": "$(date)",
+              "dynamic": true
+            },
+            {
+              "lit": "`uname`",
+              "dynamic": true
+            },
+            {
+              "lit": "\u003c(ls)",
+              "dynamic": true
+            }
+          ],
+          "name": "echo"
+        },
+        {
+          "argv": [
+            {
+              "lit": "date"
+            }
+          ],
+          "name": "date",
+          "in_subst": true
+        },
+        {
+          "argv": [
+            {
+              "lit": "uname"
+            }
+          ],
+          "name": "uname",
+          "in_subst": true
+        },
+        {
+          "argv": [
+            {
+              "lit": "ls"
+            }
+          ],
+          "name": "ls",
+          "in_subst": true
+        },
+        {
+          "argv": [
+            {
+              "lit": "tee"
+            },
+            {
+              "lit": "out"
+            }
+          ],
+          "name": "tee",
+          "writes": [
+            {
+              "path": "out",
+              "via": "tee"
+            }
+          ]
+        }
+      ],
+      "pipes": [
+        {
+          "from": 0,
+          "to": 4
+        }
+      ]
+    }
+  },
+  {
+    "src": "x=$(sleep 3) y=1",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "3"
+            }
+          ],
+          "name": "sleep",
+          "in_subst": true,
+          "sleep": {
+            "seconds": 3,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "if grep -q x f; then rm -f y; else touch z; fi",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "grep"
+            },
+            {
+              "lit": "-q"
+            },
+            {
+              "lit": "x"
+            },
+            {
+              "lit": "f"
+            }
+          ],
+          "name": "grep",
+          "reads": [
+            {
+              "path": "f",
+              "via": "grep"
+            }
+          ]
+        },
+        {
+          "argv": [
+            {
+              "lit": "rm"
+            },
+            {
+              "lit": "-f"
+            },
+            {
+              "lit": "y"
+            }
+          ],
+          "name": "rm",
+          "writes": [
+            {
+              "path": "y",
+              "via": "rm"
+            }
+          ]
+        },
+        {
+          "argv": [
+            {
+              "lit": "touch"
+            },
+            {
+              "lit": "z"
+            }
+          ],
+          "name": "touch",
+          "writes": [
+            {
+              "path": "z",
+              "via": "touch"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "case $x in a) sleep 70;; esac",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "70"
+            }
+          ],
+          "name": "sleep",
+          "sleep": {
+            "seconds": 70,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "until false; do sleep 61; done",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "false"
+            }
+          ],
+          "name": "false",
+          "loop": {
+            "kind": "until",
+            "n": -1,
+            "bounded": 1,
+            "depth": 1
+          }
+        },
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "61"
+            }
+          ],
+          "name": "sleep",
+          "loop": {
+            "kind": "until",
+            "n": -1,
+            "bounded": 1,
+            "depth": 1
+          },
+          "sleep": {
+            "seconds": 61,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "for ((i=0;i<3;i++)); do sleep 61; done",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "61"
+            }
+          ],
+          "name": "sleep",
+          "loop": {
+            "kind": "for_c",
+            "n": -1,
+            "bounded": 0,
+            "depth": 1
+          },
+          "sleep": {
+            "seconds": 61,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "for f in *.go; do wc -l \"$f\"; done",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "wc"
+            },
+            {
+              "lit": "-l"
+            },
+            {
+              "lit": "$f",
+              "dynamic": true
+            }
+          ],
+          "name": "wc",
+          "loop": {
+            "kind": "for_list",
+            "n": -1,
+            "bounded": 0,
+            "depth": 1
+          },
+          "reads": [
+            {
+              "path": "",
+              "dynamic": true,
+              "via": "wc"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "for i in {1..5} {a,b}x; do sleep 1; done",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "1"
+            }
+          ],
+          "name": "sleep",
+          "loop": {
+            "kind": "for_list",
+            "n": 7,
+            "bounded": 2,
+            "depth": 1
+          },
+          "sleep": {
+            "seconds": 1,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "while read l; do echo \"$l\"; done < in.txt",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "read"
+            },
+            {
+              "lit": "l"
+            }
+          ],
+          "name": "read",
+          "loop": {
+            "kind": "while",
+            "n": -1,
+            "bounded": 0,
+            "depth": 1
+          },
+          "redirects": [
+            {
+              "op": "\u003c",
+              "target": {
+                "lit": "in.txt"
+              }
+            }
+          ],
+          "reads": [
+            {
+              "path": "in.txt",
+              "via": "redirect"
+            }
+          ]
+        },
+        {
+          "argv": [
+            {
+              "lit": "echo"
+            },
+            {
+              "lit": "$l",
+              "dynamic": true
+            }
+          ],
+          "name": "echo",
+          "loop": {
+            "kind": "while",
+            "n": -1,
+            "bounded": 0,
+            "depth": 1
+          },
+          "redirects": [
+            {
+              "op": "\u003c",
+              "target": {
+                "lit": "in.txt"
+              }
+            }
+          ],
+          "reads": [
+            {
+              "path": "in.txt",
+              "via": "redirect"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "f() { sleep 90; }; f",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "90"
+            }
+          ],
+          "name": "sleep",
+          "sleep": {
+            "seconds": 90,
+            "known": true
+          }
+        },
+        {
+          "argv": [
+            {
+              "lit": "f"
+            }
+          ],
+          "name": "f"
+        }
+      ]
+    }
+  },
+  {
+    "src": "sh -c \"bash -c 'zsh -c \\\"sleep 9\\\"'\"",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sh"
+            },
+            {
+              "lit": "-c"
+            },
+            {
+              "lit": "bash -c 'zsh -c \"sleep 9\"'"
+            }
+          ],
+          "name": "sh"
+        },
+        {
+          "argv": [
+            {
+              "lit": "bash"
+            },
+            {
+              "lit": "-c"
+            },
+            {
+              "lit": "zsh -c \"sleep 9\""
+            }
+          ],
+          "name": "bash",
+          "depth": 1
+        },
+        {
+          "argv": [
+            {
+              "lit": "zsh"
+            },
+            {
+              "lit": "-c"
+            },
+            {
+              "lit": "sleep 9"
+            }
+          ],
+          "name": "zsh",
+          "depth": 2
+        }
+      ]
+    }
+  },
+  {
+    "src": "sudo bash -lc 'cd /tmp && cat a.go' &",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "bash"
+            },
+            {
+              "lit": "-lc"
+            },
+            {
+              "lit": "cd /tmp \u0026\u0026 cat a.go"
+            }
+          ],
+          "name": "bash",
+          "wrappers": [
+            "sudo"
+          ],
+          "sudo": true,
+          "async": true
+        },
+        {
+          "argv": [
+            {
+              "lit": "cd"
+            },
+            {
+              "lit": "/tmp"
+            }
+          ],
+          "name": "cd",
+          "async": true,
+          "depth": 1
+        },
+        {
+          "argv": [
+            {
+              "lit": "cat"
+            },
+            {
+              "lit": "a.go"
+            }
+          ],
+          "name": "cat",
+          "async": true,
+          "depth": 1,
+          "reads": [
+            {
+              "path": "a.go",
+              "via": "cat"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "bash -c \"$CMD\"",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "bash"
+            },
+            {
+              "lit": "-c"
+            },
+            {
+              "lit": "$CMD",
+              "dynamic": true
+            }
+          ],
+          "name": "bash"
+        }
+      ]
+    }
+  },
+  {
+    "src": "bash -c 'echo \"unterminated'",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "bash"
+            },
+            {
+              "lit": "-c"
+            },
+            {
+              "lit": "echo \"unterminated"
+            }
+          ],
+          "name": "bash"
+        }
+      ]
+    }
+  },
+  {
+    "src": "eval \"$CMD\"",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "eval"
+            },
+            {
+              "lit": "$CMD",
+              "dynamic": true
+            }
+          ],
+          "name": "eval"
+        }
+      ],
+      "unknown": true,
+      "unknown_reason": "eval"
+    }
+  },
+  {
+    "src": "source \"$F\"",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "source"
+            },
+            {
+              "lit": "$F",
+              "dynamic": true
+            }
+          ],
+          "name": "source"
+        }
+      ],
+      "unknown": true,
+      "unknown_reason": "source"
+    }
+  },
+  {
+    "src": ". ./env.sh",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "."
+            },
+            {
+              "lit": "./env.sh"
+            }
+          ],
+          "name": "."
+        }
+      ]
+    }
+  },
+  {
+    "src": "echo $'a\\tb' \"x\\$y\" a\\ b *.go ~/x ${HOME}/y",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "echo"
+            },
+            {
+              "lit": "a\tb"
+            },
+            {
+              "lit": "x$y"
+            },
+            {
+              "lit": "a b"
+            },
+            {
+              "lit": "*.go",
+              "dynamic": true
+            },
+            {
+              "lit": "~/x"
+            },
+            {
+              "lit": "${HOME}/y",
+              "dynamic": true
+            }
+          ],
+          "name": "echo"
+        }
+      ]
+    }
+  },
+  {
+    "src": "echo hi > ~/.ballast/state/x.json",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "echo"
+            },
+            {
+              "lit": "hi"
+            }
+          ],
+          "name": "echo",
+          "redirects": [
+            {
+              "op": "\u003e",
+              "target": {
+                "lit": "~/.ballast/state/x.json"
+              }
+            }
+          ],
+          "writes": [
+            {
+              "path": "~/.ballast/state/x.json",
+              "via": "redirect"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "cp -t dest a b",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "cp"
+            },
+            {
+              "lit": "-t"
+            },
+            {
+              "lit": "dest"
+            },
+            {
+              "lit": "a"
+            },
+            {
+              "lit": "b"
+            }
+          ],
+          "name": "cp",
+          "writes": [
+            {
+              "path": "dest",
+              "via": "cp"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "mv a b",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "mv"
+            },
+            {
+              "lit": "a"
+            },
+            {
+              "lit": "b"
+            }
+          ],
+          "name": "mv",
+          "writes": [
+            {
+              "path": "b",
+              "via": "mv"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "install -m 644 a b",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "install"
+            },
+            {
+              "lit": "-m"
+            },
+            {
+              "lit": "644"
+            },
+            {
+              "lit": "a"
+            },
+            {
+              "lit": "b"
+            }
+          ],
+          "name": "install",
+          "writes": [
+            {
+              "path": "b",
+              "via": "install"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "install -d d1 d2",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "install"
+            },
+            {
+              "lit": "-d"
+            },
+            {
+              "lit": "d1"
+            },
+            {
+              "lit": "d2"
+            }
+          ],
+          "name": "install",
+          "writes": [
+            {
+              "path": "d1",
+              "via": "install"
+            },
+            {
+              "path": "d2",
+              "via": "install"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "rsync -a -e ssh src/ host:dst/",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "rsync"
+            },
+            {
+              "lit": "-a"
+            },
+            {
+              "lit": "-e"
+            },
+            {
+              "lit": "ssh"
+            },
+            {
+              "lit": "src/"
+            },
+            {
+              "lit": "host:dst/"
+            }
+          ],
+          "name": "rsync",
+          "writes": [
+            {
+              "path": "host:dst/",
+              "via": "rsync"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "sed -i.bak 's/a/b/' f.txt",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sed"
+            },
+            {
+              "lit": "-i.bak"
+            },
+            {
+              "lit": "s/a/b/"
+            },
+            {
+              "lit": "f.txt"
+            }
+          ],
+          "name": "sed",
+          "writes": [
+            {
+              "path": "f.txt",
+              "via": "sed -i"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "sed -i '' -e s/a/b/ f.txt",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sed"
+            },
+            {
+              "lit": "-i"
+            },
+            {
+              "lit": ""
+            },
+            {
+              "lit": "-e"
+            },
+            {
+              "lit": "s/a/b/"
+            },
+            {
+              "lit": "f.txt"
+            }
+          ],
+          "name": "sed",
+          "writes": [
+            {
+              "path": "f.txt",
+              "via": "sed -i"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "rm -rf -- build tmp",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "rm"
+            },
+            {
+              "lit": "-rf"
+            },
+            {
+              "lit": "--"
+            },
+            {
+              "lit": "build"
+            },
+            {
+              "lit": "tmp"
+            }
+          ],
+          "name": "rm",
+          "writes": [
+            {
+              "path": "build",
+              "via": "rm"
+            },
+            {
+              "path": "tmp",
+              "via": "rm"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "truncate -s 0 a.log",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "truncate"
+            },
+            {
+              "lit": "-s"
+            },
+            {
+              "lit": "0"
+            },
+            {
+              "lit": "a.log"
+            }
+          ],
+          "name": "truncate",
+          "writes": [
+            {
+              "path": "a.log",
+              "via": "truncate"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "dd if=/dev/zero of=$OUT",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "dd"
+            },
+            {
+              "lit": "if=/dev/zero"
+            },
+            {
+              "lit": "of=$OUT",
+              "dynamic": true
+            }
+          ],
+          "name": "dd",
+          "writes": [
+            {
+              "path": "",
+              "dynamic": true,
+              "via": "dd"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "touch -d yesterday a b",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "touch"
+            },
+            {
+              "lit": "-d"
+            },
+            {
+              "lit": "yesterday"
+            },
+            {
+              "lit": "a"
+            },
+            {
+              "lit": "b"
+            }
+          ],
+          "name": "touch",
+          "writes": [
+            {
+              "path": "a",
+              "via": "touch"
+            },
+            {
+              "path": "b",
+              "via": "touch"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "ln -s target link",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "ln"
+            },
+            {
+              "lit": "-s"
+            },
+            {
+              "lit": "target"
+            },
+            {
+              "lit": "link"
+            }
+          ],
+          "name": "ln",
+          "writes": [
+            {
+              "path": "link",
+              "via": "ln"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "cat a >> b 2>&1",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "cat"
+            },
+            {
+              "lit": "a"
+            }
+          ],
+          "name": "cat",
+          "redirects": [
+            {
+              "op": "\u003e\u003e",
+              "target": {
+                "lit": "b"
+              }
+            },
+            {
+              "op": "\u003e\u0026",
+              "fd": "2",
+              "target": {
+                "lit": "1"
+              }
+            }
+          ],
+          "writes": [
+            {
+              "path": "b",
+              "via": "redirect"
+            }
+          ],
+          "reads": [
+            {
+              "path": "a",
+              "via": "cat"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "cat > /dev/null",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "cat"
+            }
+          ],
+          "name": "cat",
+          "redirects": [
+            {
+              "op": "\u003e",
+              "target": {
+                "lit": "/dev/null"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "cat -n a.go b.go | head -50",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "cat"
+            },
+            {
+              "lit": "-n"
+            },
+            {
+              "lit": "a.go"
+            },
+            {
+              "lit": "b.go"
+            }
+          ],
+          "name": "cat",
+          "reads": [
+            {
+              "path": "a.go",
+              "via": "cat"
+            },
+            {
+              "path": "b.go",
+              "via": "cat"
+            }
+          ]
+        },
+        {
+          "argv": [
+            {
+              "lit": "head"
+            },
+            {
+              "lit": "-50"
+            }
+          ],
+          "name": "head"
+        }
+      ],
+      "pipes": [
+        {
+          "from": 0,
+          "to": 1
+        }
+      ]
+    }
+  },
+  {
+    "src": "head -n 20 src/a.go",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "head"
+            },
+            {
+              "lit": "-n"
+            },
+            {
+              "lit": "20"
+            },
+            {
+              "lit": "src/a.go"
+            }
+          ],
+          "name": "head",
+          "reads": [
+            {
+              "path": "src/a.go",
+              "via": "head"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "tail -n +100 -- log.txt",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "tail"
+            },
+            {
+              "lit": "-n"
+            },
+            {
+              "lit": "+100"
+            },
+            {
+              "lit": "--"
+            },
+            {
+              "lit": "log.txt"
+            }
+          ],
+          "name": "tail",
+          "reads": [
+            {
+              "path": "log.txt",
+              "via": "tail"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "nl -ba main.go | sed -n '1,40p'",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "nl"
+            },
+            {
+              "lit": "-ba"
+            },
+            {
+              "lit": "main.go"
+            }
+          ],
+          "name": "nl",
+          "reads": [
+            {
+              "path": "main.go",
+              "via": "nl"
+            }
+          ]
+        },
+        {
+          "argv": [
+            {
+              "lit": "sed"
+            },
+            {
+              "lit": "-n"
+            },
+            {
+              "lit": "1,40p"
+            }
+          ],
+          "name": "sed"
+        }
+      ],
+      "pipes": [
+        {
+          "from": 0,
+          "to": 1
+        }
+      ]
+    }
+  },
+  {
+    "src": "grep -rn -A 3 foo src/a.go dir/",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "grep"
+            },
+            {
+              "lit": "-rn"
+            },
+            {
+              "lit": "-A"
+            },
+            {
+              "lit": "3"
+            },
+            {
+              "lit": "foo"
+            },
+            {
+              "lit": "src/a.go"
+            },
+            {
+              "lit": "dir/"
+            }
+          ],
+          "name": "grep",
+          "reads": [
+            {
+              "path": "src/a.go",
+              "via": "grep"
+            },
+            {
+              "path": "dir/",
+              "via": "grep"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "rg -n --glob '*.go' Parse internal/x.go",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "rg"
+            },
+            {
+              "lit": "-n"
+            },
+            {
+              "lit": "--glob"
+            },
+            {
+              "lit": "*.go"
+            },
+            {
+              "lit": "Parse"
+            },
+            {
+              "lit": "internal/x.go"
+            }
+          ],
+          "name": "rg",
+          "reads": [
+            {
+              "path": "internal/x.go",
+              "via": "rg"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "awk -F: -v n=1 '{print $1}' x=1 /etc/passwd",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "awk"
+            },
+            {
+              "lit": "-F:"
+            },
+            {
+              "lit": "-v"
+            },
+            {
+              "lit": "n=1"
+            },
+            {
+              "lit": "{print $1}"
+            },
+            {
+              "lit": "x=1"
+            },
+            {
+              "lit": "/etc/passwd"
+            }
+          ],
+          "name": "awk",
+          "reads": [
+            {
+              "path": "/etc/passwd",
+              "via": "awk"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "wc -l < src/a.go",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "wc"
+            },
+            {
+              "lit": "-l"
+            }
+          ],
+          "name": "wc",
+          "redirects": [
+            {
+              "op": "\u003c",
+              "target": {
+                "lit": "src/a.go"
+              }
+            }
+          ],
+          "reads": [
+            {
+              "path": "src/a.go",
+              "via": "redirect"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "less +G a.log",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "less"
+            },
+            {
+              "lit": "+G"
+            },
+            {
+              "lit": "a.log"
+            }
+          ],
+          "name": "less",
+          "reads": [
+            {
+              "path": "a.log",
+              "via": "less"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "src": "git --no-pager -c a=b --git-dir=.git -C a -C b log -p",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "git"
+            },
+            {
+              "lit": "--no-pager"
+            },
+            {
+              "lit": "-c"
+            },
+            {
+              "lit": "a=b"
+            },
+            {
+              "lit": "--git-dir=.git"
+            },
+            {
+              "lit": "-C"
+            },
+            {
+              "lit": "a"
+            },
+            {
+              "lit": "-C"
+            },
+            {
+              "lit": "b"
+            },
+            {
+              "lit": "log"
+            },
+            {
+              "lit": "-p"
+            }
+          ],
+          "name": "git",
+          "git": {
+            "sub": "log",
+            "cwd": "a/b",
+            "git_dir": ".git",
+            "config": [
+              "a=b"
+            ],
+            "no_pager": true,
+            "args": [
+              {
+                "lit": "-p"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "git $SUB status",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "git"
+            },
+            {
+              "lit": "$SUB",
+              "dynamic": true
+            },
+            {
+              "lit": "status"
+            }
+          ],
+          "name": "git",
+          "git": {
+            "sub": "",
+            "sub_dynamic": true,
+            "args": [
+              {
+                "lit": "status"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "git",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "git"
+            }
+          ],
+          "name": "git",
+          "git": {
+            "sub": ""
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "sleep 1h 30",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "1h"
+            },
+            {
+              "lit": "30"
+            }
+          ],
+          "name": "sleep",
+          "sleep": {
+            "seconds": 3630,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "sleep 1.5d",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "1.5d"
+            }
+          ],
+          "name": "sleep",
+          "sleep": {
+            "seconds": 129600,
+            "known": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "src": "sleep $N",
+    "want": {
+      "shell": "bash",
+      "nodes": [
+        {
+          "argv": [
+            {
+              "lit": "sleep"
+            },
+            {
+              "lit": "$N",
+              "dynamic": true
+            }
+          ],
+          "name": "sleep",
+          "sleep": {
+            "seconds": 0,
+            "known": false
+          }
+        }
+      ]
+    }
+  }
+]

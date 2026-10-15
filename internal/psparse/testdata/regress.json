@@ -1,0 +1,34 @@
+{
+  "_comment": "PowerShell rows of the plan B1 regression set plus extras. Rule under test: the explicit-deny no-long-sleep (some node has sleep.known && sleep.seconds >= 60 && !async, and the tool did not set run_in_background). 'git_sub' rows assert node.git.sub instead.",
+  "rows": [
+    {"cmd": "Start-Sleep -Seconds 300", "want": "hit"},
+    {"cmd": "Start-Sleep 30", "want": "miss"},
+    {"cmd": "foreach ($i in 1,2,3) { Start-Sleep 30 }", "want": "miss"},
+    {"cmd": "git -C ..\\x commit -m m", "git_sub": "commit"},
+
+    {"cmd": "sleep 300", "want": "hit"},
+    {"cmd": "Start-Sleep 300", "run_in_background": true, "want": "miss"},
+    {"cmd": "Start-Sleep -Seconds 59", "want": "miss"},
+    {"cmd": "Start-Sleep -Seconds 60", "want": "hit"},
+    {"cmd": "Start-Sleep -s 120", "want": "hit"},
+    {"cmd": "Start-Sleep -Milliseconds 90000", "want": "hit"},
+    {"cmd": "Start-Sleep -Milliseconds 500", "want": "miss"},
+    {"cmd": "Start-Sleep -Seconds $n", "want": "miss"},
+    {"cmd": "while ($true) { Start-Sleep 300 }", "want": "hit"},
+    {"cmd": "foreach ($i in 1..3) { Start-Sleep 300 }", "want": "hit"},
+    {"cmd": "Start-Sleep 300 &", "want": "miss"},
+    {"cmd": "Start-Job { Start-Sleep 300 }", "want": "miss"},
+    {"cmd": "echo hi; Start-Sleep 300", "want": "hit"},
+    {"cmd": "& Start-Sleep 300", "want": "hit"},
+    {"cmd": "& { Start-Sleep 300 }", "want": "hit"},
+    {"cmd": "if ($x) { Start-Sleep 300 }", "want": "hit"},
+    {"cmd": "echo \"Start-Sleep 300\"", "want": "miss"},
+    {"cmd": "Write-Output 'Start-Sleep 300'", "want": "miss"},
+    {"cmd": "# Start-Sleep 300", "want": "miss"},
+    {"cmd": "<# Start-Sleep 300 #> Get-Date", "want": "miss"},
+    {"cmd": "@'\nStart-Sleep 300\n'@ | Set-Content f.txt", "want": "miss"},
+    {"cmd": "Get-Content a.txt | ForEach-Object { Start-Sleep 300 }", "want": "hit"},
+    {"cmd": "git.exe -c a=b --no-pager commit", "git_sub": "commit"},
+    {"cmd": "& git -C d commit", "git_sub": "commit"}
+  ]
+}
