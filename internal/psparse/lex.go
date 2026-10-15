@@ -23,6 +23,9 @@ type parser struct {
 	src string
 	i   int
 	cl  *model.CommandList
+
+	// bracketWork counts the bytes skipBracket has scanned; see bracketBudget.
+	bracketWork int
 }
 
 func (p *parser) eof() bool { return p.i >= len(p.src) }
@@ -376,25 +379,43 @@ func (p *parser) skipDQ() error {
 }
 
 // maxBracketSpan bounds the lookahead for the closing ']' of an index or type
-// literal, so a long run of unmatched '[' stays linear.
+// literal.
 const maxBracketSpan = 512
+
+// bracketBudget bounds the total bytes skipBracket may scan in one source:
+// each failed attempt costs up to maxBracketSpan, so a long run of unmatched
+// '[' would otherwise be quadratic. Real scripts use a few bytes per bracket,
+// far below the budget; past it every '[' is treated as an ordinary character.
+func (p *parser) bracketBudget() int { return 4096 + 8*len(p.src) }
 
 // skipBracket skips a [...] run starting at p.i (index or type literal). It
 // reports false (leaving p.i unchanged) when no matching ']' exists nearby.
 func (p *parser) skipBracket() bool {
+	if p.bracketWork > p.bracketBudget() {
+		return false
+	}
 	start := p.i
+	ok := p.scanBracket(start)
+	p.bracketWork += p.i - start + 1
+	if !ok {
+		p.i = start
+	}
+	return ok
+}
+
+// scanBracket advances p.i over the bracket run that starts at start. On
+// failure p.i is left wherever the scan stopped.
+func (p *parser) scanBracket(start int) bool {
 	depth := 0
 	for p.i < len(p.src) && p.i-start < maxBracketSpan {
 		ch := p.src[p.i]
 		if k, _ := p.quoteAt(p.i); k == 's' {
 			if _, err := p.readSQ(); err != nil {
-				p.i = start
 				return false
 			}
 			continue
 		} else if k == 'd' {
 			if err := p.skipDQ(); err != nil {
-				p.i = start
 				return false
 			}
 			continue
@@ -409,11 +430,9 @@ func (p *parser) skipBracket() bool {
 				return true
 			}
 		case '\n':
-			p.i = start
 			return false
 		}
 		p.i++
 	}
-	p.i = start
 	return false
 }

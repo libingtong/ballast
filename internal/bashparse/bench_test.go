@@ -92,3 +92,110 @@ func TestParse100KBBudget(t *testing.T) {
 		t.Errorf("100KB parse took %v, budget %v", best, limit)
 	}
 }
+
+// TestAdversarialBudget checks that pathological but syntactically valid
+// inputs stay linear: a quadratic scan would blow the 150ms watchdog and turn
+// the matcher fail-open.
+func TestAdversarialBudget(t *testing.T) {
+	const n = 100 * 1024
+	cases := map[string]string{
+		"open braces":     "echo " + strings.Repeat("{x", n/2),
+		"nested braces":   "cat " + strings.Repeat("{", n/4) + strings.Repeat(",}", n/4),
+		"brace commas":    "cat {" + strings.Repeat("a,", n/2),
+		"open brackets":   "cat " + strings.Repeat("[", n),
+		"bracket pairs":   "cat " + strings.Repeat("[a", n/2) + "]",
+		"closed brackets": "cat " + strings.Repeat("[a]", n/3),
+		"escapes":         "cat " + strings.Repeat(`\{`, n/2),
+		"many words":      "cat " + strings.Repeat("{a,b} ", n/6),
+		"many redirects":  "cat " + strings.Repeat("a >b ", n/5),
+	}
+	limit := 20 * time.Millisecond
+	switch {
+	case raceEnabled:
+		limit = 200 * time.Millisecond
+	case os.Getenv("CI") != "":
+		limit *= 3
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			best := time.Hour
+			for i := 0; i < 5; i++ {
+				start := time.Now()
+				// A parse error is an acceptable outcome; the time is what matters.
+				_, _ = Parse(src, Options{})
+				if d := time.Since(start); d < best {
+					best = d
+				}
+			}
+			if best > limit {
+				t.Errorf("%d-byte input took %v, budget %v", len(src), best, limit)
+			}
+		})
+	}
+}
+
+// refHasBraceExpansion is the straightforward quadratic definition that the
+// linear scan in unquotedLit must agree with.
+func refHasBraceExpansion(s string) bool {
+	depth := 0
+	sep := false
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return sep
+			}
+		case ',':
+			if depth == 1 {
+				sep = true
+			}
+		case '.':
+			if depth == 1 && i+1 < len(s) && s[i+1] == '.' {
+				sep = true
+			}
+		}
+	}
+	return false
+}
+
+func refUnquotedDyn(v string) bool {
+	for i := 0; i < len(v); i++ {
+		switch v[i] {
+		case '\\':
+			i++
+		case '*', '?':
+			return true
+		case '[':
+			if strings.IndexByte(v[i+1:], ']') >= 0 {
+				return true
+			}
+		case '{':
+			if refHasBraceExpansion(v[i:]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestUnquotedLitMatchesReference(t *testing.T) {
+	alphabet := []byte(`{}[],.\a*`)
+	var gen func(prefix []byte, left int)
+	gen = func(prefix []byte, left int) {
+		if _, dyn := unquotedLit(string(prefix)); dyn != refUnquotedDyn(string(prefix)) {
+			t.Fatalf("%q: dyn=%v, reference=%v", prefix, dyn, refUnquotedDyn(string(prefix)))
+		}
+		if left == 0 {
+			return
+		}
+		for _, c := range alphabet {
+			gen(append(prefix, c), left-1)
+		}
+	}
+	gen(nil, 6)
+}

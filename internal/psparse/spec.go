@@ -191,76 +191,90 @@ func buildItems(head model.Word, rest []token) ([]item, []model.Word) {
 	var items []item
 	lastVal, lastArgv := -1, -1
 	join := false
+	// parts accumulates the pieces of the comma-joined array at argv[lastArgv]
+	// so the rendering is built once instead of by repeated concatenation.
+	var parts []string
+	flush := func() {
+		if len(parts) > 1 {
+			argv[lastArgv].Lit = strings.Join(parts, "")
+		}
+		parts = parts[:0]
+	}
 	for _, t := range rest {
 		switch {
 		case t.kind == tkParam:
+			flush()
 			items = append(items, item{param: true, name: t.param, attached: t.pval})
 			argv = append(argv, model.Word{Lit: t.raw, Dynamic: t.pval != nil && t.pval.Dynamic})
 			lastVal, join = -1, false
 		case t.kind == tkOp && t.word.Lit == "," && lastVal >= 0:
 			join = true
-			argv[lastArgv].Lit += ","
+			parts = append(parts, ",")
 		case join && lastVal >= 0:
 			items[lastVal].words = append(items[lastVal].words, t.word)
-			argv[lastArgv].Lit += t.word.Lit
+			parts = append(parts, t.word.Lit)
 			argv[lastArgv].Dynamic = argv[lastArgv].Dynamic || t.word.Dynamic
 			join = false
 		default:
+			flush()
 			items = append(items, item{words: []model.Word{t.word}})
 			argv = append(argv, t.word)
 			lastVal, lastArgv = len(items)-1, len(argv)-1
+			parts = append(parts[:0], t.word.Lit)
 			join = false
 		}
 	}
+	flush()
 	return items, argv
 }
 
 // bind assigns the items to parameters. params is the exported parameter map
-// (lower-cased "-name" as written -> values); bound maps canonical parameter
-// names to their values (named or positional) for spec'd cmdlets; extra holds
-// positional values that matched no slot.
+// (lower-cased "-name" as written -> following non-parameter words until the
+// next parameter, per the contract, whatever the cmdlet); bound maps canonical
+// parameter names to their values (named or positional, bound by the real
+// parameter table) for spec'd cmdlets; extra holds positional values that
+// matched no slot.
 func bind(spec *cmdSpec, items []item) (params, bound map[string][]model.Word, extra []model.Word) {
 	params = map[string][]model.Word{}
-	var positional [][]model.Word
-	if spec != nil {
-		bound = map[string][]model.Word{}
+	for i := 0; i < len(items); i++ {
+		if !items[i].param {
+			continue
+		}
+		vals := []model.Word{}
+		if items[i].attached != nil {
+			vals = append(vals, *items[i].attached)
+		} else {
+			for j := i + 1; j < len(items) && !items[j].param; j++ {
+				vals = append(vals, items[j].words...)
+			}
+		}
+		params[items[i].name] = append(params[items[i].name], vals...)
 	}
+	if spec == nil {
+		return params, nil, nil
+	}
+	bound = map[string][]model.Word{}
+	var positional [][]model.Word
 	for i := 0; i < len(items); i++ {
 		it := items[i]
 		if !it.param {
 			positional = append(positional, it.words)
 			continue
 		}
-		var def *paramDef
-		if spec != nil {
-			def = spec.resolve(it.name)
-		}
+		def := spec.resolve(it.name)
 		var vals []model.Word
 		switch {
 		case it.attached != nil:
 			vals = []model.Word{*it.attached}
-		case spec == nil:
-			// Unknown cmdlet: a parameter owns the value items that follow.
-			for i+1 < len(items) && !items[i+1].param {
-				vals = append(vals, items[i+1].words...)
-				i++
-			}
 		case def != nil && def.value:
 			if i+1 < len(items) && !items[i+1].param {
 				vals = items[i+1].words
 				i++
 			}
 		}
-		if _, ok := params[it.name]; !ok {
-			params[it.name] = []model.Word{}
-		}
-		params[it.name] = append(params[it.name], vals...)
 		if def != nil {
 			bound[def.name] = append(bound[def.name], vals...)
 		}
-	}
-	if spec == nil {
-		return params, nil, nil
 	}
 	slot := 0
 	for _, vals := range positional {

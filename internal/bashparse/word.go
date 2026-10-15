@@ -72,11 +72,15 @@ func (w *walker) srcText(n syntax.Node) string {
 }
 
 // unquotedLit removes backslash escapes from an unquoted literal and reports
-// whether it contains an unescaped glob or brace-expansion construct.
+// whether it contains an unescaped glob or brace-expansion construct. It makes
+// a single linear pass: '{' pairs are matched with a stack that records, per
+// open brace, whether a top-level ',' or ".." has been seen.
 func unquotedLit(v string) (string, bool) {
 	var sb strings.Builder
 	sb.Grow(len(v))
 	dyn := false
+	lastClose := strings.LastIndexByte(v, ']')
+	var braces []bool
 	for i := 0; i < len(v); i++ {
 		c := v[i]
 		switch c {
@@ -93,13 +97,29 @@ func unquotedLit(v string) (string, bool) {
 			dyn = true
 			sb.WriteByte(c)
 		case '[':
-			if strings.IndexByte(v[i+1:], ']') >= 0 {
+			if i < lastClose {
 				dyn = true
 			}
 			sb.WriteByte(c)
 		case '{':
-			if hasBraceExpansion(v[i:]) {
-				dyn = true
+			braces = append(braces, false)
+			sb.WriteByte(c)
+		case '}':
+			if n := len(braces); n > 0 {
+				if braces[n-1] {
+					dyn = true
+				}
+				braces = braces[:n-1]
+			}
+			sb.WriteByte(c)
+		case ',':
+			if n := len(braces); n > 0 {
+				braces[n-1] = true
+			}
+			sb.WriteByte(c)
+		case '.':
+			if n := len(braces); n > 0 && i+1 < len(v) && v[i+1] == '.' {
+				braces[n-1] = true
 			}
 			sb.WriteByte(c)
 		default:
@@ -107,35 +127,6 @@ func unquotedLit(v string) (string, bool) {
 		}
 	}
 	return sb.String(), dyn
-}
-
-// hasBraceExpansion reports whether s (starting at '{') opens a brace
-// expansion: a matching '}' with a top-level ',' or ".." in between.
-func hasBraceExpansion(s string) bool {
-	depth := 0
-	sep := false
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '\\':
-			i++
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return sep
-			}
-		case ',':
-			if depth == 1 {
-				sep = true
-			}
-		case '.':
-			if depth == 1 && i+1 < len(s) && s[i+1] == '.' {
-				sep = true
-			}
-		}
-	}
-	return false
 }
 
 // dblUnescape applies double-quote backslash rules: only \$ \` \" \\ and

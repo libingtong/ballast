@@ -313,3 +313,34 @@ func envSplitString(s string) bool {
 	}
 	return false
 }
+
+// envSplits reports whether env's options (args follow the command word) use
+// -S/--split-string.
+func envSplits(args []model.Word) bool {
+	for i := 0; i < len(args); {
+		w := args[i]
+		s := w.Lit
+		switch {
+		case isAssignWord(w):
+			i++
+		case w.Dynamic || len(s) < 2 || s[0] != '-' || s == "--":
+			return false
+		case strings.HasPrefix(s, "--"):
+			name, _, attached := strings.Cut(s[2:], "=")
+			switch name {
+			case "split-string":
+				return true
+			case "unset", "chdir", "argv0":
+				if !attached {
+					i++
+				}
+			}
+			i++
+		case envSplitString(s):
+			return true
+		default:
+			i = shortValue(args, i, "uCa")
+		}
+	}
+	return false
+}

@@ -481,13 +481,8 @@ func (w *walker) call(s *syntax.Stmt, x *syntax.CallExpr, c ctx, timeWrap bool) 
 		case "sleep":
 			si := ParseSleep(rest[1:])
 			n.Sleep = &si
-		case "eval":
-			w.b.unknown("eval")
-		case "source", ".":
-			if len(rest) > 1 && rest[1].Dynamic {
-				w.b.unknown("source")
-			}
 		}
+		w.markUnknown(n.Name, rest[1:])
 	}
 	var own []redirInfo
 	if len(s.Redirs) > 0 {
@@ -577,4 +572,25 @@ func (b *builder) inner(script string, c ctx) {
 		return
 	}
 	(&walker{b: b, src: script}).stmts(f.Stmts, c)
+}
+
+// markUnknown flags commands whose effect cannot be seen statically: eval,
+// source of a dynamic file and `env -S`. `builtin` forwards to the builtin it
+// names.
+func (w *walker) markUnknown(name string, args []model.Word) {
+	if name == "builtin" && len(args) > 0 && !args[0].Dynamic {
+		name, args = baseName(args[0].Lit), args[1:]
+	}
+	switch name {
+	case "eval":
+		w.b.unknown("eval")
+	case "source", ".":
+		if len(args) > 0 && args[0].Dynamic {
+			w.b.unknown("source")
+		}
+	case "env":
+		if envSplits(args) {
+			w.b.unknown("env -S")
+		}
+	}
 }
