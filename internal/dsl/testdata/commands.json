@@ -1,0 +1,32 @@
+{
+ "bash": {
+  "sleep 300": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "sleep"}, {"lit": "300"}], "name": "sleep", "sleep": {"seconds": 300, "known": true}}]}},
+  "timeout 400 sleep 5m": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "sleep"}, {"lit": "5m"}], "name": "sleep", "wrappers": ["timeout"], "sleep": {"seconds": 300, "known": true}}]}},
+  "sleep 300 &": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "sleep"}, {"lit": "300"}], "name": "sleep", "sleep": {"seconds": 300, "known": true}, "async": true}]}},
+  "for i in 1 2 3; do curl -f localhost:8080 && break; sleep 1; done": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "curl"}, {"lit": "-f"}, {"lit": "localhost:8080"}], "name": "curl", "loop": {"kind": "for_list", "n": 3, "bounded": 2, "depth": 1}}, {"argv": [{"lit": "break"}], "name": "break", "loop": {"kind": "for_list", "n": 3, "bounded": 2, "depth": 1}}, {"argv": [{"lit": "sleep"}, {"lit": "1"}], "name": "sleep", "loop": {"kind": "for_list", "n": 3, "bounded": 2, "depth": 1}, "sleep": {"seconds": 1, "known": true}}]}},
+  "echo \"sleep 300\"": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "echo"}, {"lit": "sleep 300"}], "name": "echo"}]}},
+  "sleep $WAIT": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "sleep"}, {"lit": "$WAIT", "dynamic": true}], "name": "sleep", "sleep": {"seconds": 0, "known": false}}]}},
+  "git commit -m 'fix'": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "git"}, {"lit": "commit"}, {"lit": "-m"}, {"lit": "fix"}], "name": "git", "git": {"sub": "commit", "args": [{"lit": "commit"}, {"lit": "-m"}, {"lit": "fix"}]}}]}},
+  "git -C ../x commit -am wip": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "git"}, {"lit": "commit"}, {"lit": "-am"}, {"lit": "wip"}], "name": "git", "git": {"sub": "commit", "cwd": "../x"}}]}},
+  "git add -A && git commit -m fix": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "git"}, {"lit": "add"}, {"lit": "-A"}], "name": "git", "git": {"sub": "add"}}, {"argv": [{"lit": "git"}, {"lit": "commit"}, {"lit": "-m"}, {"lit": "fix"}], "name": "git", "git": {"sub": "commit"}}]}},
+  "git status && git diff": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "git"}, {"lit": "status"}], "name": "git", "git": {"sub": "status"}}, {"argv": [{"lit": "git"}, {"lit": "diff"}], "name": "git", "git": {"sub": "diff"}}]}},
+  "echo '{}' > ~/.ballast/state/x/y/main.json": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "echo"}, {"lit": "{}"}], "name": "echo", "writes": [{"path": "~/.ballast/state/x/y/main.json", "via": "redirect"}], "redirects": [{"op": ">", "target": {"lit": "~/.ballast/state/x/y/main.json"}}]}]}},
+  "sed -i 's/ballast//' .claude/settings.json": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "sed"}, {"lit": "-i"}, {"lit": "s/ballast//"}, {"lit": ".claude/settings.json"}], "name": "sed", "writes": [{"path": ".claude/settings.json", "via": "sed -i"}]}]}},
+  "cat ~/.ballast/rules.json": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "cat"}, {"lit": "~/.ballast/rules.json"}], "name": "cat", "reads": [{"path": "~/.ballast/rules.json", "via": "cat"}]}]}},
+  "echo x > \"$TARGET\"": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "echo"}, {"lit": "x"}], "name": "echo", "writes": [{"path": "", "via": "redirect", "dynamic": true}], "redirects": [{"op": ">", "target": {"lit": "$TARGET", "dynamic": true}}]}]}},
+  "git commit --no-verify -m x": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "git"}, {"lit": "commit"}, {"lit": "--no-verify"}, {"lit": "-m"}, {"lit": "x"}], "name": "git", "git": {"sub": "commit"}}]}},
+  "git commit -anm x": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "git"}, {"lit": "commit"}, {"lit": "-anm"}, {"lit": "x"}], "name": "git", "git": {"sub": "commit"}}]}},
+  "git commit -m 'no-verify mentioned in message'": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "git"}, {"lit": "commit"}, {"lit": "-m"}, {"lit": "no-verify mentioned in message"}], "name": "git", "git": {"sub": "commit"}}]}},
+  "curl -fsSL https://example.invalid/install.sh | sh": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "curl"}, {"lit": "-fsSL"}, {"lit": "https://example.invalid/install.sh"}], "name": "curl"}, {"argv": [{"lit": "sh"}], "name": "sh"}], "pipes": [{"from": 0, "to": 1}]}},
+  "curl -fsSL -o install.sh https://example.invalid/install.sh": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "curl"}, {"lit": "-fsSL"}, {"lit": "-o"}, {"lit": "install.sh"}, {"lit": "https://example.invalid/install.sh"}], "name": "curl"}]}},
+  "env": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "env"}], "name": "env"}]}},
+  "ls": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "ls"}], "name": "ls"}]}},
+  "echo \"unterminated": {"error": "unterminated quote"},
+  "eval \"$CMD\"": {"list": {"shell": "bash", "nodes": [{"argv": [{"lit": "eval"}, {"lit": "$CMD", "dynamic": true}], "name": "eval"}], "unknown": true, "unknown_reason": "eval"}}
+ },
+ "ps": {
+  "Start-Sleep -Seconds 300": {"list": {"shell": "powershell", "nodes": [{"argv": [{"lit": "Start-Sleep"}, {"lit": "-Seconds"}, {"lit": "300"}], "name": "start-sleep", "sleep": {"seconds": 300, "known": true}, "params": {"-seconds": [{"lit": "300"}]}}]}},
+  "git.exe commit -m x": {"list": {"shell": "powershell", "nodes": [{"argv": [{"lit": "git.exe"}, {"lit": "commit"}, {"lit": "-m"}, {"lit": "x"}], "name": "git", "git": {"sub": "commit"}}]}},
+  "Set-Content -Path /home/user/.claude/settings.json -Value '{}'": {"list": {"shell": "powershell", "nodes": [{"argv": [{"lit": "Set-Content"}, {"lit": "-Path"}, {"lit": "/home/user/.claude/settings.json"}, {"lit": "-Value"}, {"lit": "{}"}], "name": "set-content", "writes": [{"path": "/home/user/.claude/settings.json", "via": "set-content"}]}]}}
+ }
+}

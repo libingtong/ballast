@@ -1,0 +1,1812 @@
+{
+ "base": {
+  "id": "lint-base",
+  "action": "deny",
+  "event": "PreToolUse",
+  "match": {
+   "tool": "Edit"
+  },
+  "message": "m",
+  "examples": [
+   {
+    "expect": "hit",
+    "input": {
+     "tool_name": "Edit",
+     "tool_input": {
+      "file_path": "/repo/a"
+     }
+    }
+   },
+   {
+    "expect": "miss",
+    "input": {
+     "tool_name": "Write",
+     "tool_input": {
+      "file_path": "/repo/a"
+     }
+    }
+   }
+  ]
+ },
+ "cases": [
+  {
+   "name": "valid base rule",
+   "want": []
+  },
+  {
+   "name": "input_regex.command on Edit",
+   "patch": {
+    "match": {
+     "input_regex": {
+      "command": "x"
+     }
+    }
+   },
+   "want": [
+    "error:input-field-unknown@/rules/0/match/input_regex/command",
+    "error:field-not-applicable@/rules/0/match/input_regex/command"
+   ]
+  },
+  {
+   "name": "input_regex needs a tool",
+   "patch": {
+    "match": {
+     "tool": null,
+     "input_regex": {
+      "command": "x"
+     }
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/input_regex"
+   ]
+  },
+  {
+   "name": "input_regex key missing on one of the listed tools",
+   "patch": {
+    "match": {
+     "tool": [
+      "Edit",
+      "Write"
+     ],
+     "input_regex": {
+      "old_string": "x"
+     }
+    }
+   },
+   "want": [
+    "error:input-field-unknown@/rules/0/match/input_regex/old_string",
+    "error:field-not-applicable@/rules/0/match/input_regex/old_string"
+   ]
+  },
+  {
+   "name": "input_regex virtual keys are valid for every edit tool",
+   "patch": {
+    "match": {
+     "tool": [
+      "Edit",
+      "MultiEdit",
+      "Write",
+      "NotebookEdit"
+     ],
+     "input_regex": {
+      "new_text": "TODO",
+      "old_text": "x"
+     }
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "input_regex accepts any key on mcp tools",
+   "patch": {
+    "match": {
+     "tool": "mcp__*",
+     "input_regex": {
+      "anything": "x"
+     }
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "input_regex on an unregistered raw tool name",
+   "patch": {
+    "match": {
+     "tool": "apply_patch",
+     "input_regex": {
+      "input": "x"
+     }
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "tool glob star reaches Edit",
+   "patch": {
+    "match": {
+     "tool": "*",
+     "input_regex": {
+      "command": "x"
+     }
+    }
+   },
+   "want": [
+    "error:input-field-unknown@/rules/0/match/input_regex/command",
+    "error:field-not-applicable@/rules/0/match/input_regex/command"
+   ]
+  },
+  {
+   "name": "input_regex key syntax",
+   "patch": {
+    "match": {
+     "input_regex": {
+      "bad key": "x"
+     }
+    }
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/match/input_regex/bad key"
+   ]
+  },
+  {
+   "name": "input_regex dotted key on MultiEdit",
+   "patch": {
+    "match": {
+     "tool": "MultiEdit",
+     "input_regex": {
+      "edits.new_string": "x"
+     }
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "ask on codex",
+   "patch": {
+    "action": "ask"
+   },
+   "options": {
+    "clients": [
+     "codex"
+    ]
+   },
+   "want": [
+    "error:action-unsupported@/rules/0/action"
+   ]
+  },
+  {
+   "name": "ask on claude PreToolUse is fine",
+   "patch": {
+    "action": "ask"
+   },
+   "want": []
+  },
+  {
+   "name": "ask on claude UserPromptSubmit",
+   "patch": {
+    "action": "ask",
+    "event": "UserPromptSubmit",
+    "match": {
+     "tool": null,
+     "text": {
+      "regex": "x"
+     }
+    }
+   },
+   "want": [
+    "error:action-unsupported@/rules/0/action"
+   ]
+  },
+  {
+   "name": "deny on PostToolUse",
+   "patch": {
+    "event": "PostToolUse"
+   },
+   "want": [
+    "error:action-unsupported@/rules/0/action"
+   ]
+  },
+  {
+   "name": "warn on PostToolUse",
+   "patch": {
+    "event": "PostToolUse",
+    "action": "warn"
+   },
+   "want": []
+  },
+  {
+   "name": "warn on codex PreToolUse",
+   "patch": {
+    "action": "warn"
+   },
+   "options": {
+    "clients": [
+     "codex"
+    ]
+   },
+   "want": [
+    "error:action-unsupported@/rules/0/action"
+   ]
+  },
+  {
+   "name": "deny on codex PreToolUse is unverified",
+   "options": {
+    "clients": [
+     "codex"
+    ]
+   },
+   "want": [
+    "warning:action-unverified@/rules/0/action"
+   ]
+  },
+  {
+   "name": "several clients are all checked",
+   "patch": {
+    "action": "ask"
+   },
+   "options": {
+    "clients": [
+     "claude-code",
+     "codex",
+     "cursor"
+    ]
+   },
+   "want": [
+    "error:action-unsupported@/rules/0/action",
+    "warning:action-unverified@/rules/0/action"
+   ]
+  },
+  {
+   "name": "rule limited to claude-code is not checked against codex",
+   "patch": {
+    "action": "ask",
+    "clients": [
+     "claude-code"
+    ]
+   },
+   "options": {
+    "clients": [
+     "codex"
+    ]
+   },
+   "want": []
+  },
+  {
+   "name": "event missing on codex",
+   "patch": {
+    "event": "PostToolUseFailure",
+    "action": "warn"
+   },
+   "options": {
+    "clients": [
+     "codex"
+    ]
+   },
+   "want": [
+    "warning:event-unavailable@/rules/0/event"
+   ]
+  },
+  {
+   "name": "PostToolUseFailure warn on claude is unverified",
+   "patch": {
+    "event": "PostToolUseFailure",
+    "action": "warn"
+   },
+   "want": [
+    "warning:action-unverified@/rules/0/action"
+   ]
+  },
+  {
+   "name": "cursor stop deny continues the run",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "regex": "x"
+     }
+    }
+   },
+   "options": {
+    "clients": [
+     "cursor"
+    ]
+   },
+   "want": [
+    "warning:cursor-stop-followup@/rules/0/action",
+    "warning:action-unverified@/rules/0/action"
+   ]
+  },
+  {
+   "name": "target the client cannot enforce",
+   "patch": {
+    "action": "log",
+    "target": "ask"
+   },
+   "options": {
+    "clients": [
+     "codex"
+    ]
+   },
+   "want": [
+    "warning:target-unsupported@/rules/0/target"
+   ]
+  },
+  {
+   "name": "log action is accepted everywhere",
+   "patch": {
+    "action": "log",
+    "target": "log"
+   },
+   "options": {
+    "clients": [
+     "claude-code",
+     "codex",
+     "cursor",
+     "hermes"
+    ]
+   },
+   "want": []
+  },
+  {
+   "name": "hermes has no Stop",
+   "patch": {
+    "event": "Stop",
+    "action": "log",
+    "match": {
+     "tool": null,
+     "text": {
+      "regex": "x"
+     }
+    }
+   },
+   "options": {
+    "clients": [
+     "hermes"
+    ]
+   },
+   "want": [
+    "warning:event-unavailable@/rules/0/event"
+   ]
+  },
+  {
+   "name": "negation-only path list",
+   "patch": {
+    "match": {
+     "path": [
+      "!x"
+     ]
+    }
+   },
+   "want": [
+    "error:glob-only-negation@/rules/0/match/path"
+   ]
+  },
+  {
+   "name": "negation-only tool list",
+   "patch": {
+    "match": {
+     "tool": [
+      "!Edit"
+     ]
+    }
+   },
+   "want": [
+    "error:glob-only-negation@/rules/0/match/tool"
+   ]
+  },
+  {
+   "name": "negation-only branch_glob",
+   "patch": {
+    "when": [
+     {
+      "branch_glob": {
+       "patterns": [
+        "!main"
+       ]
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:glob-only-negation@/rules/0/when/0/branch_glob/patterns"
+   ]
+  },
+  {
+   "name": "negation with a positive pattern",
+   "patch": {
+    "match": {
+     "path": [
+      "**/*.go",
+      "!**/*_test.go"
+     ]
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "bad glob",
+   "patch": {
+    "match": {
+     "path": [
+      "src/[a"
+     ]
+    }
+   },
+   "want": [
+    "error:bad-glob@/rules/0/match/path"
+   ]
+  },
+  {
+   "name": "bad bash cmd glob",
+   "patch": {
+    "match": {
+     "tool": null,
+     "bash": {
+      "cmd": "{a"
+     }
+    }
+   },
+   "want": [
+    "error:bad-glob@/rules/0/match/bash/cmd"
+   ]
+  },
+  {
+   "name": "backreference is not RE2",
+   "patch": {
+    "match": {
+     "tool": "Bash",
+     "input_regex": {
+      "command": "(a)\\1"
+     }
+    }
+   },
+   "want": [
+    "error:bad-regex@/rules/0/match/input_regex/command/0"
+   ]
+  },
+  {
+   "name": "lookahead is not RE2",
+   "patch": {
+    "match": {
+     "tool": "Bash",
+     "input_regex": {
+      "command": [
+       "ok",
+       "(?=x)"
+      ]
+     }
+    }
+   },
+   "want": [
+    "error:bad-regex@/rules/0/match/input_regex/command/1"
+   ]
+  },
+  {
+   "name": "lookbehind in args_regex",
+   "patch": {
+    "match": {
+     "tool": null,
+     "bash": {
+      "args_regex": "(?<=a)b"
+     }
+    }
+   },
+   "want": [
+    "error:bad-regex@/rules/0/match/bash/args_regex/0"
+   ]
+  },
+  {
+   "name": "bad text regex",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "regex": [
+       "a",
+       "["
+      ],
+      "not_regex": "(x"
+     }
+    }
+   },
+   "want": [
+    "error:bad-regex@/rules/0/match/text/regex/1",
+    "error:bad-regex@/rules/0/match/text/not_regex/0"
+   ]
+  },
+  {
+   "name": "bad count_regex",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "count_regex": {
+       "regex": "(",
+       "gte": 1
+      }
+     }
+    }
+   },
+   "want": [
+    "error:bad-regex@/rules/0/match/text/count_regex/regex"
+   ]
+  },
+  {
+   "name": "bad prev_prompt_regex",
+   "patch": {
+    "when": [
+     {
+      "prev_prompt_regex": {
+       "regex": "*x"
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:bad-regex@/rules/0/when/0/prev_prompt_regex/regex"
+   ]
+  },
+  {
+   "name": "RE2 classes are fine",
+   "patch": {
+    "match": {
+     "tool": "Bash",
+     "input_regex": {
+      "command": "(?i)\\p{Han}+|[[:alpha:]]\\b"
+     }
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "condition with two keys",
+   "patch": {
+    "when": [
+     {
+      "is_subagent": {},
+      "path_exists": {}
+     }
+    ]
+   },
+   "want": [
+    "error:cond-arity@/rules/0/when/0"
+   ]
+  },
+  {
+   "name": "condition without keys",
+   "patch": {
+    "when": [
+     {}
+    ]
+   },
+   "want": [
+    "error:cond-arity@/rules/0/when/0"
+   ]
+  },
+  {
+   "name": "nested condition arity",
+   "patch": {
+    "when": [
+     {
+      "not": {
+       "all": [
+        {
+         "is_subagent": {}
+        },
+        {
+         "is_subagent": {},
+         "env_equals": {
+          "name": "A",
+          "value": "b"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:cond-arity@/rules/0/when/0/not/all/1"
+   ]
+  },
+  {
+   "name": "empty all",
+   "patch": {
+    "when": [
+     {
+      "all": []
+     }
+    ]
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/when/0/all"
+   ]
+  },
+  {
+   "name": "unknown predicate",
+   "patch": {
+    "when": [
+     {
+      "exec": {
+       "cmd": "x"
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:unknown-predicate@/rules/0/when/0/exec"
+   ]
+  },
+  {
+   "name": "unknown predicate inside not",
+   "patch": {
+    "when": [
+     {
+      "not": {
+       "exec": {}
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:unknown-predicate@/rules/0/when/0/not/exec"
+   ]
+  },
+  {
+   "name": "unknown field in a rule",
+   "patch": {
+    "bogus": 1
+   },
+   "want": [
+    "error:unknown-field@/rules/0/bogus"
+   ]
+  },
+  {
+   "name": "unknown field in match",
+   "patch": {
+    "match": {
+     "toool": "x"
+    }
+   },
+   "want": [
+    "error:unknown-field@/rules/0/match/toool"
+   ]
+  },
+  {
+   "name": "unknown field in shell match",
+   "patch": {
+    "match": {
+     "tool": null,
+     "bash": {
+      "cmd": "x",
+      "flagz": "y"
+     }
+    }
+   },
+   "want": [
+    "error:unknown-field@/rules/0/match/bash/flagz"
+   ]
+  },
+  {
+   "name": "unknown field in an example",
+   "patch": {
+    "examples": [
+     {
+      "expect": "hit",
+      "input": {},
+      "bogus": true
+     },
+     {
+      "expect": "miss",
+      "input": {}
+     }
+    ]
+   },
+   "want": [
+    "error:unknown-field@/rules/0/examples/0/bogus"
+   ]
+  },
+  {
+   "name": "unknown top-level field",
+   "file": {
+    "extra": 1
+   },
+   "want": [
+    "error:unknown-field@/extra"
+   ]
+  },
+  {
+   "name": "wrong version",
+   "file": {
+    "version": 2
+   },
+   "want": [
+    "error:version-unsupported@/version"
+   ]
+  },
+  {
+   "name": "missing version",
+   "file": {
+    "version": null
+   },
+   "want": [
+    "error:version-unsupported@/version"
+   ]
+  },
+  {
+   "name": "missing rules",
+   "raw": "{\"version\":1}",
+   "want": [
+    "error:schema-invalid@/rules"
+   ]
+  },
+  {
+   "name": "wrong type",
+   "patch": {
+    "enabled": "yes"
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/enabled"
+   ]
+  },
+  {
+   "name": "top-level key with the wrong case",
+   "raw": "{\"VERSION\":1,\"rules\":[]}",
+   "want": [
+    "error:unknown-field@/VERSION"
+   ]
+  },
+  {
+   "name": "rule key with the wrong case",
+   "raw": "{\"version\":1,\"rules\":[{\"id\":\"a\",\"Action\":\"deny\",\"event\":\"PreToolUse\",\"examples\":[]}]}",
+   "want": [
+    "error:unknown-field@/rules/0/Action"
+   ]
+  },
+  {
+   "name": "predicate key with the wrong case",
+   "raw": "{\"version\":1,\"rules\":[{\"id\":\"a\",\"action\":\"deny\",\"event\":\"PreToolUse\",\"when\":[{\"IS_SUBAGENT\":{}}],\"examples\":[]}]}",
+   "want": [
+    "error:unknown-predicate@/rules/0/when/0/IS_SUBAGENT"
+   ]
+  },
+  {
+   "name": "duplicate rule key",
+   "raw": "{\"version\":1,\"rules\":[{\"id\":\"a\",\"action\":\"log\",\"action\":\"deny\",\"event\":\"PreToolUse\",\"examples\":[]}]}",
+   "want": [
+    "error:schema-invalid@/rules/0/action"
+   ]
+  },
+  {
+   "name": "duplicate top-level key",
+   "raw": "{\"version\":1,\"rules\":[],\"version\":1}",
+   "want": [
+    "error:schema-invalid@/version"
+   ]
+  },
+  {
+   "name": "not JSON",
+   "raw": "{not json",
+   "want": [
+    "error:schema-invalid"
+   ]
+  },
+  {
+   "name": "trailing data",
+   "raw": "{\"version\":1,\"rules\":[]} {}",
+   "want": [
+    "error:schema-invalid"
+   ]
+  },
+  {
+   "name": "empty file",
+   "raw": " ",
+   "want": [
+    "error:schema-invalid"
+   ]
+  },
+  {
+   "name": "BOM is tolerated",
+   "raw": "﻿{\"version\":1,\"rules\":[]}",
+   "want": []
+  },
+  {
+   "name": "org layer within the limit",
+   "count": 12,
+   "options": {
+    "layer": "org"
+   },
+   "want": []
+  },
+  {
+   "name": "org layer over the limit",
+   "count": 13,
+   "options": {
+    "layer": "org"
+   },
+   "want": [
+    "error:too-many-rules@/rules/12"
+   ]
+  },
+  {
+   "name": "user layer is not capped by lint alone",
+   "count": 13,
+   "want": []
+  },
+  {
+   "name": "disabled rules do not count",
+   "count": 13,
+   "patch": {
+    "enabled": false
+   },
+   "options": {
+    "layer": "org"
+   },
+   "want": []
+  },
+  {
+   "name": "bad id",
+   "patch": {
+    "id": "Bad_ID"
+   },
+   "want": [
+    "error:bad-id@/rules/0/id"
+   ]
+  },
+  {
+   "name": "id too short",
+   "patch": {
+    "id": "ab"
+   },
+   "want": [
+    "error:bad-id@/rules/0/id"
+   ]
+  },
+  {
+   "name": "duplicate ids",
+   "rules": [
+    {},
+    {}
+   ],
+   "want": [
+    "error:duplicate-id@/rules/1/id"
+   ]
+  },
+  {
+   "name": "bad event",
+   "patch": {
+    "event": "SessionStart"
+   },
+   "want": [
+    "error:bad-event@/rules/0/event"
+   ]
+  },
+  {
+   "name": "missing event",
+   "patch": {
+    "event": null
+   },
+   "want": [
+    "error:bad-event@/rules/0/event"
+   ]
+  },
+  {
+   "name": "bad action",
+   "patch": {
+    "action": "nuke"
+   },
+   "want": [
+    "error:bad-action@/rules/0/action"
+   ]
+  },
+  {
+   "name": "bad target",
+   "patch": {
+    "target": "nuke"
+   },
+   "want": [
+    "error:bad-action@/rules/0/target"
+   ]
+  },
+  {
+   "name": "target weaker than action",
+   "patch": {
+    "action": "deny",
+    "target": "warn"
+   },
+   "want": [
+    "warning:target-weaker-than-action@/rules/0/target"
+   ]
+  },
+  {
+   "name": "target stronger than action",
+   "patch": {
+    "action": "log",
+    "target": "deny"
+   },
+   "want": []
+  },
+  {
+   "name": "unknown client",
+   "patch": {
+    "clients": [
+     "claude-code",
+     "vim"
+    ]
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/clients/1"
+   ]
+  },
+  {
+   "name": "empty clients",
+   "patch": {
+    "clients": []
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/clients"
+   ]
+  },
+  {
+   "name": "duplicate clients",
+   "patch": {
+    "clients": [
+     "codex",
+     "codex"
+    ]
+   },
+   "options": {
+    "clients": [
+     "claude-code"
+    ]
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/clients/1"
+   ]
+  },
+  {
+   "name": "message at the limit",
+   "patch": {
+    "message": "字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字"
+   },
+   "want": []
+  },
+  {
+   "name": "inject object without text",
+   "patch": {
+    "inject": {
+     "anchor": "a"
+    }
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/inject"
+   ]
+  },
+  {
+   "name": "description too long",
+   "patch": {
+    "description": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/description"
+   ]
+  },
+  {
+   "name": "examples need a hit",
+   "patch": {
+    "examples": [
+     {
+      "expect": "miss",
+      "input": {
+       "a": 1
+      }
+     },
+     {
+      "expect": "unknown",
+      "input": {
+       "a": 1
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:examples-missing@/rules/0/examples"
+   ]
+  },
+  {
+   "name": "examples need a non-hit",
+   "patch": {
+    "examples": [
+     {
+      "expect": "hit",
+      "input": {
+       "a": 1
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:examples-missing@/rules/0/examples"
+   ]
+  },
+  {
+   "name": "no examples at all",
+   "patch": {
+    "examples": []
+   },
+   "want": [
+    "error:examples-missing@/rules/0/examples",
+    "error:examples-missing@/rules/0/examples"
+   ]
+  },
+  {
+   "name": "bad expect",
+   "patch": {
+    "examples": [
+     {
+      "expect": "hit",
+      "input": {
+       "a": 1
+      }
+     },
+     {
+      "expect": "nope",
+      "input": {
+       "a": 1
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/examples/1/expect",
+    "error:examples-missing@/rules/0/examples"
+   ]
+  },
+  {
+   "name": "example input must be an object",
+   "patch": {
+    "examples": [
+     {
+      "expect": "hit",
+      "input": "x"
+     },
+     {
+      "expect": "miss",
+      "input": {
+       "a": 1
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:example-bad-input@/rules/0/examples/0/input"
+   ]
+  },
+  {
+   "name": "bad fixture",
+   "patch": {
+    "examples": [
+     {
+      "expect": "hit",
+      "input": {
+       "a": 1
+      },
+      "fixture": {
+       "verify_fresh": "maybe",
+       "goos": "plan9"
+      }
+     },
+     {
+      "expect": "miss",
+      "input": {
+       "a": 1
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/examples/0/fixture/verify_fresh",
+    "error:schema-invalid@/rules/0/examples/0/fixture/goos"
+   ]
+  },
+  {
+   "name": "empty rule",
+   "patch": {
+    "match": null
+   },
+   "want": [
+    "error:empty-rule@/rules/0"
+   ]
+  },
+  {
+   "name": "empty match object is an empty rule",
+   "patch": {
+    "match": {
+     "tool": []
+    }
+   },
+   "want": [
+    "error:empty-rule@/rules/0"
+   ]
+  },
+  {
+   "name": "when alone is enough",
+   "patch": {
+    "match": null,
+    "when": [
+     {
+      "is_subagent": {}
+     }
+    ]
+   },
+   "want": []
+  },
+  {
+   "name": "text source must match the event",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "source": "prompt",
+      "regex": "x"
+     }
+    }
+   },
+   "want": [
+    "error:text-source-mismatch@/rules/0/match/text/source"
+   ]
+  },
+  {
+   "name": "text source tool_response on PostToolUse",
+   "patch": {
+    "event": "PostToolUse",
+    "action": "warn",
+    "match": {
+     "tool": null,
+     "text": {
+      "source": "tool_response",
+      "regex": "x"
+     }
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "text source tool_response on Stop",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "source": "tool_response",
+      "regex": "x"
+     }
+    }
+   },
+   "want": [
+    "error:text-source-mismatch@/rules/0/match/text/source"
+   ]
+  },
+  {
+   "name": "unknown text source",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "source": "stdout",
+      "regex": "x"
+     }
+    }
+   },
+   "want": [
+    "error:text-source-mismatch@/rules/0/match/text/source"
+   ]
+  },
+  {
+   "name": "text needs a condition",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "source": "last_assistant_message"
+     }
+    }
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/match/text"
+   ]
+  },
+  {
+   "name": "bad preprocess step",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "preprocess": [
+       "strip_all",
+       "strip_quotes",
+       "strip_quotes"
+      ],
+      "regex": "x"
+     }
+    }
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/match/text/preprocess/0",
+    "error:schema-invalid@/rules/0/match/text/preprocess/2"
+   ]
+  },
+  {
+   "name": "empty window",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "window": {},
+      "regex": "x"
+     }
+    }
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/match/text/window"
+   ]
+  },
+  {
+   "name": "text on PreToolUse",
+   "patch": {
+    "match": {
+     "text": {
+      "regex": "x"
+     }
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/text"
+   ]
+  },
+  {
+   "name": "tool on Stop",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": "Edit",
+     "text": {
+      "regex": "x"
+     }
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/tool"
+   ]
+  },
+  {
+   "name": "path on UserPromptSubmit",
+   "patch": {
+    "event": "UserPromptSubmit",
+    "action": "warn",
+    "match": {
+     "tool": null,
+     "path": "**"
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/path"
+   ]
+  },
+  {
+   "name": "bash on Stop",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "bash": {
+      "cmd": "x"
+     }
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/bash"
+   ]
+  },
+  {
+   "name": "run_in_background on UserPromptSubmit",
+   "patch": {
+    "event": "UserPromptSubmit",
+    "action": "warn",
+    "match": {
+     "tool": null,
+     "run_in_background": true,
+     "text": {
+      "regex": "x"
+     }
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/run_in_background"
+   ]
+  },
+  {
+   "name": "agent_type applies to every event",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "agent_type": "general-*"
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "bash with an edit tool",
+   "patch": {
+    "match": {
+     "tool": "Edit",
+     "bash": {
+      "cmd": "x"
+     }
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/bash"
+   ]
+  },
+  {
+   "name": "bash with a mixed tool list",
+   "patch": {
+    "match": {
+     "tool": [
+      "Edit",
+      "Bash"
+     ],
+     "bash": {
+      "cmd": "x"
+     }
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "ps with a read tool",
+   "patch": {
+    "match": {
+     "tool": "Read",
+     "ps": {
+      "cmd": "x"
+     }
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/ps"
+   ]
+  },
+  {
+   "name": "path with a tool without targets",
+   "patch": {
+    "match": {
+     "tool": [
+      "WebFetch",
+      "Grep"
+     ],
+     "path": "**"
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/path"
+   ]
+  },
+  {
+   "name": "path with mixed tools",
+   "patch": {
+    "match": {
+     "tool": [
+      "WebFetch",
+      "Edit"
+     ],
+     "path": "**"
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "path with mcp tools",
+   "patch": {
+    "match": {
+     "tool": "mcp__*",
+     "path": "**"
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "run_in_background with an edit tool",
+   "patch": {
+    "match": {
+     "tool": "Edit",
+     "run_in_background": true
+    }
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/match/run_in_background"
+   ]
+  },
+  {
+   "name": "run_in_background with Bash",
+   "patch": {
+    "match": {
+     "tool": "Bash",
+     "run_in_background": false
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "$target predicate on Stop",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "regex": "x"
+     }
+    },
+    "when": [
+     {
+      "read_this_session": {}
+     }
+    ]
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/when/0/read_this_session"
+   ]
+  },
+  {
+   "name": "literal path predicate on Stop",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "regex": "x"
+     }
+    },
+    "when": [
+     {
+      "path_exists": {
+       "path": "go.mod"
+      }
+     }
+    ]
+   },
+   "want": []
+  },
+  {
+   "name": "$target predicate with a tool without targets",
+   "patch": {
+    "match": {
+     "tool": "WebFetch"
+    },
+    "when": [
+     {
+      "path_exists": {
+       "path": "$target"
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/when/0/path_exists"
+   ]
+  },
+  {
+   "name": "verify_failed_since_read without a path on UserPromptSubmit",
+   "patch": {
+    "event": "UserPromptSubmit",
+    "action": "warn",
+    "match": {
+     "tool": null,
+     "text": {
+      "regex": "x"
+     }
+    },
+    "when": [
+     {
+      "not": {
+       "verify_failed_since_read": {}
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:field-not-applicable@/rules/0/when/0/not/verify_failed_since_read"
+   ]
+  },
+  {
+   "name": "empty cmp in sleep_s",
+   "patch": {
+    "match": {
+     "tool": null,
+     "bash": {
+      "cmd": "sleep",
+      "sleep_s": {}
+     }
+    }
+   },
+   "want": [
+    "error:bad-cmp@/rules/0/match/bash/sleep_s"
+   ]
+  },
+  {
+   "name": "empty cmp in tool_count_since_inject",
+   "patch": {
+    "when": [
+     {
+      "tool_count_since_inject": {}
+     }
+    ]
+   },
+   "want": [
+    "error:bad-cmp@/rules/0/when/0/tool_count_since_inject"
+   ]
+  },
+  {
+   "name": "empty cmp in cjk_ratio",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "cjk_ratio": {}
+     }
+    }
+   },
+   "want": [
+    "error:bad-cmp@/rules/0/match/text/cjk_ratio"
+   ]
+  },
+  {
+   "name": "count_regex without a comparison",
+   "patch": {
+    "event": "Stop",
+    "match": {
+     "tool": null,
+     "text": {
+      "count_regex": {
+       "regex": "x"
+      }
+     }
+    }
+   },
+   "want": [
+    "error:bad-cmp@/rules/0/match/text/count_regex"
+   ]
+  },
+  {
+   "name": "prior_hit without a comparison",
+   "patch": {
+    "when": [
+     {
+      "prior_hit": {
+       "rule": "other-rule"
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:bad-cmp@/rules/0/when/0/prior_hit",
+    "warning:prior-hit-unknown-rule@/rules/0/when/0/prior_hit/rule"
+   ]
+  },
+  {
+   "name": "prior_hit to a rule in the same file",
+   "patch": {
+    "when": [
+     {
+      "prior_hit": {
+       "rule": "lint-base",
+       "gte": 1
+      }
+     }
+    ]
+   },
+   "want": []
+  },
+  {
+   "name": "prior_hit to an unknown rule",
+   "patch": {
+    "when": [
+     {
+      "prior_hit": {
+       "rule": "nobody-here",
+       "gte": 1
+      }
+     }
+    ]
+   },
+   "want": [
+    "warning:prior-hit-unknown-rule@/rules/0/when/0/prior_hit/rule"
+   ]
+  },
+  {
+   "name": "bad env name",
+   "patch": {
+    "when": [
+     {
+      "env_equals": {
+       "name": "1BAD",
+       "value": "x"
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/when/0/env_equals/name"
+   ]
+  },
+  {
+   "name": "bad verify names",
+   "patch": {
+    "when": [
+     {
+      "verify_fresh": {
+       "names": [
+        "Unit",
+        "ok",
+        "ok"
+       ]
+      }
+     }
+    ]
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/when/0/verify_fresh/names/0",
+    "error:schema-invalid@/rules/0/when/0/verify_fresh/names/2"
+   ]
+  },
+  {
+   "name": "empty shell matcher",
+   "patch": {
+    "match": {
+     "tool": null,
+     "bash": {}
+    }
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/match/bash"
+   ]
+  },
+  {
+   "name": "flags need a dash",
+   "patch": {
+    "match": {
+     "tool": null,
+     "bash": {
+      "flags": [
+       "force"
+      ]
+     }
+    }
+   },
+   "want": [
+    "error:schema-invalid@/rules/0/match/bash/flags/0"
+   ]
+  },
+  {
+   "name": "settings out of range",
+   "file": {
+    "settings": {
+     "inject": {
+      "anchor_every": -1,
+      "batch_after_tools": 20000
+     }
+    }
+   },
+   "want": [
+    "error:schema-invalid@/settings/inject/anchor_every",
+    "error:schema-invalid@/settings/inject/batch_after_tools"
+   ]
+  },
+  {
+   "name": "disabled rule is still validated",
+   "patch": {
+    "enabled": false,
+    "action": "nuke"
+   },
+   "want": [
+    "error:bad-action@/rules/0/action"
+   ]
+  },
+  {
+   "name": "message over the limit",
+   "patch": {
+    "message": "字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字"
+   },
+   "want": [
+    "error:message-too-long@/rules/0/message"
+   ]
+  },
+  {
+   "name": "inject text over the limit",
+   "patch": {
+    "inject": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   "want": [
+    "error:inject-too-long@/rules/0/inject"
+   ]
+  },
+  {
+   "name": "inject text at the limit",
+   "patch": {
+    "inject": "字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字"
+   },
+   "want": []
+  },
+  {
+   "name": "anchor over the limit",
+   "patch": {
+    "inject": {
+     "text": "t",
+     "anchor": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+   },
+   "want": [
+    "error:anchor-too-long@/rules/0/inject/anchor"
+   ]
+  },
+  {
+   "name": "inject budget over 8000",
+   "count": 21,
+   "patch": {
+    "inject": {
+     "text": "字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字",
+     "anchor": "a"
+    }
+   },
+   "want": [
+    "error:inject-budget-exceeded"
+   ]
+  },
+  {
+   "name": "inject budget at 8000",
+   "count": 20,
+   "patch": {
+    "inject": {
+     "text": "字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字",
+     "anchor": "a"
+    }
+   },
+   "want": []
+  },
+  {
+   "name": "anchor budget over 1200 is a warning",
+   "count": 16,
+   "patch": {
+    "inject": {
+     "text": "t",
+     "anchor": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+   },
+   "want": [
+    "warning:inject-budget-exceeded"
+   ]
+  },
+  {
+   "name": "default anchor is the first line cut to 80",
+   "count": 16,
+   "patch": {
+    "inject": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nsecond"
+   },
+   "want": [
+    "warning:inject-budget-exceeded"
+   ]
+  }
+ ]
+}
