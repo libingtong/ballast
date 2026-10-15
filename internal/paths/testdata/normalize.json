@@ -1,0 +1,28 @@
+{
+  "_comment": "U1 expectation table. Each row: goos, base (normalized cwd), home, input, want (internal form). Rows run on every host OS because normalization is pure string logic parameterized by goos.",
+  "normalize": [
+    {"goos": "linux",   "base": "/repo",           "home": "/home/u",        "in": "src/a.go",                 "want": "/repo/src/a.go"},
+    {"goos": "linux",   "base": "/repo",           "home": "/home/u",        "in": "/repo/./src/../b.go",      "want": "/repo/b.go"},
+    {"goos": "linux",   "base": "/repo",           "home": "/home/u",        "in": "~/.ballast/rules.json",    "want": "/home/u/.ballast/rules.json"},
+    {"goos": "darwin",  "base": "/Users/u/r",      "home": "/Users/u",       "in": "A.go",                     "want": "/Users/u/r/A.go"},
+    {"goos": "windows", "base": "c:/Users/x/repo", "home": "c:/Users/x",     "in": "C:\\Users\\X\\repo\\a.go", "want": "c:/Users/X/repo/a.go"},
+    {"goos": "windows", "base": "c:/Users/x/repo", "home": "c:/Users/x",     "in": "src\\b.go",                "want": "c:/Users/x/repo/src/b.go"},
+    {"goos": "windows", "base": "c:/Users/x/repo", "home": "c:/Users/x",     "in": "/c/Users/x/repo/c.go",     "want": "c:/Users/x/repo/c.go"},
+    {"goos": "windows", "base": "c:/Users/x/repo", "home": "c:/Users/x",     "in": "\\\\srv\\share\\d\\e.txt", "want": "//srv/share/d/e.txt"},
+    {"goos": "windows", "base": "c:/Users/x/repo", "home": "c:/Users/x",     "in": "~\\.claude\\settings.json","want": "c:/Users/x/.claude/settings.json"},
+    {"goos": "linux",   "base": "/repo",           "home": "/home/u",        "in": "",                         "want": ""}
+  ],
+  "equal": [
+    {"goos": "windows", "a": "c:/Users/X/a.go", "b": "c:/users/x/A.GO", "want": true},
+    {"goos": "darwin",  "a": "/Users/u/A.go",   "b": "/users/u/a.go",   "want": true},
+    {"goos": "linux",   "a": "/home/u/A.go",    "b": "/home/u/a.go",    "want": false}
+  ],
+  "globs": [
+    {"patterns": ["**/*.go", "!vendor/**"], "ci": false, "cand": ["vendor/x.go"],             "want": false},
+    {"patterns": ["**/*.go", "!vendor/**"], "ci": false, "cand": ["a/b.go"],                  "want": true},
+    {"patterns": ["*.md"],                  "ci": false, "cand": ["docs/x/readme.md"],        "want": true},
+    {"patterns": ["**/.ballast/**"],        "ci": false, "cand": ["/home/u/.ballast/state/x"],"want": true},
+    {"patterns": ["**/.claude/settings*.json"], "ci": true, "cand": ["c:/Users/X/.Claude/Settings.local.json"], "want": true},
+    {"patterns": ["!x"],                    "ci": false, "cand": ["x"],                       "error": "only-negation"}
+  ]
+}

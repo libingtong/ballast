@@ -1,0 +1,8 @@
+{
+  "_comment": "U9 golden stats over audit-sample.jsonl (last line is a deliberately corrupt tail: corrupt=1). Query since 2026-10-01, by rule.",
+  "corrupt": 1,
+  "rows": [
+    {"rule": "no-long-sleep", "action": "deny", "target": "deny", "evals": 10, "hits": 1, "would": 0, "unknown": 1, "sessions": 1},
+    {"rule": "read-before-edit", "action": "log", "target": "deny", "evals": 10, "hits": 0, "would": 2, "unknown": 2, "sessions": 2}
+  ]
+}

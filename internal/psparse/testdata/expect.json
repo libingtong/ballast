@@ -1,0 +1,25 @@
+{
+  "_comment": "U2 PowerShell expectation table (same row format as bashparse/testdata/expect.json).",
+  "cases": [
+    {"src": "Start-Sleep -Seconds 300", "nodes": [{"name": "start-sleep", "sleep": {"seconds": 300, "known": true}}]},
+    {"src": "sleep 300", "nodes": [{"name": "start-sleep", "sleep": {"seconds": 300, "known": true}}]},
+    {"src": "Start-Sleep -Milliseconds 500", "nodes": [{"name": "start-sleep", "sleep": {"seconds": 0.5, "known": true}}]},
+    {"src": "Start-Sleep -Seconds $n", "nodes": [{"name": "start-sleep", "sleep": {"known": false}}]},
+    {"src": "foreach ($i in 1,2,3) { Start-Sleep 30 }", "nodes": [{"name": "start-sleep", "loop": {"kind": "foreach", "bounded": "true"}}]},
+    {"src": "while ($true) { Start-Sleep 300 }", "nodes": [{"name": "start-sleep", "loop": {"kind": "while", "bounded": "false"}}]},
+    {"src": "Set-Content -Path $HOME\\.ballast\\rules.json -Value x", "nodes": [{"name": "set-content", "writes": [{"dynamic": true, "via": "set-content"}]}]},
+    {"src": "'x' | Out-File C:\\Users\\x\\.claude\\settings.json", "nodes": [{"name": "write-output"}, {"name": "out-file", "writes": [{"path": "C:\\Users\\x\\.claude\\settings.json", "via": "out-file"}]}]},
+    {"src": "echo hi > out.txt", "nodes": [{"name": "write-output", "writes": [{"path": "out.txt", "via": "redirect"}]}]},
+    {"src": "git.exe -C ..\\x commit -m m", "nodes": [{"name": "git", "git": {"sub": "commit", "cwd": "..\\x"}}]},
+    {"src": "rm -Recurse -Force .ballast", "nodes": [{"name": "remove-item", "writes": [{"path": ".ballast", "via": "remove-item"}]}]},
+    {"src": "iex $cmd", "unknown": true},
+    {"src": "Get-Content src\\a.go -TotalCount 50", "nodes": [{"name": "get-content", "reads": [{"path": "src\\a.go", "via": "get-content"}]}]},
+    {"src": "gc -Path a.txt", "nodes": [{"name": "get-content", "reads": [{"path": "a.txt", "via": "get-content"}]}]},
+    {"src": "cat a.txt", "nodes": [{"name": "get-content", "reads": [{"path": "a.txt", "via": "get-content"}]}]},
+    {"src": "Select-String -Pattern foo -Path a.go", "nodes": [{"name": "select-string", "reads": [{"path": "a.go", "via": "select-string"}]}]},
+    {"src": "Select-String foo a.go", "nodes": [{"name": "select-string", "reads": [{"path": "a.go", "via": "select-string"}]}]},
+    {"src": "Get-Content $f", "nodes": [{"name": "get-content", "reads": [{"dynamic": true, "via": "get-content"}]}]},
+    {"src": "rg.exe -n Parse src\\x.go", "nodes": [{"name": "rg", "reads": [{"path": "src\\x.go", "via": "rg"}]}]},
+    {"src": "Write-Output 'unterminated", "error": true}
+  ]
+}

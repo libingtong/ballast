@@ -1,0 +1,3 @@
+// Package common holds helpers shared by the client adapters (unit U6).
+// Not imported outside internal/adapter/...
+package common

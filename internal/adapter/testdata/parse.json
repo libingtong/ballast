@@ -1,0 +1,33 @@
+{
+  "_comment": "U6 parse expectations. 'file' is relative to the repo root; 'want' lists asserted model.Event fields (JSON names of model.Event / model.ToolCall). Inline 'stdin' rows cover clients without captured payloads (synthesized from pinrule sources; mark unverified).",
+  "rows": [
+    {"client": "claude-code", "native": "PreToolUse", "file": "docs/facts/payloads/bash-ok/03-PreToolUse.json",
+     "want": {"event": "PreToolUse", "effort": "medium", "tool": {"name": "Bash", "shell": "bash", "command": "echo hello-ballast", "tool_use_id": "toolu_01DwTNHkDtSoGeHhhcksfPsK"}}},
+    {"client": "claude-code", "native": "PostToolUseFailure", "file": "docs/facts/payloads/bash-exit1/04-PostToolUseFailure.json",
+     "want": {"event": "PostToolUseFailure", "exit_code": 3, "is_interrupt": false}},
+    {"client": "claude-code", "native": "PostToolBatch", "file": "docs/facts/payloads/bash-ok/05-PostToolBatch.json",
+     "want": {"event": "PostToolBatch", "batch_calls_len": 1}},
+    {"client": "claude-code", "native": "SubagentStop", "file": "docs/facts/payloads/compact/03-SubagentStop.json",
+     "want": {"event": "SubagentStop", "agent_id": "af7ac9c1f6dab7f09", "agent_type": "", "internal_compact_agent": true}},
+    {"client": "claude-code", "native": "SessionStart", "file": "docs/facts/payloads/compact/04-SessionStart.json",
+     "want": {"event": "SessionStart", "source": "compact"}},
+    {"client": "claude-code", "native": "Stop", "file": "docs/facts/payloads/bash-ok/06-Stop.json",
+     "want": {"event": "Stop", "last_assistant_message": "DONE", "has_last_assistant_message": true}},
+    {"client": "claude-code", "native": "PreToolUse", "stdin": "{\"session_id\":\"s\",\"effort\":\"high\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":7}}",
+     "want": {"event": "PreToolUse", "effort": "high", "tool": {"name": "Bash", "command": ""}}},
+    {"client": "claude-code", "native": "PreToolUse", "stdin": "[1,2]", "error": "bad_input"},
+    {"client": "claude-code", "native": "NoSuchEvent", "stdin": "{}", "error": "unknown_event"},
+    {"client": "codex", "native": "PreToolUse", "stdin": "{\"session_id\":\"s\",\"cwd\":\"/r\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"apply_patch\",\"tool_input\":{\"input\":\"*** Begin Patch\\n*** Update File: a.go\\n@@\\n-x\\n+y\\n*** Add File: b.go\\n+z\\n*** End Patch\\n\"}}",
+     "want": {"tool": {"name": "Edit", "raw_name": "apply_patch", "targets": ["a.go", "b.go"], "target_adds": ["b.go"]}}},
+    {"client": "codex", "native": "PreToolUse", "stdin": "{\"session_id\":\"s\",\"tool_name\":\"exec_command\",\"tool_input\":{\"cmd\":[\"bash\",\"-lc\",\"sleep 300\"]}}",
+     "want": {"tool": {"name": "Bash", "raw_name": "exec_command", "shell": "bash", "command": "bash -lc 'sleep 300'"}}},
+    {"client": "cursor", "native": "beforeShellExecution", "stdin": "{\"conversation_id\":\"c1\",\"command\":\"git commit -m x\",\"cwd\":\"/r\"}",
+     "want": {"event": "PreToolUse", "session_id": "c1", "tool": {"name": "Bash", "command": "git commit -m x"}}},
+    {"client": "cursor", "native": "preToolUse", "stdin": "{\"conversation_id\":\"c1\",\"subagent_id\":\"sa\",\"tool_name\":\"Shell\",\"tool_input\":{\"command\":\"ls\"}}",
+     "want": {"session_id": "c1", "agent_id": "sa", "tool": {"name": "Bash", "raw_name": "Shell"}}},
+    {"client": "hermes", "native": "pre_llm_call", "stdin": "{\"hook_event_name\":\"pre_llm_call\",\"session_id\":\"h\",\"extra\":{\"user_message\":\"hi\",\"is_first_turn\":true}}",
+     "want": {"event": "UserPromptSubmit", "prompt": "hi", "is_first_turn": true}},
+    {"client": "hermes", "native": "pre_tool_call", "stdin": "{\"session_id\":\"h\",\"tool_name\":\"terminal\",\"tool_input\":{\"command\":\"sleep 300\"}}",
+     "want": {"event": "PreToolUse", "tool": {"name": "Bash", "raw_name": "terminal", "command": "sleep 300"}}}
+  ]
+}

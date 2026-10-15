@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/libingtong/ballast/schema/rules.v1.json",
+  "title": "Ballast rule file v1",
+  "description": "Frozen rule format (docs/dsl-semantics.md). Semantic checks that JSON Schema cannot express (RE2 compilation, glob syntax, field applicability per event/tool, client capability matrix, injection budgets across files, example execution) are performed by `ballast lint`. String lengths are counted in Unicode code points, matching the DSL's rune budgets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "rules"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "version": {"const": 1},
+    "settings": {"$ref": "#/$defs/settings"},
+    "rules": {"type": "array", "items": {"$ref": "#/$defs/rule"}}
+  },
+  "$defs": {
+    "nonEmptyString": {"type": "string", "minLength": 1},
+    "stringList": {
+      "description": "A string or a non-empty array of strings; list items are OR-combined.",
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      ]
+    },
+    "globList": {
+      "description": "doublestar glob list; a leading '!' negates (list-level only): a value matches iff it matches >=1 positive and 0 negative patterns.",
+      "$ref": "#/$defs/stringList"
+    },
+    "regexList": {
+      "description": "RE2 regular expressions (Go regexp); no backreferences or lookaround.",
+      "$ref": "#/$defs/stringList"
+    },
+    "cmp": {
+      "description": "Comparison; several keys AND together (range).",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "eq": {"type": "number"}, "ne": {"type": "number"},
+        "gt": {"type": "number"}, "gte": {"type": "number"},
+        "lt": {"type": "number"}, "lte": {"type": "number"}
+      }
+    },
+    "action": {"enum": ["log", "warn", "ask", "deny"]},
+    "event": {"enum": ["PreToolUse", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "Stop", "SubagentStop"]},
+    "client": {"enum": ["claude-code", "codex", "cursor", "hermes"]},
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inject": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "anchor_every": {"type": "integer", "minimum": 0, "maximum": 1000},
+            "batch_after_tools": {"type": "integer", "minimum": 0, "maximum": 10000}
+          }
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "event", "examples"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9-]{3,40}$"},
+        "description": {"type": "string", "maxLength": 500},
+        "enabled": {"type": "boolean", "default": true},
+        "action": {"$ref": "#/$defs/action", "default": "log"},
+        "target": {"$ref": "#/$defs/action"},
+        "event": {"$ref": "#/$defs/event"},
+        "clients": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/client"}},
+        "match": {"$ref": "#/$defs/match"},
+        "when": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/cond"}},
+        "message": {"type": "string", "maxLength": 300},
+        "inject": {"$ref": "#/$defs/inject"},
+        "examples": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/example"}}
+      }
+    },
+    "inject": {
+      "oneOf": [
+        {"type": "string", "minLength": 1, "maxLength": 400},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text"],
+          "properties": {
+            "text": {"type": "string", "minLength": 1, "maxLength": 400},
+            "anchor": {"type": "string", "minLength": 1, "maxLength": 80}
+          }
+        }
+      ]
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "tool": {"$ref": "#/$defs/globList"},
+        "path": {"$ref": "#/$defs/globList"},
+        "agent_type": {"$ref": "#/$defs/globList"},
+        "input_regex": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$"},
+          "additionalProperties": {"$ref": "#/$defs/regexList"}
+        },
+        "run_in_background": {"type": "boolean"},
+        "bash": {"$ref": "#/$defs/shellMatch"},
+        "ps": {"$ref": "#/$defs/shellMatch"},
+        "text": {"$ref": "#/$defs/textMatch"}
+      }
+    },
+    "shellMatch": {
+      "description": "All present fields must hold on the SAME command node.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "cmd": {"$ref": "#/$defs/globList"},
+        "args_regex": {"$ref": "#/$defs/regexList"},
+        "flags": {"$ref": "#/$defs/stringList"},
+        "git_sub": {"$ref": "#/$defs/stringList"},
+        "sleep_s": {"$ref": "#/$defs/cmp"},
+        "async": {"type": "boolean"},
+        "in_loop": {"type": "boolean"},
+        "loop_bounded": {"type": "boolean"},
+        "in_subst": {"type": "boolean"},
+        "sudo": {"type": "boolean"},
+        "dynamic": {"type": "boolean"},
+        "writes": {"$ref": "#/$defs/globList"},
+        "pipe_from": {"$ref": "#/$defs/globList"},
+        "pipe_to": {"$ref": "#/$defs/globList"}
+      }
+    },
+    "textMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": {"enum": ["last_assistant_message", "prompt", "tool_response", "error"]},
+        "preprocess": {"type": "array", "uniqueItems": true, "items": {"enum": ["strip_code_blocks", "strip_quotes"]}},
+        "window": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "tail_chars": {"type": "integer", "minimum": 1},
+            "head_chars": {"type": "integer", "minimum": 1}
+          }
+        },
+        "regex": {"$ref": "#/$defs/regexList"},
+        "not_regex": {"$ref": "#/$defs/regexList"},
+        "cjk_ratio": {"$ref": "#/$defs/cmp"},
+        "count_regex": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["regex"],
+          "minProperties": 2,
+          "properties": {
+            "regex": {"type": "string", "minLength": 1},
+            "eq": {"type": "number"}, "ne": {"type": "number"},
+            "gt": {"type": "number"}, "gte": {"type": "number"},
+            "lt": {"type": "number"}, "lte": {"type": "number"}
+          }
+        }
+      },
+      "anyOf": [
+        {"required": ["regex"]}, {"required": ["not_regex"]},
+        {"required": ["cjk_ratio"]}, {"required": ["count_regex"]}
+      ]
+    },
+    "pathArg": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"path": {"type": "string", "minLength": 1}}
+    },
+    "empty": {"type": "object", "additionalProperties": false, "maxProperties": 0},
+    "cond": {
+      "description": "Exactly one key: a combinator (all/any/not) or one predicate of the closed vocabulary.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "all": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/cond"}},
+        "any": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/cond"}},
+        "not": {"$ref": "#/$defs/cond"},
+        "read_this_session": {"$ref": "#/$defs/pathArg"},
+        "path_exists": {"$ref": "#/$defs/pathArg"},
+        "verify_fresh": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"names": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$"}}}
+        },
+        "verify_failed_since_read": {"$ref": "#/$defs/pathArg"},
+        "tool_count_since_inject": {"$ref": "#/$defs/cmp"},
+        "prev_prompt_regex": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["regex"],
+          "properties": {"regex": {"type": "string", "minLength": 1}}
+        },
+        "prior_hit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rule"],
+          "minProperties": 2,
+          "properties": {
+            "rule": {"type": "string", "pattern": "^[a-z0-9-]{3,40}$"},
+            "eq": {"type": "number"}, "ne": {"type": "number"},
+            "gt": {"type": "number"}, "gte": {"type": "number"},
+            "lt": {"type": "number"}, "lte": {"type": "number"}
+          }
+        },
+        "env_equals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+            "value": {"type": "string"}
+          }
+        },
+        "branch_glob": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["patterns"],
+          "properties": {"patterns": {"$ref": "#/$defs/globList"}}
+        },
+        "is_subagent": {"$ref": "#/$defs/empty"}
+      }
+    },
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expect", "input"],
+      "properties": {
+        "name": {"type": "string"},
+        "expect": {"enum": ["hit", "miss", "unknown"]},
+        "client": {"$ref": "#/$defs/client"},
+        "native": {"type": "string", "minLength": 1},
+        "input": {"type": "object", "description": "Hook stdin payload subset in the client's native format; session_id/cwd/hook_event_name are filled in when absent."},
+        "fixture": {"$ref": "#/$defs/fixture"}
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cwd": {"type": "string"},
+        "home": {"type": "string"},
+        "goos": {"enum": ["linux", "darwin", "windows"]},
+        "read": {"type": "array", "items": {"type": "string"}},
+        "exists": {"type": "array", "items": {"type": "string"}},
+        "verify_fresh": {"enum": ["true", "false", "unknown"]},
+        "failed_since_read": {"type": "array", "items": {"type": "string"}},
+        "env": {"type": "object", "additionalProperties": {"type": "string"}},
+        "branch": {"type": "string"},
+        "tool_count_since_inject": {"type": "integer", "minimum": 0},
+        "prev_prompt": {"type": "string"},
+        "prior_hits": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "not_a_repo": {"type": "boolean"}
+      }
+    }
+  }
+}

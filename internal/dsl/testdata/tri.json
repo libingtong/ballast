@@ -1,0 +1,19 @@
+{
+  "_comment": "U3 expectation table for three-valued evaluation. 'when' outcomes per binding are given directly; the evaluator must combine AND within a binding and OR across bindings; an unknown matcher with no positive binding yields unknown.",
+  "and": [["true","true","true"],["true","false","false"],["true","unknown","unknown"],["false","unknown","false"],["unknown","unknown","unknown"]],
+  "or":  [["true","unknown","true"],["false","unknown","unknown"],["false","false","false"]],
+  "not": [["true","false"],["false","true"],["unknown","unknown"]],
+  "bindings": [
+    {"desc": "two targets, one exists-and-unread",      "per_binding": [["true","true"],["true","false"]],      "want": "true"},
+    {"desc": "two targets, one unknown, one false",     "per_binding": [["unknown"],["false"]],                  "want": "unknown"},
+    {"desc": "no binding (path globs matched nothing)", "per_binding": [],                                      "want": "false"},
+    {"desc": "shell parse error, no positive node",     "per_binding": [], "matcher_unknown": true,             "want": "unknown"},
+    {"desc": "parse ok but eval present, one node hits","per_binding": [["true"]], "matcher_unknown": true,     "want": "true"}
+  ],
+  "arbitration": [
+    {"client": "claude-code", "event": "PreToolUse", "hits": [["a","warn"],["b","deny"],["c","log"]], "want_action": "deny", "want_reason_ids": ["b"]},
+    {"client": "claude-code", "event": "PreToolUse", "hits": [["a","warn"],["b","warn"]],             "want_action": "warn", "want_reason_ids": ["a","b"]},
+    {"client": "codex",       "event": "PreToolUse", "hits": [["a","ask"]],                           "want_action": "log",  "want_degraded": ["a"]},
+    {"client": "claude-code", "event": "PostToolUse","hits": [["a","log"]],                           "want_action": "log",  "want_labels": ["would_warn"]}
+  ]
+}

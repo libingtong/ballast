@@ -9,3 +9,4 @@ coverage.*
 /.claude/settings.local.json
 /tmp/
 /.m0tmp/
+/.wt/

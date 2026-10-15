@@ -1,0 +1,46 @@
+{
+  "$schema": "../rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "read-before-edit",
+      "description": "pinrule read_first 的 DSL 版:修改已存在的文件前,必须在本 agent 的本次会话中读过它(Read 类工具,或 PostToolUse 时登记的只读 shell 命令读取目标,Codex 依赖后者)。多文件补丁中任一已存在的目标未读即命中;新建文件(path_exists=false)豁免。",
+      "action": "deny",
+      "event": "PreToolUse",
+      "match": {"tool": ["Edit", "MultiEdit", "Write", "NotebookEdit"]},
+      "when": [
+        {"path_exists": {}},
+        {"not": {"read_this_session": {}}}
+      ],
+      "message": "该文件已存在但本会话尚未读取。请先读取它(Read 工具,或 cat、sed -n、head 等只读命令),再修改。",
+      "inject": {"text": "修改已存在的文件前,必须先在本会话中读过它(Read 工具,或 cat、sed -n、head 等只读 shell 命令);新建文件不受此限制。", "anchor": "改已有文件前先读"},
+      "examples": [
+        {
+          "name": "edit an existing file that was not read",
+          "expect": "hit",
+          "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "y"}},
+          "fixture": {"exists": ["src/a.go"]}
+        },
+        {
+          "name": "edit after reading",
+          "expect": "miss",
+          "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "y"}},
+          "fixture": {"exists": ["src/a.go"], "read": ["src/a.go"]}
+        },
+        {
+          "name": "create a new file",
+          "expect": "miss",
+          "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/new.go", "content": "package src\n"}},
+          "fixture": {"exists": []}
+        },
+        {
+          "name": "codex apply_patch: one of two existing targets unread",
+          "expect": "hit",
+          "client": "codex",
+          "input": {"tool_name": "apply_patch", "tool_input": {"input": "*** Begin Patch\n*** Update File: src/a.go\n@@\n-x\n+y\n*** Update File: src/b.go\n@@\n-x\n+y\n*** End Patch\n"}},
+          "fixture": {"exists": ["src/a.go", "src/b.go"], "read": ["src/a.go"]}
+        }
+      ]
+    }
+  ]
+}

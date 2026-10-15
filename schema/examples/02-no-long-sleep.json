@@ -1,0 +1,29 @@
+{
+  "$schema": "../rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "no-long-sleep",
+      "description": "前台 sleep ≥ 60s 即命中(任一命令节点);shell 的 & 后台与工具级 run_in_background 都放行。bash 与 ps 两个变体按工具的 shell 种类分派。",
+      "action": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "run_in_background": false,
+        "bash": {"cmd": "sleep", "sleep_s": {"gte": 60}, "async": false},
+        "ps": {"cmd": "start-sleep", "sleep_s": {"gte": 60}, "async": false}
+      },
+      "message": "不要在前台 sleep 60 秒以上。需要等待时用 run_in_background,或用有界的短轮询。",
+      "inject": "不要在前台 sleep 60 秒以上;需要等待时用 run_in_background 或短间隔轮询。",
+      "examples": [
+        {"name": "plain sleep 300", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "sleep 300"}}},
+        {"name": "wrapped by timeout", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "timeout 400 sleep 5m"}}},
+        {"name": "shell background &", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "sleep 300 &"}}},
+        {"name": "tool-level background", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "sleep 300", "run_in_background": true}}},
+        {"name": "bounded retry loop with short sleeps", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "for i in 1 2 3; do curl -f localhost:8080 && break; sleep 1; done"}}},
+        {"name": "quoted text is not a command", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "echo \"sleep 300\""}}},
+        {"name": "dynamic duration is unknown", "expect": "unknown", "input": {"tool_name": "Bash", "tool_input": {"command": "sleep $WAIT"}}},
+        {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Start-Sleep -Seconds 300"}}}
+      ]
+    }
+  ]
+}

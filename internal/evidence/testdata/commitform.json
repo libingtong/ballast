@@ -1,0 +1,19 @@
+{
+  "_comment": "U8 ParseCommitForm table. Unit test (U8): build model.GitInvocation from 'git' directly (JSON tags of model.GitInvocation/model.Word) and call ParseCommitForm(git, \"/repo\"); compare with 'want' (omitted fields = zero). No bashparse dependency. 'cmd' is the source command: U12's integration test parses it with bashparse, takes the git node and must reach the same 'want' (and the same 'git' for sub/cwd/args).",
+  "rows": [
+    {"cmd": "git commit -m x", "git": {"sub": "commit", "args": [{"lit": "-m"}, {"lit": "x"}]}, "want": {"kind": "plain"}},
+    {"cmd": "git commit --amend --no-edit", "git": {"sub": "commit", "args": [{"lit": "--amend"}, {"lit": "--no-edit"}]}, "want": {"kind": "plain", "amend": true}},
+    {"cmd": "git commit -am x", "git": {"sub": "commit", "args": [{"lit": "-am"}, {"lit": "x"}]}, "want": {"kind": "all"}},
+    {"cmd": "git commit --all -m x", "git": {"sub": "commit", "args": [{"lit": "--all"}, {"lit": "-m"}, {"lit": "x"}]}, "want": {"kind": "all"}},
+    {"cmd": "git commit -m x -- src/a.go", "git": {"sub": "commit", "args": [{"lit": "-m"}, {"lit": "x"}, {"lit": "--"}, {"lit": "src/a.go"}]}, "want": {"kind": "paths", "paths": ["src/a.go"]}},
+    {"cmd": "git commit src/a.go src/b.go -m x", "git": {"sub": "commit", "args": [{"lit": "src/a.go"}, {"lit": "src/b.go"}, {"lit": "-m"}, {"lit": "x"}]}, "want": {"kind": "paths", "paths": ["src/a.go", "src/b.go"]}},
+    {"cmd": "git commit -i src/a.go -m x", "git": {"sub": "commit", "args": [{"lit": "-i"}, {"lit": "src/a.go"}, {"lit": "-m"}, {"lit": "x"}]}, "want": {"kind": "paths", "paths": ["src/a.go"], "include": true}},
+    {"cmd": "git commit -o src/a.go -m x", "git": {"sub": "commit", "args": [{"lit": "-o"}, {"lit": "src/a.go"}, {"lit": "-m"}, {"lit": "x"}]}, "want": {"kind": "paths", "paths": ["src/a.go"]}},
+    {"cmd": "git commit -F msg.txt", "git": {"sub": "commit", "args": [{"lit": "-F"}, {"lit": "msg.txt"}]}, "want": {"kind": "plain"}},
+    {"cmd": "git commit --fixup=abc123", "git": {"sub": "commit", "args": [{"lit": "--fixup=abc123"}]}, "want": {"kind": "plain"}},
+    {"cmd": "git -C ../x commit -m x", "git": {"sub": "commit", "cwd": "../x", "args": [{"lit": "-m"}, {"lit": "x"}]}, "want": {"kind": "plain", "dir": "/x"}},
+    {"cmd": "git commit -p", "git": {"sub": "commit", "args": [{"lit": "-p"}]}, "want": {"kind": "unparseable"}},
+    {"cmd": "git commit --interactive", "git": {"sub": "commit", "args": [{"lit": "--interactive"}]}, "want": {"kind": "unparseable"}},
+    {"cmd": "git commit -m \"$MSG\" $FILES", "git": {"sub": "commit", "args": [{"lit": "-m"}, {"lit": "$MSG", "dynamic": true}, {"lit": "$FILES", "dynamic": true}]}, "want": {"kind": "unparseable"}}
+  ]
+}

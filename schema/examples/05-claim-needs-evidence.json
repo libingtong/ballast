@@ -1,0 +1,37 @@
+{
+  "$schema": "../rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "claim-needs-evidence",
+      "description": "Stop 时若最终回复(去掉代码块与引用、取末尾 600 字)声称完成/测试通过,而当前工作树没有新鲜的 verify 证据,则命中。影子模式:action=log,target=deny。",
+      "action": "log",
+      "target": "deny",
+      "event": "Stop",
+      "match": {
+        "text": {
+          "source": "last_assistant_message",
+          "preprocess": ["strip_code_blocks", "strip_quotes"],
+          "window": {"tail_chars": 600},
+          "regex": [
+            "(?i)\\b(all tests pass(ed)?|tests? (are )?passing|done|completed|finished)\\b",
+            "(已完成|全部通过|测试通过|搞定|完成了)"
+          ],
+          "not_regex": [
+            "(?i)\\bnot (yet )?(done|completed|finished)\\b",
+            "(未完成|还没|尚未|没有完成)"
+          ]
+        }
+      },
+      "when": [{"not": {"verify_fresh": {}}}],
+      "message": "你声称已完成或测试通过,但当前工作树没有一致的 ballast verify 通过记录。请运行 `ballast verify` 并用 --status 确认结果。",
+      "examples": [
+        {"name": "claims done without evidence", "expect": "hit", "input": {"last_assistant_message": "修复已完成,全部通过。", "stop_hook_active": false}, "fixture": {"verify_fresh": "false"}},
+        {"name": "claims done with fresh evidence", "expect": "miss", "input": {"last_assistant_message": "All tests passed. Done."}, "fixture": {"verify_fresh": "true"}},
+        {"name": "explicitly not done", "expect": "miss", "input": {"last_assistant_message": "The refactor is not done yet; tests still fail."}, "fixture": {"verify_fresh": "false"}},
+        {"name": "claim only inside a code block", "expect": "miss", "input": {"last_assistant_message": "Run this:\n```\necho done\n```\nThen tell me the output."}, "fixture": {"verify_fresh": "false"}},
+        {"name": "outside a repo", "expect": "unknown", "input": {"last_assistant_message": "Done."}, "fixture": {"not_a_repo": true, "verify_fresh": "unknown"}}
+      ]
+    }
+  ]
+}

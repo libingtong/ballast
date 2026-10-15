@@ -1,0 +1,36 @@
+{
+  "$schema": "../rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "no-tamper",
+      "description": "禁止改写 Ballast 状态/规则与客户端 hook 配置。文件工具用其目标路径,Bash/PowerShell 用解析出的写入目标(重定向、tee、cp/mv、sed -i、Set-Content、Out-File 等);路径同时按原始与 EvalSymlinks 解析后两种形式比较。T0 下只是检测,不是安全边界。",
+      "action": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "tool": ["Edit", "MultiEdit", "Write", "NotebookEdit", "Bash", "PowerShell"],
+        "path": [
+          "**/.ballast/**",
+          "~/.claude/settings*.json",
+          "**/.claude/settings*.json",
+          "~/.codex/hooks.json",
+          "~/.codex/config.toml",
+          "~/.cursor/hooks.json",
+          "~/.cursor/rules/ballast.mdc",
+          "~/.hermes/config.yaml"
+        ]
+      },
+      "message": "不得改写 Ballast 的规则、状态、证据,或 AI 客户端的 hook 配置。如需调整规则,请让用户手动修改。",
+      "inject": "不得改写 ~/.ballast、<repo>/.ballast 或任何 AI 客户端的 hook 配置文件。",
+      "examples": [
+        {"name": "Edit user rules", "expect": "hit", "input": {"tool_name": "Write", "tool_input": {"file_path": "/home/user/.ballast/rules.json", "content": "{}"}}},
+        {"name": "redirect into state", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "echo '{}' > ~/.ballast/state/x/y/main.json"}}},
+        {"name": "sed -i on repo settings", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "sed -i 's/ballast//' .claude/settings.json"}}},
+        {"name": "PowerShell Set-Content", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Set-Content -Path /home/user/.claude/settings.json -Value '{}'"}}},
+        {"name": "reading is fine", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "cat ~/.ballast/rules.json"}}},
+        {"name": "ordinary source edit", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "a", "new_string": "b"}}},
+        {"name": "dynamic write target", "expect": "unknown", "input": {"tool_name": "Bash", "tool_input": {"command": "echo x > \"$TARGET\""}}}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "../rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "chinese-plain",
+      "description": "pinrule chinese_plain 的 examples 版(个人偏好,不进默认包):用户上一条提示是中文,而回复正文(去掉代码块)中文占比 < 30% 时提醒。",
+      "action": "warn",
+      "event": "Stop",
+      "clients": ["claude-code"],
+      "match": {
+        "text": {
+          "source": "last_assistant_message",
+          "preprocess": ["strip_code_blocks"],
+          "cjk_ratio": {"lt": 0.3}
+        }
+      },
+      "when": [{"prev_prompt_regex": {"regex": "\\p{Han}"}}],
+      "message": "用户使用中文提问,请用中文回复(代码与命令除外)。",
+      "examples": [
+        {"name": "Chinese prompt, English reply", "expect": "hit", "input": {"last_assistant_message": "All done, the build is green now."}, "fixture": {"prev_prompt": "帮我修一下构建"}},
+        {"name": "Chinese prompt, Chinese reply", "expect": "miss", "input": {"last_assistant_message": "构建已经修好,`go test ./...` 全部通过。"}, "fixture": {"prev_prompt": "帮我修一下构建"}},
+        {"name": "English prompt", "expect": "miss", "input": {"last_assistant_message": "Fixed."}, "fixture": {"prev_prompt": "please fix the build"}},
+        {"name": "reply is only code", "expect": "miss", "input": {"last_assistant_message": "```\ngo test ./...\n```"}, "fixture": {"prev_prompt": "给我命令"}}
+      ]
+    }
+  ]
+}

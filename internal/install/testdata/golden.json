@@ -1,0 +1,51 @@
+{
+  "_comment": "U10 golden Plan outputs from an ABSENT file, binary /opt/ballast/bin/ballast, goos linux. Normative entry shapes (architecture §5). JSON files are written with 2-space indentation and a trailing newline; key order of existing documents is preserved, new keys appended.",
+  "claude-code": {
+    "path": "<CLAUDE_CONFIG_DIR>/settings.json",
+    "after": {
+      "hooks": {
+        "SessionStart": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "SessionStart"]}]}],
+        "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "UserPromptSubmit"]}]}],
+        "PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "PreToolUse"]}]}],
+        "PostToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "PostToolUse"]}]}],
+        "PostToolUseFailure": [{"matcher": "*", "hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "PostToolUseFailure"]}]}],
+        "PostToolBatch": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "PostToolBatch"]}]}],
+        "Stop": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "Stop"]}]}],
+        "SubagentStop": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "SubagentStop"]}]}],
+        "SessionEnd": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "SessionEnd"]}]}]
+      }
+    },
+    "manifest_key_example": "hooks.PreToolUse[0].hooks[0]",
+    "notes": "Never write async, onFailure or timeout. The managed entry object hashed is the inner {type,command,args}; the outer group {matcher,hooks} is created by install and removed when its hooks list becomes empty."
+  },
+  "codex": {
+    "path": "<CODEX_HOME>/hooks.json",
+    "after": {
+      "hooks": {
+        "SessionStart": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast hook --client codex --event SessionStart", "timeout": 30}]}],
+        "PreToolUse": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast hook --client codex --event PreToolUse", "timeout": 30}]}]
+      }
+    },
+    "config_toml_append": "[features]\nhooks = true\n",
+    "trust_toml_example": "[hooks.state.'<CODEX_HOME>/hooks.json:pre_tool_use:0:0']\nenabled = true\ntrusted_hash = \"sha256:<CodexTrustHash>\"\n",
+    "notes": "All 6 Codex natives are written (abbreviated here). Trust entries only with --codex-trust; recorded as ManagedFlag and removed on uninstall. features.hooks is recorded with set_by_ballast and never turned off automatically."
+  },
+  "cursor": {
+    "path": "<INSTALL_ROOT>/.cursor/hooks.json",
+    "after": {
+      "version": 1,
+      "hooks": {
+        "preToolUse": [{"command": "/opt/ballast/bin/ballast hook --client cursor --event preToolUse"}],
+        "stop": [{"command": "/opt/ballast/bin/ballast hook --client cursor --event stop", "loop_limit": 10}],
+        "subagentStop": [{"command": "/opt/ballast/bin/ballast hook --client cursor --event subagentStop", "loop_limit": 10}]
+      }
+    },
+    "mdc_path": "<INSTALL_ROOT>/.cursor/rules/ballast.mdc",
+    "notes": "All 10 Cursor natives are written (abbreviated). version:1 is added only when absent and removed on uninstall only if install created the file."
+  },
+  "hermes": {
+    "path": "<HERMES_HOME>/config.yaml",
+    "after_text": "hooks:\n  pre_tool_call:\n    - command: \"/opt/ballast/bin/ballast hook --client hermes --event pre_tool_call\"\n      timeout: 30\n",
+    "notes": "Only the top-level hooks: block is touched; existing lines outside it are byte-identical. Our list items are inserted at the end of each event list (or a new event key is appended at the end of the block). Flow-style/anchor-using hooks blocks ⇒ ErrSettingsParse."
+  }
+}

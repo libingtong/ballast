@@ -1,0 +1,30 @@
+{
+  "_comment": "U4 inject golden cases. 'state' fakes SessionState fields; 'want_kinds' is Injection.Kinds in order; 'want_contains' are substrings of Text; 'want_empty' means Text == \"\".",
+  "rules": [
+    {"id": "read-before-edit", "action": "deny", "inject": {"text": "修改已存在的文件前必须先 Read 它。", "anchor": "改文件前先读"}},
+    {"id": "no-long-sleep", "action": "deny", "inject": "不要在前台 sleep 60 秒以上;需要等待时用 run_in_background。"},
+    {"id": "no-tamper", "action": "deny"}
+  ],
+  "cases": [
+    {"desc": "SessionStart full", "client": "claude-code", "event": "SessionStart", "state": {},
+     "want_kinds": ["full"], "want_contains": ["[read-before-edit] 修改已存在的文件前必须先 Read 它。", "[no-long-sleep]"]},
+    {"desc": "UPS anchor every prompt", "client": "claude-code", "event": "UserPromptSubmit", "state": {"prompt_count": 4, "generation": "SAME"},
+     "want_kinds": ["anchor"], "want_contains": ["[read-before-edit] 改文件前先读", "[no-long-sleep] 不要在前台 sleep 60 秒以上;需要等待时用 run_in_background。"]},
+    {"desc": "PostToolBatch below threshold", "client": "claude-code", "event": "PostToolBatch", "state": {"tool_count_since_inject": 24, "generation": "SAME"},
+     "want_empty": true},
+    {"desc": "PostToolBatch at threshold", "client": "claude-code", "event": "PostToolBatch", "state": {"tool_count_since_inject": 25, "generation": "SAME"},
+     "want_kinds": ["anchor"]},
+    {"desc": "Codex mid-turn carrier is PostToolUse", "client": "codex", "event": "PostToolUse", "state": {"tool_count_since_inject": 30, "generation": "SAME"},
+     "want_kinds": ["anchor"]},
+    {"desc": "generation changed: promote", "client": "claude-code", "event": "UserPromptSubmit",
+     "state": {"generation": "OLD", "rule_digest": {"read-before-edit": "log", "no-long-sleep": "deny", "gone-rule": "warn"}},
+     "want_kinds": ["gen_summary", "anchor"], "want_contains": ["read-before-edit: log → deny", "gone-rule"]},
+    {"desc": "job results reported", "client": "claude-code", "event": "UserPromptSubmit", "state": {"generation": "SAME", "prompt_count": 0},
+     "new_jobs": [{"job_id": "20261016T010203-a1b2c3", "name": "test", "outcome": "pass", "s_end": "cf2116c703d8e60883512ee029b93a3c0b7919e4"}],
+     "want_kinds": ["job_results", "anchor"], "want_contains": ["verify test: pass (job=20261016T010203-a1b2c3, S=cf2116c703d8)"]},
+    {"desc": "Hermes full on first pre_llm_call", "client": "hermes", "event": "UserPromptSubmit", "state": {}, "is_first_turn": true,
+     "want_kinds": ["full"]},
+    {"desc": "Hermes PostToolUse cannot carry context", "client": "hermes", "event": "PostToolUse", "state": {"tool_count_since_inject": 99},
+     "want_empty": true}
+  ]
+}

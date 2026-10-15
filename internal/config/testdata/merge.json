@@ -1,0 +1,33 @@
+{
+  "_comment": "U4 merge expectation table. Each layer lists [id, enabled] in file order; 'want_active' is the merged order; notices are [kind, layer, id].",
+  "cases": [
+    {
+      "desc": "org immutable; repo wins over user; user adds",
+      "org":  [["read-before-edit", true]],
+      "repo": [["read-before-edit", true], ["no-long-sleep", true]],
+      "user": [["no-long-sleep", true], ["my-rule", true]],
+      "want_active": ["read-before-edit", "no-long-sleep", "my-rule"],
+      "want_notices": [["rule_shadowed", "repo", "read-before-edit"], ["rule_shadowed", "user", "no-long-sleep"]]
+    },
+    {
+      "desc": "user cannot disable an upper rule",
+      "org": [],
+      "repo": [["no-tamper", true]],
+      "user": [["no-tamper", false]],
+      "want_active": ["no-tamper"],
+      "want_notices": [["rule_shadowed", "user", "no-tamper"]]
+    },
+    {
+      "desc": "12 cap counts enabled only; org never dropped",
+      "org":  [["o-01", true], ["o-02", true], ["o-03", true], ["o-04", true], ["o-05", true], ["o-06", true]],
+      "repo": [["r-01", true], ["r-02", false], ["r-03", true], ["r-04", true], ["r-05", true]],
+      "user": [["u-01", true], ["u-02", true], ["u-03", true]],
+      "want_active": ["o-01", "o-02", "o-03", "o-04", "o-05", "o-06", "r-01", "r-03", "r-04", "r-05", "u-01", "u-02"],
+      "want_notices": [["rule_dropped", "user", "u-03"]]
+    }
+  ],
+  "settings": [
+    {"org": {"inject": {"anchor_every": 3}}, "repo": {"inject": {"anchor_every": 1, "batch_after_tools": 10}}, "user": {"inject": {"batch_after_tools": 50}},
+     "want": {"inject": {"anchor_every": 3, "batch_after_tools": 10}}}
+  ]
+}

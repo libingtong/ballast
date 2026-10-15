@@ -1,0 +1,7 @@
+{"ts":"2026-10-10T01:00:00Z","v":1,"type":"hit","session_id":"s1","repo_inst":"aaaa","event":"PreToolUse","tool":"Bash","rule_id":"no-long-sleep","rule_layer":"repo","generation":"g1","action":"deny","target":"deny","decision":"deny","matched":"bash node 0: sleep 300"}
+{"ts":"2026-10-10T01:05:00Z","v":1,"type":"hit","session_id":"s1","repo_inst":"aaaa","event":"PreToolUse","tool":"Edit","rule_id":"read-before-edit","rule_layer":"user","generation":"g1","action":"log","target":"deny","decision":"would_deny","matched":"path: /repo/a.go"}
+{"ts":"2026-10-10T01:10:00Z","v":1,"type":"eval_summary","session_id":"s1","repo_inst":"aaaa","event":"Stop","generation":"g1","evals":{"no-long-sleep":{"evals":10,"hits":1,"would":0,"unknown":1},"read-before-edit":{"evals":4,"hits":0,"would":1,"unknown":0}}}
+{"ts":"2026-10-11T02:00:00Z","v":1,"type":"hit","session_id":"s2","repo_inst":"bbbb","event":"PreToolUse","tool":"Write","rule_id":"read-before-edit","rule_layer":"user","generation":"g1","action":"log","target":"deny","decision":"would_deny","matched":"path: /repo/b.go"}
+{"ts":"2026-10-11T02:30:00Z","v":1,"type":"eval_summary","session_id":"s2","repo_inst":"bbbb","event":"SessionEnd","generation":"g1","evals":{"read-before-edit":{"evals":6,"hits":0,"would":1,"unknown":2}}}
+{"ts":"2026-10-11T02:31:00Z","v":1,"type":"diag","session_id":"s2","detail":{"diag":"lock_timeout","wait_us":20000}}
+{"ts":"2026-10-11T02:3

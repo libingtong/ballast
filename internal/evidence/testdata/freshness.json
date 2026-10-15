@@ -1,0 +1,24 @@
+{
+  "_comment": "U8 freshness suite (plan B3). Each case is a script of steps against a fixture repo (git init + 3 tracked files + project.json with required 'test' and optional 'lint', exempt ['**/*.md','docs/**']). Step verbs: edit <path>, add-u, add <path>, stage <path>, commit, verify <name> pass|fail|timeout (synthesized VerifyRecord with S computed by TreeS at that moment), verify-running <name>, mutate-during-verify <path>, checkout <ref>, reset-hard, other-session-edit <path>, worktree-b. 'fresh' is the expected verify_fresh value of a PreToolUse FreshQuery{Kind: commit, Git: <git node of argv>, Cwd: fixture root}. 'check' is the expected `verify --check` exit code (commit mode) IN THE PRE-COMMIT ENVIRONMENT: the harness installs a fixture .git/hooks/pre-commit that copies $GIT_INDEX_FILE to a temp file, records its own cwd, and exits 1 (aborting the commit); it then runs `git <argv>` and calls evidence.Check(opt, <recorded cwd>, CheckOptions{Mode: commit, IndexFile: <copy>}) and maps the result with the architecture §7 table. Hence for 'git commit -a'/'git commit <paths>' C is the index git was about to commit (p3 ⇒ 0). Case 7: '../other' is a SECOND fixture repo (sibling directory, same project.json, no verify records); git runs the hook with cwd = ../other, so check uses ../other's project.json and evidence (no record ⇒ 11), and verify_fresh resolves the -C target to ../other (no_record ⇒ false). Case 6: 'worktree-b' adds a linked worktree (git worktree add) whose repo_inst differs; argv runs there.",
+  "counter_examples": [
+    {"id": 1,  "desc": "another session edits after pass", "steps": ["verify test pass", "other-session-edit src/a.go"], "argv": "git commit -am x", "fresh": "false", "check": 10},
+    {"id": 2,  "desc": "checkout/reset after pass", "steps": ["edit src/a.go", "add-u", "verify test pass", "reset-hard"], "argv": "git commit -m x", "fresh": "false", "check": 10},
+    {"id": 3,  "desc": "file modified during verify (S_start != S_end)", "steps": ["mutate-during-verify src/a.go"], "argv": "git commit -am x", "fresh": "false", "check": 10},
+    {"id": 4,  "desc": "later failed verify supersedes earlier pass", "steps": ["verify test pass", "verify test fail"], "argv": "git commit -m x", "fresh": "false", "check": 10},
+    {"id": 5,  "desc": "only non-required verify passed", "steps": ["verify lint pass"], "argv": "git commit -m x", "fresh": "false", "check": 11},
+    {"id": 6,  "desc": "verified in worktree A, commit in worktree B", "steps": ["verify test pass", "worktree-b"], "argv": "git commit -m x", "fresh": "false", "check": 11},
+    {"id": 7,  "desc": "git -C other commit", "steps": ["verify test pass"], "argv": "git -C ../other commit -m x", "fresh": "false", "check": 11},
+    {"id": 8,  "desc": "verify timed out", "steps": ["verify test timeout"], "argv": "git commit -m x", "fresh": "false", "check": 10},
+    {"id": 9,  "desc": "partial staging: unstaged tracked change, plain commit", "steps": ["edit src/a.go", "edit src/b.go", "stage src/a.go", "verify test pass"], "argv": "git commit -m x", "fresh": "false", "check": 10},
+    {"id": 10, "desc": "new file added after verify", "steps": ["verify test pass", "edit src/new.go", "add src/new.go"], "argv": "git commit -m x", "fresh": "false", "check": 10},
+    {"id": 11, "desc": "same-name job still running", "steps": ["verify test pass", "verify-running test"], "argv": "git commit -m x", "fresh": "unknown", "check": 13}
+  ],
+  "positives": [
+    {"id": "p1", "desc": "only exempt files changed after pass", "steps": ["verify test pass", "edit README.md", "edit docs/x.txt", "add-u"], "argv": "git commit -m x", "fresh": "true", "check": 0},
+    {"id": "p2", "desc": "add -u everything then plain commit", "steps": ["edit src/a.go", "add-u", "verify test pass"], "argv": "git commit -m x", "fresh": "true", "check": 0},
+    {"id": "p3", "desc": "commit -a with worktree verified", "steps": ["edit src/a.go", "verify test pass"], "argv": "git commit -a -m x", "fresh": "true", "check": 0}
+  ],
+  "consistency": [
+    {"desc": "S == C(all) == C(plain after add -u) == git add -u && git rm --cached exempt && git write-tree", "steps": ["edit src/a.go", "edit README.md", "edit src/b.go"]}
+  ]
+}

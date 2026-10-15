@@ -1,0 +1,27 @@
+{
+  "$schema": "../rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "evidence-before-commit",
+      "description": "git commit 前必须有与待提交内容(C)一致的 required verify 通过记录。verify 进行中、非 git 仓库、无法解析的提交参数 → unknown(放行并审计)。",
+      "action": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "bash": {"cmd": "git", "git_sub": "commit"},
+        "ps": {"cmd": "git", "git_sub": "commit"}
+      },
+      "when": [{"not": {"verify_fresh": {}}}],
+      "message": "提交前需要与待提交内容一致的 ballast verify 通过记录:运行 `ballast verify`,用 `ballast verify --status` 确认通过后再提交。有未暂存改动时先 `git add -u`,或 `git stash --keep-index` 后重新 verify。`git add` 与 `git commit` 请分两次执行(同一条命令里的 add 在判定时尚未执行)。",
+      "inject": {"text": "git commit 前必须有与待提交内容一致的 `ballast verify` 通过记录(后台运行,用 --status 查询)。", "anchor": "提交前先 ballast verify"},
+      "examples": [
+        {"name": "stale evidence", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'fix'"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "fresh evidence", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'fix'"}}, "fixture": {"verify_fresh": "true"}},
+        {"name": "verify still running", "expect": "unknown", "input": {"tool_name": "Bash", "tool_input": {"command": "git -C ../x commit -am wip"}}, "fixture": {"verify_fresh": "unknown"}},
+        {"name": "add and commit in one command (add has not run yet)", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git add -A && git commit -m fix"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "not a commit", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git status && git diff"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git.exe commit -m x"}}, "fixture": {"verify_fresh": "false"}}
+      ]
+    }
+  ]
+}
