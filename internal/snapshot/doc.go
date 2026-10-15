@@ -76,9 +76,11 @@
 //   - Entries are filtered (exempt) before they are refreshed, so exempt
 //     files are never read; the result is identical because add -u followed
 //     by rm --cached commutes with filtering.
-//   - Racy test: an index entry whose mtime is in the same second as (or
-//     later than) the index file mtime is rehashed. git's own test is at
-//     least as strict, so rehashing a superset cannot change a result.
+//   - Racy test, both halves of git's protection: an index entry whose
+//     mtime is in the same second as (or later than) the index file mtime is
+//     rehashed, and so is a size-0 entry whose id is not the empty blob
+//     (git's smudged-entry rule in ce_match_stat_basic; it is the only
+//     protection left once the index has been rewritten).
 //     Sub-second fields are compared when the index carries them; dev is
 //     compared as the contract says; uid/gid are not (chown changes ctime).
 //   - assume-unchanged entries are left alone (git add -u does so, even for
@@ -98,12 +100,15 @@
 //     and attributes (HOME, XDG_CONFIG_HOME, GIT_CONFIG_GLOBAL,
 //     GIT_CONFIG_SYSTEM, GIT_CONFIG_NOSYSTEM) and the fallback's TMPDIR.
 //   - Gitlinks (submodules; mode 160000) are handled like git's add -u: a
-//     missing directory is a removal and a directory without ".git"
-//     (uninitialised submodule) keeps the recorded commit. A checked-out
-//     submodule (".git" present), a gitlink replaced by a non-directory and
-//     a tracked file or symlink replaced by a directory holding ".git" (git
-//     records the nested repository's HEAD as a gitlink) fall back; these
-//     are fallback conditions beyond the list above.
+//     missing directory is a removal, a directory without ".git"
+//     (uninitialised submodule) keeps the recorded commit, and a checked-out
+//     submodule records its HEAD, resolved natively (".git" directory or
+//     gitfile; detached id, or a loose ref or packed-refs entry). A HEAD
+//     that cannot be resolved that way (unborn, reftable, sha256, a
+//     "commondir" layout, unusual ref names), a gitlink replaced by a
+//     non-directory and a tracked file or symlink replaced by a directory
+//     holding ".git" (git records the nested repository's HEAD as a gitlink)
+//     fall back; these are fallback conditions beyond the list above.
 //   - TreeC paths form: pathspecs are relative to CommitForm.Dir when set
 //     (else the repo root), absolute paths inside the repo are accepted
 //     (symlinks in them and in Dir are resolved), "--only" is approximated

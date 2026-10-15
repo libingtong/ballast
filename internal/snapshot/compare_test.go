@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -204,16 +205,63 @@ func scenarios() []scenario {
 			addGitlinks(f, "vendor/sub")
 			f.write("vendor/sub/untracked.txt", "u\n")
 		}},
-		{name: "checked-out submodule", fallback: true, mutate: func(f *fixture) {
+		{name: "checked-out submodule", mutate: func(f *fixture) {
 			nestedRepo(f, "vendor/sub")
 			f.git("add", "vendor/sub")
 			f.git("commit", "-qm", "add submodule")
 			f.gitIn(f.path("vendor/sub"), nil, "commit", "-q", "--allow-empty", "-m", "moved on")
 		}},
-		{name: "checked-out submodule unchanged", fallback: true, mutate: func(f *fixture) {
+		{name: "checked-out submodule unchanged", mutate: func(f *fixture) {
 			nestedRepo(f, "vendor/sub")
 			f.git("add", "vendor/sub")
 			f.git("commit", "-qm", "add submodule")
+		}},
+		{name: "checked-out submodule with packed refs", mutate: func(f *fixture) {
+			nestedRepo(f, "vendor/sub")
+			f.git("add", "vendor/sub")
+			f.git("commit", "-qm", "add submodule")
+			f.gitIn(f.path("vendor/sub"), nil, "commit", "-q", "--allow-empty", "-m", "moved on")
+			f.gitIn(f.path("vendor/sub"), nil, "pack-refs", "--all")
+		}},
+		{name: "checked-out submodule on a detached head", mutate: func(f *fixture) {
+			nestedRepo(f, "vendor/sub")
+			f.git("add", "vendor/sub")
+			f.git("commit", "-qm", "add submodule")
+			f.gitIn(f.path("vendor/sub"), nil, "commit", "-q", "--allow-empty", "-m", "moved on")
+			f.gitIn(f.path("vendor/sub"), nil, "checkout", "-q", "--detach", "HEAD~1")
+			f.write("src/a.go", "package ui\n")
+		}},
+		{name: "checked-out submodule with a gitfile", mutate: func(f *fixture) {
+			nestedRepo(f, "vendor/sub")
+			f.git("add", "vendor/sub")
+			f.git("commit", "-qm", "add submodule")
+			f.gitIn(f.path("vendor/sub"), nil, "commit", "-q", "--allow-empty", "-m", "moved on")
+			moved := f.path(".git/modules/sub")
+			if err := os.MkdirAll(filepath.Dir(moved), 0o755); err != nil {
+				f.t.Fatal(err)
+			}
+			if err := os.Rename(f.path("vendor/sub/.git"), moved); err != nil {
+				f.t.Fatal(err)
+			}
+			f.write("vendor/sub/.git", "gitdir: "+moved+"\n")
+		}},
+		{name: "checked-out submodule with unborn head", fallback: true, mutate: func(f *fixture) {
+			addGitlinks(f, "vendor/sub")
+			f.gitIn(f.dir, nil, "init", "-q", "-b", "main", f.path("vendor/sub"))
+			f.write("src/a.go", "package ui\n")
+		}},
+		{name: "checked-out submodule with dirty content", mutate: func(f *fixture) {
+			nestedRepo(f, "vendor/sub")
+			f.git("add", "vendor/sub")
+			f.git("commit", "-qm", "add submodule")
+			f.write("vendor/sub/inner.txt", "modified\n")
+			f.write("vendor/sub/untracked.txt", "u\n")
+		}},
+		{name: "checked-out submodule exempt", exempt: []string{"vendor/**"}, mutate: func(f *fixture) {
+			nestedRepo(f, "vendor/sub")
+			f.git("add", "vendor/sub")
+			f.git("commit", "-qm", "add submodule")
+			f.gitIn(f.path("vendor/sub"), nil, "commit", "-q", "--allow-empty", "-m", "moved on")
 		}},
 		{name: "gitlink replaced by file", fallback: true, mutate: func(f *fixture) {
 			addGitlinks(f, "vendor/sub")

@@ -166,6 +166,39 @@ func TestStatCacheTrustAndRacy(t *testing.T) {
 		}
 	})
 
+	t.Run("smudged entry of an empty file is rehashed", func(t *testing.T) {
+		f := newFixture(t)
+		f.write("a.txt", "aaaa\n")
+		f.write("e.txt", "")
+		f.commitAll("init")
+		if out, err := f.gitStdin(f.dir, nil, "STALE\n", "hash-object", "-w", "--stdin"); err != nil {
+			t.Fatal(out, err)
+		}
+		real := f.nativeS(nil)
+		i := f.entryIndex("e.txt")
+		// The index is newer than the entry, so only the size-0 rule
+		// can reveal that the recorded id is not the empty blob.
+		f.craft(2, time.Now().Add(time.Hour), func(e []bentry) {
+			if e[i].size != 0 || e[i].sha != emptyBlobID {
+				t.Fatalf("setup: e.txt entry size=%d sha=%x", e[i].size, e[i].sha)
+			}
+			e[i].sha = stale
+		})
+		want, err := f.referenceErr(true, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := f.nativeS(nil); got != real || got != want {
+			t.Errorf("%s (real %s)", describe(got, want), real)
+		}
+	})
+
+	t.Run("empty blob id constant", func(t *testing.T) {
+		if hashBlob(nil) != emptyBlobID {
+			t.Errorf("emptyBlobID = %x, want %x", emptyBlobID, hashBlob(nil))
+		}
+	})
+
 	// Each recorded stat field that differs from the file forces a rehash.
 	for _, tc := range []struct {
 		name   string

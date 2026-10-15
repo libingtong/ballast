@@ -540,3 +540,32 @@ func TestResolveSpecsArgs(t *testing.T) {
 		}
 	}
 }
+
+func TestSafeRefNameAndHexID(t *testing.T) {
+	for ref, want := range map[string]bool{
+		"refs/heads/main":      true,
+		"refs/heads/a/b-c_d.e": true,
+		"refs/heads/../x":      false,
+		"refs/heads//x":        false,
+		"refs/heads/.x":        false,
+		"refs/heads/x.lock":    false,
+		"refs/heads/x.":        false,
+		"refs/heads/a b":       false,
+		"refs/heads/a\\b":      false,
+		"refs/heads/a@{1}":     false,
+	} {
+		if got := safeRefName(ref); got != want {
+			t.Errorf("safeRefName(%q) = %v, want %v", ref, got, want)
+		}
+	}
+	for s, want := range map[string]bool{
+		strings.Repeat("a", 40): true,
+		strings.Repeat("a", 64): false,
+		strings.Repeat("g", 40): false,
+		"":                      false,
+	} {
+		if _, ok := parseHexID(s); ok != want {
+			t.Errorf("parseHexID(%q) ok = %v, want %v", s, ok, want)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package snapshot
 import (
 	"bytes"
 	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -340,18 +341,96 @@ func (r *refresher) refreshOne(e *IndexEntry) (keep bool, err error) {
 }
 
 // refreshGitlink handles a gitlink entry whose path is a directory. Git
-// keeps the recorded commit unless the directory is a checked-out repository
-// (it then records that HEAD), so an uninitialised submodule is unchanged
-// and a repository present on disk is left to git.
+// records the HEAD of a checked-out submodule and keeps the recorded commit
+// of an uninitialised one. A HEAD that cannot be resolved with certainty
+// (reftable, sha256, worktree-style layouts, odd refs) is left to git.
 func (r *refresher) refreshGitlink(e *IndexEntry, abs string) (bool, error) {
 	has, err := r.hasDotGit(abs)
 	if err != nil {
 		return false, fallbackf("lstat %s/.git: %v", e.Path, err)
 	}
-	if has {
-		return false, fallbackf("checked-out submodule %s", e.Path)
+	if !has {
+		return true, nil
 	}
+	head, ok := r.submoduleHead(abs)
+	if !ok {
+		return false, fallbackf("checked-out submodule %s: HEAD not natively resolvable", e.Path)
+	}
+	e.SHA = head
 	return true, nil
+}
+
+// submoduleHead resolves HEAD of the repository checked out in dir: a
+// detached id, or a symbolic ref found as a loose ref or in packed-refs.
+func (r *refresher) submoduleHead(dir string) ([20]byte, bool) {
+	var zero [20]byte
+	gitDir, found, err := candidateGitDir(r.fs, dir)
+	if err != nil || !found {
+		return zero, false
+	}
+	if _, err := r.fs.Lstat(filepath.Join(gitDir, "commondir")); !isMissing(err) {
+		return zero, false
+	}
+	data, err := r.fs.ReadFile(filepath.Join(gitDir, "HEAD"))
+	if err != nil {
+		return zero, false
+	}
+	line := strings.TrimRight(string(data), "\r\n")
+	for depth := 0; depth < 2; depth++ {
+		ref, symbolic := strings.CutPrefix(line, "ref: ")
+		if !symbolic {
+			return parseHexID(line)
+		}
+		ref = strings.TrimSpace(ref)
+		if !strings.HasPrefix(ref, "refs/") || !safeRefName(ref) {
+			return zero, false
+		}
+		if data, err = r.fs.ReadFile(filepath.Join(gitDir, filepath.FromSlash(ref))); err == nil {
+			line = strings.TrimRight(string(data), "\r\n")
+			if _, sym := strings.CutPrefix(line, "ref: "); sym {
+				continue
+			}
+			return parseHexID(line)
+		} else if !isMissing(err) {
+			return zero, false
+		}
+		packed, err := r.fs.ReadFile(filepath.Join(gitDir, "packed-refs"))
+		if err != nil {
+			return zero, false
+		}
+		for _, l := range strings.Split(string(packed), "\n") {
+			if id, name, ok := strings.Cut(strings.TrimRight(l, "\r"), " "); ok && name == ref {
+				return parseHexID(id)
+			}
+		}
+		return zero, false
+	}
+	return zero, false
+}
+
+func parseHexID(s string) ([20]byte, bool) {
+	var out [20]byte
+	if len(s) != 40 {
+		return out, false
+	}
+	if _, err := hex.Decode(out[:], []byte(s)); err != nil {
+		return out, false
+	}
+	return out, true
+}
+
+// safeRefName accepts only plain ref names (no dot components, no empty
+// components, no backslashes or control characters).
+func safeRefName(ref string) bool {
+	if strings.ContainsAny(ref, "\\:*?[~^ \x00\x7f") || strings.Contains(ref, "..") || strings.Contains(ref, "@{") {
+		return false
+	}
+	for _, c := range strings.Split(ref, "/") {
+		if c == "" || c[0] == '.' || strings.HasSuffix(c, ".lock") {
+			return false
+		}
+	}
+	return !strings.HasSuffix(ref, ".")
 }
 
 // hasDotGit reports whether dir contains a .git entry (file or directory).
@@ -402,6 +481,12 @@ func (r *refresher) statClean(e *IndexEntry, st *fileStat) bool {
 	if uint32(st.size) != e.Size || st.mtime.sec != e.MtimeS {
 		return false
 	}
+	// git smudges racily clean entries to size 0 when it writes the index;
+	// ce_match_stat_basic treats a size-0 entry that is not the empty blob
+	// as changed, and after a rewrite that is the only protection left.
+	if e.Size == 0 && e.SHA != emptyBlobID {
+		return false
+	}
 	if r.nsec && st.mtime.nsec != e.MtimeNS {
 		return false
 	}
@@ -415,8 +500,6 @@ func (r *refresher) statClean(e *IndexEntry, st *fileStat) bool {
 	}
 	// Racy git: an entry modified in the same second as the index was
 	// written (or later) cannot be trusted even if its stat data match.
-	// git's own test is at least this strict, so rehashing a superset of
-	// its racy entries cannot change the result.
 	if e.MtimeS >= r.idxTime.sec {
 		return false
 	}

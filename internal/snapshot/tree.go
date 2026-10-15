@@ -10,6 +10,12 @@ import (
 	"github.com/libingtong/ballast/internal/model"
 )
 
+// emptyBlobID is the sha1 object id of the empty blob.
+var emptyBlobID = [20]byte{
+	0xe6, 0x9d, 0xe2, 0x9b, 0xb2, 0xd1, 0xd6, 0x43, 0x4b, 0x8b,
+	0x29, 0xae, 0x77, 0x5a, 0xd8, 0xc2, 0xe4, 0x8c, 0x53, 0x91,
+}
+
 // hashBlob returns the git object id of a blob with the given content.
 func hashBlob(content []byte) [20]byte {
 	h := sha1.New()
