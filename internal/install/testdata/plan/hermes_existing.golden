@@ -1,0 +1,30 @@
+# hermes config
+model:
+  name: nous   # keep me
+terminal:
+  shell: |
+    hooks:
+      not a real section
+hooks:
+  # user hooks
+  pre_tool_call:
+    - command: "/usr/local/bin/guard"
+      timeout: 5
+    - command: "/opt/ballast/bin/ballast hook --client hermes --event pre_tool_call"
+      timeout: 30
+  on_session_end:
+  - command: /usr/local/bin/bye
+  - command: "/opt/ballast/bin/ballast hook --client hermes --event on_session_end"
+    timeout: 30
+  on_session_start:
+    - command: "/opt/ballast/bin/ballast hook --client hermes --event on_session_start"
+      timeout: 30
+  pre_llm_call:
+    - command: "/opt/ballast/bin/ballast hook --client hermes --event pre_llm_call"
+      timeout: 30
+  post_tool_call:
+    - command: "/opt/ballast/bin/ballast hook --client hermes --event post_tool_call"
+      timeout: 30
+
+logging:
+  level: info

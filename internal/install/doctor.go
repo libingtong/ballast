@@ -53,9 +53,7 @@ type DoctorOptions struct {
 }
 
 // Doctor runs every check. The CLI exits 1 when any check is fail.
-func Doctor(opt DoctorOptions) []Check {
-	panic("unimplemented: install.Doctor")
-}
+func Doctor(opt DoctorOptions) []Check { return runDoctor(opt) }
 
 // OrgRenderOptions configures `ballast org render`.
 type OrgRenderOptions struct {
@@ -76,5 +74,5 @@ type OrgRenderOptions struct {
 // (M0b-unverified). With Write+IAmAdmin and root it writes
 // <ManagedDir>/managed-settings.d/ballast.json; otherwise prints only.
 func OrgRender(lay layout.Layout, fsys sys.FS, opt OrgRenderOptions) ([]byte, error) {
-	panic("unimplemented: install.OrgRender")
+	return renderOrg(lay, fsys, opt)
 }

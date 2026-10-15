@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {"command": "/bin/user-stop"},
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event stop",
+        "loop_limit": 10
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event sessionStart"
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event beforeSubmitPrompt"
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event preToolUse"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event beforeShellExecution"
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event beforeMCPExecution"
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event beforeReadFile"
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event postToolUse"
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event afterAgentResponse"
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": "/opt/ballast/bin/ballast hook --client cursor --event subagentStop",
+        "loop_limit": 10
+      }
+    ]
+  }
+}
