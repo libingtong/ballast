@@ -1,0 +1,22 @@
+{
+  "session_id": "0b9f24b8-1fc4-4c07-92e9-d3a2b1d2eb57",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/0b9f24b8-1fc4-4c07-92e9-d3a2b1d2eb57.jsonl",
+  "cwd": "<probe-root>/work/updatedinput-no-allow",
+  "prompt_id": "666a30f4-a26b-42cb-8ec7-3e7c49da7b9a",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolBatch",
+  "tool_calls": [
+    {
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "touch probe_a.txt",
+        "description": "Create empty file probe_a.txt"
+      },
+      "tool_use_id": "toolu_01XfSNUCgSZS7iZfyAvVARCw",
+      "tool_response": "(Bash completed with no output)"
+    }
+  ]
+}

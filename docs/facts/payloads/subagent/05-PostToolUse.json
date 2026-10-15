@@ -1,0 +1,30 @@
+{
+  "session_id": "37e6127b-5b70-4c04-ab77-3bee1444231b",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b.jsonl",
+  "cwd": "<probe-root>/work/subagent",
+  "prompt_id": "8e82ea8e-53d8-43a8-9596-57881aab0420",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Run echo from-subagent",
+    "prompt": "Use the Bash tool to run the shell command: echo from-subagent\n\nThen report the exact output the command produced. Do nothing else.",
+    "subagent_type": "general-purpose"
+  },
+  "tool_response": {
+    "isAsync": true,
+    "status": "async_launched",
+    "agentId": "abd5c6b4f8110fdb4",
+    "description": "Run echo from-subagent",
+    "resolvedModel": "claude-haiku-5-5",
+    "prompt": "Use the Bash tool to run the shell command: echo from-subagent\n\nThen report the exact output the command produced. Do nothing else.",
+    "outputFile": "<tmp>/-private-tmp-claude-501-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b/tasks/abd5c6b4f8110fdb4.output",
+    "canReadOutputFile": true,
+    "canContinueAgent": true
+  },
+  "tool_use_id": "toolu_01Tg2AdtuJW8pDiyYqf3BaPK",
+  "duration_ms": 7
+}

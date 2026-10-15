@@ -1,0 +1,7 @@
+{
+  "session_id": "0b9f24b8-1fc4-4c07-92e9-d3a2b1d2eb57",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/0b9f24b8-1fc4-4c07-92e9-d3a2b1d2eb57.jsonl",
+  "cwd": "<probe-root>/work/updatedinput-no-allow",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}

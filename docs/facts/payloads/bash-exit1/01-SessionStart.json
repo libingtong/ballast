@@ -1,0 +1,7 @@
+{
+  "session_id": "c3c69172-4a28-4fb7-9ca1-48dff0f94118",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/c3c69172-4a28-4fb7-9ca1-48dff0f94118.jsonl",
+  "cwd": "<probe-root>/work/bash-exit1",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}

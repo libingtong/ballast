@@ -1,0 +1,17 @@
+{
+  "session_id": "f98be0dc-8773-4059-a134-a8cee9506e24",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/f98be0dc-8773-4059-a134-a8cee9506e24.jsonl",
+  "cwd": "<probe-root>/work/bash-startfail",
+  "prompt_id": "82a2d343-26a5-4d70-a389-7b2a1821e9ac",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "nonexistent-ballast-cmd --x",
+    "description": "Run the specified nonexistent command once"
+  },
+  "tool_use_id": "toolu_01MuGHTXPRcmt8YAJV9hBZBp"
+}

@@ -1,0 +1,15 @@
+{
+  "session_id": "a26b1d18-0a83-411b-ba2f-59717df6df12",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/a26b1d18-0a83-411b-ba2f-59717df6df12.jsonl",
+  "cwd": "<probe-root>/work/exit1-json-deny",
+  "prompt_id": "d3e68775-a405-44e4-8819-a54385ebf66a",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "The command failed. `touch probe_a.txt` was blocked before it ran, with the hook error `PreToolUse:Bash hook error: probe deny via exit1`, so no file was created. I did not retry or try another approach, as you asked.",
+  "background_tasks": [],
+  "session_crons": []
+}

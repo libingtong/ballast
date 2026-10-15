@@ -1,0 +1,15 @@
+{
+  "session_id": "0d8a59c8-9d7e-4aab-b60f-b689664c22a0",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/0d8a59c8-9d7e-4aab-b60f-b689664c22a0.jsonl",
+  "cwd": "<probe-root>/work/warn-additionalcontext",
+  "prompt_id": "580a7cf6-f64b-4a11-bf57-f845181fd873",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "DONE",
+  "background_tasks": [],
+  "session_crons": []
+}

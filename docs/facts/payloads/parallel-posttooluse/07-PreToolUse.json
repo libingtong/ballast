@@ -1,0 +1,16 @@
+{
+  "session_id": "e1d22c6a-fd1f-4acd-847c-72e7665b1638",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/e1d22c6a-fd1f-4acd-847c-72e7665b1638.jsonl",
+  "cwd": "<probe-root>/work/parallel-posttooluse",
+  "prompt_id": "23ad150b-f63b-4676-bdcf-bf118455a8ea",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "<probe-root>/work/parallel-posttooluse/f3.txt"
+  },
+  "tool_use_id": "toolu_0157kapdWJtX6yCsGVvvx8Ff"
+}

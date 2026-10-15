@@ -1,0 +1,9 @@
+{
+  "session_id": "37e6127b-5b70-4c04-ab77-3bee1444231b",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b.jsonl",
+  "cwd": "<probe-root>/work/subagent",
+  "prompt_id": "8e82ea8e-53d8-43a8-9596-57881aab0420",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Use the Agent (Task) tool to launch a general-purpose subagent whose job is to run the shell command \"echo from-subagent\" with Bash and report the output. Then reply DONE."
+}

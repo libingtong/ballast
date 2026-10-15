@@ -1,0 +1,19 @@
+{
+  "session_id": "37e6127b-5b70-4c04-ab77-3bee1444231b",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b.jsonl",
+  "cwd": "<probe-root>/work/subagent",
+  "prompt_id": "8e82ea8e-53d8-43a8-9596-57881aab0420",
+  "permission_mode": "default",
+  "agent_id": "abd5c6b4f8110fdb4",
+  "agent_type": "general-purpose",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo from-subagent",
+    "description": "Echo test string"
+  },
+  "tool_use_id": "toolu_011mVFx88QCs17EHu2KPcYad"
+}

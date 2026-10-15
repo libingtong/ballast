@@ -1,0 +1,17 @@
+{
+  "session_id": "c3c69172-4a28-4fb7-9ca1-48dff0f94118",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/c3c69172-4a28-4fb7-9ca1-48dff0f94118.jsonl",
+  "cwd": "<probe-root>/work/bash-exit1",
+  "prompt_id": "fc547b32-fcd1-4c7c-a0be-05eed802763f",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "sh -c 'echo out; echo err >&2; exit 3'",
+    "description": "Run the specified sh command that prints out and err and exits 3"
+  },
+  "tool_use_id": "toolu_01Dvj2WxGahX1eNcdXFmEaXN"
+}

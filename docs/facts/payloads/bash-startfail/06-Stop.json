@@ -1,0 +1,15 @@
+{
+  "session_id": "f98be0dc-8773-4059-a134-a8cee9506e24",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/f98be0dc-8773-4059-a134-a8cee9506e24.jsonl",
+  "cwd": "<probe-root>/work/bash-startfail",
+  "prompt_id": "82a2d343-26a5-4d70-a389-7b2a1821e9ac",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "DONE\n\nThe command failed with exit code 127: `zsh: command not found: nonexistent-ballast-cmd`. I ran it once and did not retry.",
+  "background_tasks": [],
+  "session_crons": []
+}

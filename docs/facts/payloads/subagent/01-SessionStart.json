@@ -1,0 +1,7 @@
+{
+  "session_id": "37e6127b-5b70-4c04-ab77-3bee1444231b",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b.jsonl",
+  "cwd": "<probe-root>/work/subagent",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}

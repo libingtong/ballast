@@ -1,0 +1,25 @@
+{
+  "session_id": "3be7fb21-1184-4aa6-8a3b-66332d2c33bd",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/3be7fb21-1184-4aa6-8a3b-66332d2c33bd.jsonl",
+  "cwd": "<probe-root>/work/bash-ok",
+  "prompt_id": "1caff056-b5fe-43fa-b47e-e43f534f781e",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo hello-ballast",
+    "description": "Echo hello-ballast string"
+  },
+  "tool_response": {
+    "stdout": "hello-ballast",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  },
+  "tool_use_id": "toolu_01DwTNHkDtSoGeHhhcksfPsK",
+  "duration_ms": 662
+}

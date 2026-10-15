@@ -1,0 +1,24 @@
+{
+  "session_id": "71479d82-2fdf-4f0e-9e94-61d68a13cece",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/71479d82-2fdf-4f0e-9e94-61d68a13cece.jsonl",
+  "cwd": "<probe-root>/work/updatedinput-allow",
+  "prompt_id": "8103a41b-c023-4c7d-b758-062076e1ba7f",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "touch probe_b.txt"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": true
+  },
+  "tool_use_id": "toolu_01SKwgiL2TGpWBbPWafDC8Hb",
+  "duration_ms": 464
+}

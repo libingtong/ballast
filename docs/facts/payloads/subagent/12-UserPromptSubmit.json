@@ -1,0 +1,9 @@
+{
+  "session_id": "37e6127b-5b70-4c04-ab77-3bee1444231b",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b.jsonl",
+  "cwd": "<probe-root>/work/subagent",
+  "prompt_id": "e7c6fb04-9b9d-4383-bee8-6ff6584a9c83",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "<task-notification>\n<task-id>abd5c6b4f8110fdb4</task-id>\n<tool-use-id>toolu_01Tg2AdtuJW8pDiyYqf3BaPK</tool-use-id>\n<output-file><tmp>/-private-tmp-claude-501-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b/tasks/abd5c6b4f8110fdb4.output</output-file>\n<status>completed</status>\n<summary>Agent \"Run echo from-subagent\" finished</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>\n<result>The command output was exactly: `from-subagent`</result>\n<usage><subagent_tokens>13261</subagent_tokens><tool_uses>1</tool_uses><duration_ms>6115</duration_ms></usage>\n</task-notification>"
+}

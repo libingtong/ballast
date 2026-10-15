@@ -1,0 +1,7 @@
+{
+  "session_id": "e1d22c6a-fd1f-4acd-847c-72e7665b1638",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/e1d22c6a-fd1f-4acd-847c-72e7665b1638.jsonl",
+  "cwd": "<probe-root>/work/parallel-posttooluse",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}

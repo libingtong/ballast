@@ -1,0 +1,23 @@
+{
+  "session_id": "37e6127b-5b70-4c04-ab77-3bee1444231b",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/37e6127b-5b70-4c04-ab77-3bee1444231b.jsonl",
+  "cwd": "<probe-root>/work/subagent",
+  "prompt_id": "8e82ea8e-53d8-43a8-9596-57881aab0420",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "The subagent is still running the `echo from-subagent` command. I'll reply DONE with its output once it reports back.",
+  "background_tasks": [
+    {
+      "id": "abd5c6b4f8110fdb4",
+      "type": "subagent",
+      "status": "running",
+      "description": "Run echo from-subagent",
+      "agent_type": "general-purpose"
+    }
+  ],
+  "session_crons": []
+}

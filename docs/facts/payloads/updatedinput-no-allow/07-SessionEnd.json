@@ -1,0 +1,8 @@
+{
+  "session_id": "0b9f24b8-1fc4-4c07-92e9-d3a2b1d2eb57",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/0b9f24b8-1fc4-4c07-92e9-d3a2b1d2eb57.jsonl",
+  "cwd": "<probe-root>/work/updatedinput-no-allow",
+  "prompt_id": "666a30f4-a26b-42cb-8ec7-3e7c49da7b9a",
+  "hook_event_name": "SessionEnd",
+  "reason": "other"
+}

@@ -1,0 +1,11 @@
+{
+  "session_id": "9ea44634-b4c0-4890-b35e-cfa9fd6251c2",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/9ea44634-b4c0-4890-b35e-cfa9fd6251c2.jsonl",
+  "cwd": "<probe-root>/work/compact",
+  "hook_event_name": "SessionStart",
+  "source": "resume",
+  "seconds_since_last_response": 3,
+  "context_tokens": 17684,
+  "prompt_cache_likely_expired": false,
+  "estimated_cache_write_usd": 0.0035
+}

@@ -1,0 +1,22 @@
+{
+  "session_id": "a26b1d18-0a83-411b-ba2f-59717df6df12",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-501-<project-key>/a26b1d18-0a83-411b-ba2f-59717df6df12.jsonl",
+  "cwd": "<probe-root>/work/exit1-json-deny",
+  "prompt_id": "d3e68775-a405-44e4-8819-a54385ebf66a",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolBatch",
+  "tool_calls": [
+    {
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "touch probe_a.txt",
+        "description": "Create empty file probe_a.txt"
+      },
+      "tool_use_id": "toolu_011QDMbwTJqkrR2gtt4MScfp",
+      "tool_response": "PreToolUse:Bash hook error: probe deny via exit1"
+    }
+  ]
+}
