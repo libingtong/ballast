@@ -598,6 +598,8 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - **compact 时的内部 agent**(`agent_type` 为空的 SubagentStop):默认忽略。
 - **Stop 族的 warn**:映射到 `systemMessage`,已由 M0a 实测确认。
 - **gob 规则缓存**:可选;热更新所需的 stat 检测必须保留。
+- **git 回退路径**:用 `exec.CommandContext` 并按进程组 kill;临时索引不得写入用户的 `.git/`;看门狗退出前完成清理(来自 M0c 审计)。
+- **bench 门槛**:同时满足 `Bad==0`、样本数齐全、`p95≤30`;每个 `--client` 至少有一个 PreToolUse 场景(来自 M0c 审计)。
 
 ## 已定事项(无需再裁决)
 - 合并语义:采用 B4 的方案,org 整体不可变,原问题 3 的备选方案升格为正式方案,以消除歧义。
