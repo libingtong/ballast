@@ -10,7 +10,9 @@ import (
 	"io/fs"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
@@ -158,7 +160,27 @@ type refresher struct {
 	dirs    map[string]bool
 	lastDir string
 	lastOK  bool
+	// pre holds the leaf Lstat results of a parallel prefetch (see
+	// prefetch); cur is the one belonging to the entry being refreshed.
+	pre []leafStat
+	cur *leafStat
 }
+
+// leafStat is one prefetched Lstat result of a tracked entry's path.
+type leafStat struct {
+	fi   fs.FileInfo
+	err  error
+	done bool
+}
+
+// prefetchMin is the smallest entry count worth the goroutine start-up;
+// below it the serial loop is faster. A variable so tests can force either
+// path.
+var prefetchMin = 2048
+
+// prefetchWorkers caps the Lstat parallelism (a file system serves ~2.5x
+// more lstat/s from 4 threads than from one; more does not help).
+const prefetchWorkers = 4
 
 func newRefresher(opt Options, repo *model.RepoInfo, set *repoSettings, idx *Index, attrDirs map[string]bool) *refresher {
 	r := &refresher{
@@ -186,6 +208,11 @@ func newRefresher(opt Options, repo *model.RepoInfo, set *repoSettings, idx *Ind
 }
 
 func (r *refresher) run(ents []IndexEntry, req request) ([]IndexEntry, error) {
+	if len(ents) >= prefetchMin {
+		if err := r.prefetch(ents, req); err != nil {
+			return nil, err
+		}
+	}
 	out := ents[:0]
 	for i := range ents {
 		e := ents[i]
@@ -196,6 +223,10 @@ func (r *refresher) run(ents []IndexEntry, req request) ([]IndexEntry, error) {
 			out = append(out, e)
 			continue
 		}
+		r.cur = nil
+		if r.pre != nil && r.pre[i].done {
+			r.cur = &r.pre[i]
+		}
 		keep, err := r.refreshOne(&e)
 		if err != nil {
 			return nil, err
@@ -205,6 +236,47 @@ func (r *refresher) run(ents []IndexEntry, req request) ([]IndexEntry, error) {
 		}
 	}
 	return out, nil
+}
+
+// prefetch issues the leaf Lstat of every tracked entry from a few
+// goroutines. Only the system calls run in parallel: refreshOne still makes
+// every decision serially, in index order, and merely takes the Lstat result
+// from here instead of asking the file system itself. A path whose parent
+// turns out not to be a plain directory is never consulted (refreshOne
+// drops the entry before it gets to the leaf), so a result obtained through
+// a symlinked parent is simply unused. The call is read-only.
+func (r *refresher) prefetch(ents []IndexEntry, req request) error {
+	workers := min(prefetchWorkers, runtime.GOMAXPROCS(0))
+	if workers < 2 {
+		return nil
+	}
+	pre := make([]leafStat, len(ents))
+	var wg sync.WaitGroup
+	chunk := (len(ents) + workers - 1) / workers
+	for w := 0; w < workers; w++ {
+		lo, hi := w*chunk, min((w+1)*chunk, len(ents))
+		if lo >= hi {
+			break
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := lo; i < hi; i++ {
+				if (i-lo)&0xff == 0 && r.opt.deadlineExceeded() {
+					return // the serial loop reports the deadline
+				}
+				e := &ents[i]
+				if e.Flags&flagAssumeValid != 0 || !safeWorktreePath(e.Path) || (req.limited && !matchAny(req.specs, e.Path)) {
+					continue
+				}
+				fi, err := r.fs.Lstat(filepath.Join(r.root, filepath.FromSlash(e.Path)))
+				pre[i] = leafStat{fi: fi, err: err, done: true}
+			}
+		}()
+	}
+	wg.Wait()
+	r.pre = pre
+	return nil
 }
 
 func matchAny(pats []pathPattern, name string) bool {
@@ -279,7 +351,12 @@ func (r *refresher) refreshOne(e *IndexEntry) (keep bool, err error) {
 		return false, err
 	}
 	abs := filepath.Join(r.root, filepath.FromSlash(e.Path))
-	fi, err := r.fs.Lstat(abs)
+	var fi fs.FileInfo
+	if r.cur != nil {
+		fi, err = r.cur.fi, r.cur.err
+	} else {
+		fi, err = r.fs.Lstat(abs)
+	}
 	if err != nil {
 		if isMissing(err) {
 			return false, nil
