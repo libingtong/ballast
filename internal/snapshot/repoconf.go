@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/libingtong/ballast/internal/model"
@@ -138,23 +139,45 @@ func loadSettings(fsys sys.FS, env sys.Env, repo *model.RepoInfo) *repoSettings 
 		s.applyFile(fsys, env, f, 0)
 	}
 	if env != nil {
-		for _, k := range []string{"GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT"} {
-			v, ok := env.Getenv(k)
-			if !ok || v == "" {
-				continue
-			}
-			lv := strings.ToLower(v)
-			for _, w := range []string{"autocrlf", "core.eol", "safecrlf", "symlinks", "filemode", "attributesfile", "include", "objectformat"} {
-				if strings.Contains(lv, w) {
-					s.uncertain = "environment config override (" + k + ")"
-				}
-			}
-		}
+		s.checkEnvConfig(env)
 		if s.uncertain == "" {
 			s.addDefaultAttrFiles(env)
 		}
 	}
 	return s
+}
+
+// checkEnvConfig flags configuration injected through the environment
+// (`git -c`, GIT_CONFIG_COUNT) that touches a setting we depend on.
+func (s *repoSettings) checkEnvConfig(env sys.Env) {
+	if v, ok := env.Getenv("GIT_CONFIG_PARAMETERS"); ok && v != "" {
+		lv := strings.ToLower(v)
+		for _, w := range []string{"autocrlf", "core.eol", "safecrlf", "symlinks", "filemode", "attributesfile", "include", "objectformat"} {
+			if strings.Contains(lv, w) {
+				s.uncertain = "environment config override (GIT_CONFIG_PARAMETERS)"
+				return
+			}
+		}
+	}
+	if v, ok := env.Getenv("GIT_CONFIG_COUNT"); ok && v != "" {
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil || n < 0 || n > 256 {
+			s.uncertain = "unparsable GIT_CONFIG_COUNT"
+			return
+		}
+		for i := 0; i < n; i++ {
+			key, _ := env.Getenv("GIT_CONFIG_KEY_" + strconv.Itoa(i))
+			key = strings.ToLower(key)
+			section, name := key, ""
+			if j := strings.LastIndexByte(key, '.'); j >= 0 {
+				section, name = key[:j], key[j+1:]
+			}
+			if relevantConfigKey(section, name) || strings.HasPrefix(section, "include") {
+				s.uncertain = "environment config override (GIT_CONFIG_KEY_" + strconv.Itoa(i) + ")"
+				return
+			}
+		}
+	}
 }
 
 func (s *repoSettings) addDefaultAttrFiles(env sys.Env) {

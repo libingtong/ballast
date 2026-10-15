@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -164,6 +165,41 @@ func scenarios() []scenario {
 			f.git("add", "-N", "src/new.go")
 		}},
 		{name: "unmerged entries", fallback: true, plainFalls: true, mutate: func(f *fixture) { makeConflict(f) }},
+		{name: "gitlink removed by deeper exempt pattern", fallback: true, exempt: []string{"vendor/sub/**"}, mutate: addGitlink},
+		{name: "gitlink removed by deeper literal exempt", fallback: true, exempt: []string{"vendor/sub/x.txt"}, mutate: addGitlink},
+		{name: "gitlink removed by exact exempt", fallback: true, exempt: []string{"vendor/sub"}, mutate: addGitlink},
+		{name: "gitlink removed by star exempt", fallback: true, exempt: []string{"vendor/*"}, mutate: addGitlink},
+		{name: "gitlink kept by unrelated exempt", fallback: true, exempt: []string{"vendor/other/**", "docs/**"}, mutate: addGitlink},
+		{name: "gitlink kept by sibling prefix exempt", fallback: true, exempt: []string{"vendor/sub2/**"}, mutate: addGitlink},
+		{name: "ordering around slash", mutate: func(f *fixture) {
+			for _, n := range []string{"a-b", "a_b", "a+b", "a!b", "a~b", "a,b", "a=b", "a@b"} {
+				f.write(n, "x\n")
+			}
+			f.git("add", "-A")
+			f.write("a-b", "changed\n")
+			f.write("a/z.go", "package Z2\n")
+		}},
+		{name: "dangling symlink changed", unixOnly: true, mutate: func(f *fixture) {
+			f.remove("link")
+			f.symlink("does/not/exist", "link")
+		}},
+		{name: "symlink to directory", unixOnly: true, mutate: func(f *fixture) {
+			f.remove("link")
+			f.symlink("src", "link")
+		}},
+		{name: "symlink with unicode and long target", unixOnly: true, mutate: func(f *fixture) {
+			f.remove("link")
+			f.symlink(strings.Repeat("长目录/", 60)+"é", "link")
+		}},
+		{name: "many untouched dirs", mutate: func(f *fixture) {
+			for i := 0; i < 30; i++ {
+				f.write(fmt.Sprintf("gen/d%02d/e%d/f.txt", i, i%4), "x\n")
+			}
+			f.git("add", "-A")
+			f.git("commit", "-qm", "gen")
+			f.write("gen/d07/e3/f.txt", "changed\n")
+			f.remove("gen/d13")
+		}},
 		{name: "gitlink entry", fallback: true, exempt: docsExempt, mutate: func(f *fixture) {
 			f.git("update-index", "--add", "--cacheinfo", "160000,0123456789012345678901234567890123456789,vendor/sub")
 			f.write("src/a.go", "package g\n")
@@ -220,6 +256,12 @@ func scenarios() []scenario {
 		{name: "core.symlinks false", unixOnly: true, fallback: true, cfg: [][2]string{{"core.symlinks", "false"}},
 			mutate: func(f *fixture) { f.write("src/a.go", "package ns\n") }},
 	}
+}
+
+func addGitlink(f *fixture) {
+	f.git("update-index", "--add", "--cacheinfo", "160000,0123456789012345678901234567890123456789,vendor/sub")
+	f.git("update-index", "--add", "--cacheinfo", "160000,0123456789012345678901234567890123456789,vendor/sub2")
+	f.write("src/a.go", "package g2\n")
 }
 
 func makeConflict(f *fixture) {

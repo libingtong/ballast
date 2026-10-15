@@ -15,9 +15,9 @@ import (
 	"github.com/libingtong/ballast/internal/sys"
 )
 
-// maxInMemory bounds the files hashed from a single read; larger ones are
+// defaultInMemory bounds the files hashed from a single read; larger ones are
 // streamed (and cannot be scanned for CRLF).
-const maxInMemory = 64 << 20
+const defaultInMemory = 64 << 20
 
 var crlf = []byte("\r\n")
 
@@ -45,6 +45,13 @@ func (o Options) withDefaults() Options {
 		o.Git = ExecGit{}
 	}
 	return o
+}
+
+func (o Options) memLimit() int64 {
+	if o.inMemoryLimit > 0 {
+		return o.inMemoryLimit
+	}
+	return defaultInMemory
 }
 
 func (o Options) deadlineExceeded() bool {
@@ -360,7 +367,7 @@ func (r *refresher) hashRegular(abs, dir, rel string, size int64) ([20]byte, err
 	if soft && r.set.safeCRLF {
 		return [20]byte{}, fallbackf("core.safecrlf with text conversion for %s", rel)
 	}
-	if size > maxInMemory {
+	if size > r.opt.memLimit() {
 		if soft {
 			return [20]byte{}, fallbackf("large file %s under text conversion", rel)
 		}

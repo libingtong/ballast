@@ -81,12 +81,6 @@ func (p *pathPattern) match(name string) bool {
 	return wildmatch(p.pat, name, p.glob)
 }
 
-// matchDir is the extra rule git applies to directory-like entries
-// (gitlinks): a pattern that descends into the entry matches it.
-func (p *pathPattern) matchDir(name string) bool {
-	return len(p.pat) > len(name) && p.pat[:len(name)] == name && p.pat[len(name)] == '/'
-}
-
 // normalizeSpec cleans a pathspec the way git's prefix handling does:
 // "." and empty components vanish, ".." pops one component, a trailing
 // slash is preserved. An error means the spec leaves the repository.
@@ -160,19 +154,6 @@ func (f *Filter) Exempt(rel string) bool {
 // empty reports whether the filter removes nothing.
 func (f *Filter) empty() bool { return f == nil || len(f.pats) == 0 }
 
-// exemptEntry applies the filter to one index entry. Gitlinks behave like
-// directories in `git rm --cached`: a pattern that reaches below them
-// removes them too.
-func (f *Filter) exemptEntry(e *IndexEntry) bool {
-	for i := range f.pats {
-		p := &f.pats[i]
-		if p.match(e.Path) || (e.Mode == modeGitlink && p.matchDir(e.Path)) {
-			return true
-		}
-	}
-	return false
-}
-
 // removeExempt drops exempt entries in place and returns the shortened slice.
 func (f *Filter) removeExempt(ents []IndexEntry) []IndexEntry {
 	if f.empty() {
@@ -180,7 +161,7 @@ func (f *Filter) removeExempt(ents []IndexEntry) []IndexEntry {
 	}
 	out := ents[:0]
 	for i := range ents {
-		if f.exemptEntry(&ents[i]) {
+		if f.Exempt(ents[i].Path) {
 			continue
 		}
 		out = append(out, ents[i])

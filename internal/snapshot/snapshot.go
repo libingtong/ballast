@@ -64,6 +64,10 @@ type Options struct {
 	// index, and is the base of the fallback git environment. nil ⇒
 	// sys.OSEnv.
 	Env sys.Env
+
+	// inMemoryLimit overrides the size above which files are streamed
+	// instead of read at once (tests only).
+	inMemoryLimit int64
 }
 
 // TreeC computes C for a commit form (see package doc). For the paths form
