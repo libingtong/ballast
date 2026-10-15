@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -583,7 +584,18 @@ func (r *resolver) settle(p, cur string, fi fs.FileInfo, tail []string) (string,
 		if err := r.hop(p); err != nil {
 			return "", err
 		}
-		parent, _, _ := splitParent(cur)
+		parent, _, ok := splitParent(cur)
+		if ok {
+			// A relative target is interpreted by the OS against the physical
+			// parent directory, which may itself sit behind a symlink.
+			rp, err := r.eval(parent)
+			if err != nil && !isNotExist(err) {
+				return "", err
+			}
+			if err == nil {
+				parent = rp
+			}
+		}
 		return r.resolve(appendTail(normalize(target, parent, "", r.goos), tail))
 	}
 	return appendTail(base, tail), nil
@@ -647,6 +659,9 @@ func candidates(fsys sys.FS, raw string, ctx model.PathContext, realRoot func(ro
 		if real, err := RealPath(fsys, norm, goos); err == nil && real != norm {
 			forms = append(forms, real)
 		}
+		if phys, ok := physicalDotDot(fsys, raw, ctx); ok && !slices.Contains(forms, phys) {
+			forms = append(forms, phys)
+		}
 		if root != "" {
 			if rr, ok := realRoot(root); ok && rr != root {
 				rootReal = rr
@@ -682,10 +697,75 @@ func candidates(fsys sys.FS, raw string, ctx model.PathContext, realRoot func(ro
 	return out
 }
 
+// physicalDotDot resolves raw the way a POSIX kernel (or a shell) does: ".."
+// applies to the physical directory reached so far, not to the preceding
+// spelled component, so "link/../x" is "<target of link>/../x". normalize
+// folds ".." lexically, which is right for Win32 but would let a symlinked
+// directory hide a write from the double check on POSIX. ok is false when
+// goos is windows, raw has no ".." component, raw is not a POSIX absolute
+// path after home/cwd expansion, or resolution failed; otherwise real is the
+// fully resolved path.
+func physicalDotDot(fsys sys.FS, raw string, ctx model.PathContext) (real string, ok bool) {
+	goos := ctx.GOOS
+	if goos == "windows" || !strings.Contains(raw, "..") {
+		return "", false
+	}
+	s := ToSlashForm(raw, goos)
+	if s == "~" || strings.HasPrefix(s, "~/") {
+		if ctx.Home == "" {
+			return "", false
+		}
+		s = ExpandHome(s, normalize(ctx.Home, "", "", goos))
+	}
+	if s == "" {
+		return "", false
+	}
+	if s[0] != '/' {
+		cwd := normalize(ctx.Cwd, "", ctx.Home, goos)
+		if cwd == "" || cwd[0] != '/' {
+			return "", false
+		}
+		s = joinSlash(cwd, s)
+	}
+	hasDots := false
+	for c := range strings.SplitSeq(s, "/") {
+		if c == ".." {
+			hasDots = true
+			break
+		}
+	}
+	if !hasDots {
+		return "", false
+	}
+	cur := "/"
+	for c := range strings.SplitSeq(s, "/") {
+		switch c {
+		case "", ".":
+		case "..":
+			rp, err := RealPath(fsys, cur, goos)
+			if err != nil {
+				return "", false
+			}
+			if parent, _, pok := splitParent(rp); pok {
+				cur = parent
+			} else {
+				cur = "/"
+			}
+		default:
+			cur = joinSlash(cur, c)
+		}
+	}
+	real, err := RealPath(fsys, cur, goos)
+	if err != nil {
+		return "", false
+	}
+	return real, true
+}
+
 type rootKey struct{ root, goos string }
 
 // Service is the ports.PathService implementation. It caches the resolved
-// ProjectRoot per (root, GOOS) for its lifetime, so the symlink layout of the
+// ProjectRoot and Home per (root, GOOS) for its lifetime, so the symlink layout of the
 // project root is assumed stable while a Service lives (one hook process).
 type Service struct {
 	FS sys.FS
@@ -706,28 +786,54 @@ func (s *Service) Normalize(p, base string, ctx model.PathContext) string {
 // Candidates implements ports.PathService.
 func (s *Service) Candidates(raw string, ctx model.PathContext) []string {
 	return candidates(s.FS, raw, ctx, func(root string) (string, bool) {
-		k := rootKey{root, ctx.GOOS}
-		if v, ok := s.roots.Load(k); ok {
-			return v.(string), true
-		}
-		rr, err := RealPath(s.FS, root, ctx.GOOS)
-		if err != nil {
-			return "", false
-		}
-		s.roots.Store(k, rr)
-		return rr, true
+		return s.realRoot(root, ctx.GOOS)
 	})
 }
 
-// CompileGlobs implements ports.PathService.
+// realRoot resolves root (a ProjectRoot or Home) once per Service.
+func (s *Service) realRoot(root, goos string) (string, bool) {
+	k := rootKey{root, goos}
+	if v, ok := s.roots.Load(k); ok {
+		return v.(string), true
+	}
+	rr, err := RealPath(s.FS, root, goos)
+	if err != nil {
+		return "", false
+	}
+	s.roots.Store(k, rr)
+	return rr, true
+}
+
+// CompileGlobs implements ports.PathService. When the home directory is
+// itself reached through a symlink, every "~" pattern is also compiled
+// against the resolved home, so a resolved candidate such as
+// /data/u/.ballast/x still matches "~/.ballast/**".
 func (s *Service) CompileGlobs(patterns []string, ctx model.PathContext) (ports.GlobMatcher, error) {
 	home := ctx.Home
 	if home != "" {
 		home = normalize(home, "", "", ctx.GOOS)
 	}
-	g, err := CompileGlobs(patterns, GlobOptions{Home: home, CaseInsensitive: IsCaseInsensitive(ctx.GOOS)})
+	opt := GlobOptions{Home: home, CaseInsensitive: IsCaseInsensitive(ctx.GOOS)}
+	list := patterns
+	if s.FS != nil && home != "" && len(patterns) > 0 {
+		if rh, ok := s.realRoot(home, ctx.GOOS); ok && rh != home {
+			list = append([]string(nil), patterns...)
+			for _, p := range patterns {
+				neg := strings.HasPrefix(p, "!")
+				if body := strings.TrimPrefix(p, "!"); body == "~" || strings.HasPrefix(body, "~/") {
+					alt := escapeGlob(strings.TrimSuffix(rh, "/")) + body[1:]
+					if neg {
+						alt = "!" + alt
+					}
+					list = append(list, alt)
+				}
+			}
+		}
+	}
+	g, err := CompileGlobs(list, opt)
 	if err != nil {
 		return nil, err // never return a typed-nil *GlobSet inside the interface
 	}
+	g.patterns = append([]string(nil), patterns...)
 	return g, nil
 }

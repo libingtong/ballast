@@ -331,3 +331,173 @@ func TestCandidatesWindowsJunction(t *testing.T) {
 		t.Errorf("junction into ~/.ballast not matched: %q", got)
 	}
 }
+
+func TestCandidatesDanglingRelativeLinkUnderSymlinkedDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows resolves component by component; covered by the fakeFS tests")
+	}
+	f := newFixture(t)
+	f.symlink(t, f.ballast+"/state", f.proj+"/dir")
+	// The target is relative to the physical parent (~/.ballast/state), not to proj/dir's spelling.
+	if err := os.Symlink("../later.json", f.osPath(f.ballast+"/state/ptr")); err != nil {
+		t.Fatal(err)
+	}
+	got := f.svc.Candidates(f.proj+"/dir/ptr", f.ctx)
+	if !slices.Contains(got, f.ballast+"/later.json") {
+		t.Errorf("Candidates = %q, missing %q", got, f.ballast+"/later.json")
+	}
+	if !f.matches(t, []string{"~/.ballast/**"}, got) {
+		t.Errorf("dangling relative link not matched: %q", got)
+	}
+	// What the OS really does.
+	if err := os.WriteFile(f.osPath(f.proj+"/dir/ptr"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(f.osPath(f.ballast + "/later.json")); err != nil {
+		t.Fatalf("OS did not write through the link: %v", err)
+	}
+}
+
+func TestCandidatesDotDotAfterSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Win32 folds .. lexically")
+	}
+	f := newFixture(t)
+	f.symlink(t, f.ballast+"/state", f.proj+"/d")
+	patterns := []string{"~/.ballast/**"}
+
+	// Target exists / does not exist; absolute, relative and ~-based spellings.
+	f.write(t, f.ballast+"/rules.json")
+	for _, c := range []struct{ raw, want string }{
+		{"d/../rules.json", f.ballast + "/rules.json"},
+		{f.proj + "/d/../rules.json", f.ballast + "/rules.json"},
+		{"d/../new.json", f.ballast + "/new.json"},
+		{"d/../new/deeper/x.json", f.ballast + "/new/deeper/x.json"},
+		{"src/../d/../new.json", f.ballast + "/new.json"},
+		{"./d/./../new.json", f.ballast + "/new.json"},
+	} {
+		got := f.svc.Candidates(c.raw, f.ctx)
+		if !slices.Contains(got, c.want) {
+			t.Errorf("Candidates(%q) = %q, missing %q", c.raw, got, c.want)
+		}
+		if !f.matches(t, patterns, got) {
+			t.Errorf("Candidates(%q) = %q not matched by %q", c.raw, got, patterns)
+		}
+	}
+
+	// The OS agrees.
+	if err := os.WriteFile(f.osPath(f.proj+"/d/../w.json"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(f.osPath(f.ballast + "/w.json")); err != nil {
+		t.Fatalf("OS did not apply .. physically: %v", err)
+	}
+
+	// Plain .. keeps its lexical meaning and adds no extra candidates.
+	want := []string{f.proj + "/src/a.go", "src/a.go"}
+	if got := f.svc.Candidates("src/../src/a.go", f.ctx); !reflect.DeepEqual(got, want) {
+		t.Errorf("plain ..: %q, want %q", got, want)
+	}
+	// ".." above a missing directory and past the root stay harmless.
+	if got := f.svc.Candidates("nope/../x.go", f.ctx); !slices.Contains(got, f.proj+"/x.go") {
+		t.Errorf("missing dir ..: %q", got)
+	}
+	if got := f.svc.Candidates("/../../x.go", f.ctx); !slices.Contains(got, "/x.go") {
+		t.Errorf("above root: %q", got)
+	}
+}
+
+func TestPhysicalDotDotEdges(t *testing.T) {
+	ctx := model.PathContext{Cwd: "/w", Home: "/h", GOOS: "linux"}
+	fsys := sys.OSFS{}
+	for _, c := range []struct {
+		raw  string
+		ctx  model.PathContext
+		want bool
+	}{
+		{"a/b", ctx, false},
+		{"..foo/x", ctx, false},
+		{"a/..b/c", ctx, false},
+		{"~/../x", model.PathContext{Cwd: "/w", GOOS: "linux"}, false},
+		{"../x", model.PathContext{GOOS: "linux"}, false},
+		{"../x", model.PathContext{Cwd: "rel", GOOS: "linux"}, false},
+		{"a/../x", model.PathContext{Cwd: "/w", GOOS: "windows"}, false},
+		{"/nonexistent-ballast-root/a/../x", ctx, true},
+		{"~/a/../x", ctx, true},
+	} {
+		if _, ok := physicalDotDot(fsys, c.raw, c.ctx); ok != c.want {
+			t.Errorf("physicalDotDot(%q, %+v) ok = %v, want %v", c.raw, c.ctx, ok, c.want)
+		}
+	}
+	if _, ok := physicalDotDot(errFS{sys.OSFS{}, errors.New("boom")}, "/a/../x", ctx); ok {
+		t.Error("resolution error must yield ok=false")
+	}
+}
+
+func TestCompileGlobsSymlinkedHome(t *testing.T) {
+	sb := testenv.New(t)
+	root, err := filepath.EvalSymlinks(sb.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goos := runtime.GOOS
+	n := func(p string) string { return Normalize(p, "", model.PathContext{GOOS: goos}) }
+	realHome := n(filepath.Join(root, "data", "u"))
+	home := n(filepath.Join(root, "linkedhome"))
+	for _, d := range []string{realHome + "/.ballast/state", realHome + "/proj"} {
+		if err := os.MkdirAll(ToOS(d, goos), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(ToOS(realHome, goos), ToOS(home, goos)); err != nil {
+		if goos == "windows" {
+			t.Skipf("symlink creation not permitted: %v", err)
+		}
+		t.Fatal(err)
+	}
+	proj := home + "/proj"
+	ctx := model.PathContext{Cwd: proj, ProjectRoot: proj, Home: home, GOOS: goos}
+	if err := os.Symlink(ToOS(realHome+"/.ballast", goos), ToOS(proj+"/l", goos)); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(sys.OSFS{})
+	cands := svc.Candidates("l/state/x.json", ctx)
+	if !slices.Contains(cands, realHome+"/.ballast/state/x.json") {
+		t.Fatalf("candidates = %q", cands)
+	}
+
+	g, err := svc.CompileGlobs([]string{"~/.ballast/**"}, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !g.Match(cands...) {
+		t.Errorf("link into the real home not matched: %q", cands)
+	}
+	if !g.Match(home + "/.ballast/x") {
+		t.Error("literal home spelling must still match")
+	}
+	if got := g.Patterns(); !reflect.DeepEqual(got, []string{"~/.ballast/**"}) {
+		t.Errorf("Patterns() = %q, want the source list", got)
+	}
+	// Negations get both homes, too.
+	g, err = svc.CompileGlobs([]string{"**/*.json", "!~/.ballast/**"}, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Match(cands...) {
+		t.Errorf("negated ~ pattern must veto the resolved-home spelling: %q", cands)
+	}
+	if !g.Match(proj + "/other.json") {
+		t.Error("unrelated json must match")
+	}
+	// Bare "~" and a list without "~" patterns.
+	if g, err = svc.CompileGlobs([]string{"~"}, ctx); err != nil || !g.Match(realHome) || !g.Match(home) {
+		t.Errorf("bare ~: %v %v", g, err)
+	}
+	if _, err = svc.CompileGlobs([]string{"!~/x"}, ctx); !errors.Is(err, ErrOnlyNegation) {
+		t.Errorf("only negation: %v", err)
+	}
+	if _, err = svc.CompileGlobs([]string{"~/["}, ctx); !errors.Is(err, ErrBadPattern) {
+		t.Errorf("bad pattern: %v", err)
+	}
+}
