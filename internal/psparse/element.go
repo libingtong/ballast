@@ -579,7 +579,7 @@ func (p *parser) readDollar(c ctx, sb *strings.Builder) (bool, error) {
 
 func applyRedirs(n *model.CommandNode, redirs []redir) {
 	for _, r := range redirs {
-		n.Redirects = append(n.Redirects, model.Redirect{Op: r.op, Fd: r.fd, Target: r.target})
+		n.Redirects = append(n.Redirects, model.Redirect{Op: r.fd + r.op, Fd: r.fd, Target: r.target})
 		if r.merge || r.op == ">&" {
 			continue
 		}

@@ -282,7 +282,7 @@
           "name": "cat",
           "redirects": [
             {
-              "op": "\u003c\u003c",
+              "op": "<<",
               "target": {
                 "lit": "EOF"
               }
@@ -448,7 +448,7 @@
           "name": "exec",
           "redirects": [
             {
-              "op": "\u003e",
+              "op": ">",
               "target": {
                 "lit": "log.txt"
               }
@@ -523,13 +523,13 @@
           "name": "echo",
           "redirects": [
             {
-              "op": "\u003e",
+              "op": ">",
               "target": {
                 "lit": "out.txt"
               }
             },
             {
-              "op": "\u003e",
+              "op": "2>",
               "fd": "2",
               "target": {
                 "lit": "/dev/null"
@@ -555,13 +555,13 @@
           "name": "echo",
           "redirects": [
             {
-              "op": "\u003e",
+              "op": ">",
               "target": {
                 "lit": "out.txt"
               }
             },
             {
-              "op": "\u003e",
+              "op": "2>",
               "fd": "2",
               "target": {
                 "lit": "/dev/null"
@@ -637,7 +637,7 @@
               "dynamic": true
             },
             {
-              "lit": "\u003c(ls)",
+              "lit": "<(ls)",
               "dynamic": true
             }
           ],
@@ -971,7 +971,7 @@
           },
           "redirects": [
             {
-              "op": "\u003c",
+              "op": "<",
               "target": {
                 "lit": "in.txt"
               }
@@ -1003,7 +1003,7 @@
           },
           "redirects": [
             {
-              "op": "\u003c",
+              "op": "<",
               "target": {
                 "lit": "in.txt"
               }
@@ -1116,7 +1116,7 @@
               "lit": "-lc"
             },
             {
-              "lit": "cd /tmp \u0026\u0026 cat a.go"
+              "lit": "cd /tmp && cat a.go"
             }
           ],
           "name": "bash",
@@ -1322,7 +1322,7 @@
           "name": "echo",
           "redirects": [
             {
-              "op": "\u003e",
+              "op": ">",
               "target": {
                 "lit": "~/.ballast/state/x.json"
               }
@@ -1759,13 +1759,13 @@
           "name": "cat",
           "redirects": [
             {
-              "op": "\u003e\u003e",
+              "op": ">>",
               "target": {
                 "lit": "b"
               }
             },
             {
-              "op": "\u003e\u0026",
+              "op": "2>&",
               "fd": "2",
               "target": {
                 "lit": "1"
@@ -1802,7 +1802,7 @@
           "name": "cat",
           "redirects": [
             {
-              "op": "\u003e",
+              "op": ">",
               "target": {
                 "lit": "/dev/null"
               }
@@ -2115,7 +2115,7 @@
           "name": "wc",
           "redirects": [
             {
-              "op": "\u003c",
+              "op": "<",
               "target": {
                 "lit": "src/a.go"
               }

@@ -143,6 +143,26 @@ func TestCanonicalName(t *testing.T) {
 	}
 }
 
+// The seed alias list is frozen: U2 may add entries, never remove or change them.
+func TestAliasSeedsKept(t *testing.T) {
+	seeds := map[string]string{
+		"rm": "remove-item", "del": "remove-item", "erase": "remove-item", "ri": "remove-item",
+		"rd": "remove-item", "rmdir": "remove-item", "sleep": "start-sleep", "sc": "set-content",
+		"ac": "add-content", "cp": "copy-item", "copy": "copy-item", "cpi": "copy-item",
+		"mv": "move-item", "move": "move-item", "mi": "move-item", "ni": "new-item", "md": "new-item",
+		"mkdir": "new-item", "cat": "get-content", "gc": "get-content", "type": "get-content",
+		"echo": "write-output", "write": "write-output", "iex": "invoke-expression",
+		"saps": "start-process", "start": "start-process", "sajb": "start-job",
+		"foreach": "foreach-object", "%": "foreach-object", "cd": "set-location",
+		"sl": "set-location", "chdir": "set-location",
+	}
+	for k, v := range seeds {
+		if Aliases[k] != v {
+			t.Errorf("Aliases[%q] = %q, want %q", k, Aliases[k], v)
+		}
+	}
+}
+
 func TestParseStructure(t *testing.T) {
 	tests := []struct {
 		src  string
@@ -398,6 +418,34 @@ func TestParseStructure(t *testing.T) {
 		got := renderAll(cl)
 		if !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%q:\n got  %q\n want %q", tc.src, got, tc.want)
+		}
+	}
+}
+
+func TestRedirectRecords(t *testing.T) {
+	type r struct{ op, fd, target string }
+	tests := []struct {
+		src  string
+		want []r
+	}{
+		{"a > f", []r{{">", "", "f"}}},
+		{"a >> f", []r{{">>", "", "f"}}},
+		{"a 2> f", []r{{"2>", "2", "f"}}},
+		{"a 2>> f", []r{{"2>>", "2", "f"}}},
+		{"a *> f", []r{{"*>", "*", "f"}}},
+		{"a 2>&1", []r{{"2>&", "2", "1"}}},
+		{"a *>&1", []r{{"*>&", "*", "1"}}},
+		{"a 4>f", []r{{"4>", "4", "f"}}},
+		{"a > f 2>&1", []r{{">", "", "f"}, {"2>&", "2", "1"}}},
+	}
+	for _, tc := range tests {
+		n := mustParse(t, tc.src).Nodes[0]
+		var got []r
+		for _, rd := range n.Redirects {
+			got = append(got, r{rd.Op, rd.Fd, rd.Target.Lit})
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%q: %v, want %v", tc.src, got, tc.want)
 		}
 	}
 }

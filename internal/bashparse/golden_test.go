@@ -107,11 +107,13 @@ func TestGolden(t *testing.T) {
 			got = append(got, entry{Src: src, Err: true})
 			continue
 		}
-		b, mErr := json.Marshal(cl)
-		if mErr != nil {
+		var mb bytes.Buffer
+		menc := json.NewEncoder(&mb)
+		menc.SetEscapeHTML(false)
+		if mErr := menc.Encode(cl); mErr != nil {
 			t.Fatalf("%q: %v", src, mErr)
 		}
-		got = append(got, entry{Src: src, Want: b})
+		got = append(got, entry{Src: src, Want: bytes.TrimSpace(mb.Bytes())})
 	}
 	if *update {
 		var buf bytes.Buffer

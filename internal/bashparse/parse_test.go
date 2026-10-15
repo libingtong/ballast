@@ -224,6 +224,42 @@ func TestParseStructure(t *testing.T) {
 	}
 }
 
+func TestRedirectRecords(t *testing.T) {
+	type r struct{ op, fd, target string }
+	tests := []struct {
+		src  string
+		want []r
+	}{
+		{"a > f", []r{{">", "", "f"}}},
+		{"a >> f", []r{{">>", "", "f"}}},
+		{"a 2> f", []r{{"2>", "2", "f"}}},
+		{"a 2>> f", []r{{"2>>", "2", "f"}}},
+		{"a 2>&1", []r{{"2>&", "2", "1"}}},
+		{"a >&2", []r{{">&", "", "2"}}},
+		{"a &> f", []r{{"&>", "", "f"}}},
+		{"a &>> f", []r{{"&>>", "", "f"}}},
+		{"a >| f", []r{{">|", "", "f"}}},
+		{"a < f", []r{{"<", "", "f"}}},
+		{"a 3< f", []r{{"3<", "3", "f"}}},
+		{"a <<< word", []r{{"<<<", "", "word"}}},
+		{"a << EOF\nx\nEOF", []r{{"<<", "", "EOF"}}},
+		{"a <<- EOF\nx\nEOF", []r{{"<<-", "", "EOF"}}},
+		{"a <<'EOF'\nx\nEOF", []r{{"<<", "", "EOF"}}},
+		{"a {fd}> f", []r{{">", "{fd}", "f"}}},
+		{"a > f 2>&1 < g", []r{{">", "", "f"}, {"2>&", "2", "1"}, {"<", "", "g"}}},
+	}
+	for _, tc := range tests {
+		n := mustParse(t, tc.src).Nodes[0]
+		var got []r
+		for _, rd := range n.Redirects {
+			got = append(got, r{rd.Op, rd.Fd, rd.Target.Lit})
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%q: %v, want %v", tc.src, got, tc.want)
+		}
+	}
+}
+
 func TestParsePipes(t *testing.T) {
 	tests := []struct {
 		src  string
@@ -418,19 +454,46 @@ func TestParserPort(t *testing.T) {
 }
 
 func TestParseCRLFAndComments(t *testing.T) {
-	cl := mustParse(t, "a # sleep 300\r\nb # c\n# d\nc")
+	cl := mustParse(t, "a # sleep 300\r\nb # c\n# d\nc\r\n")
 	if got := names(cl); got != "a/0 b/0 c/0" {
-		// CRLF: the carriage return stays part of the word in bash; we only
-		// require that comments never produce nodes.
-		t.Logf("names = %q", got)
+		t.Errorf("names = %q", got)
 	}
-	if len(cl.Nodes) < 3 {
-		t.Errorf("nodes = %d", len(cl.Nodes))
+	cl = mustParse(t, "sleep 300\r\nls")
+	if n := cl.Nodes[0]; n.Sleep == nil || n.Sleep.Seconds != 300 {
+		t.Errorf("CR must not leak into words: %+v", n)
 	}
-	for _, n := range cl.Nodes {
-		if strings.Contains(n.Name, "sleep") {
-			t.Errorf("comment parsed as command: %+v", n)
+	for _, src := range []string{"# sleep 300", "echo # sleep 300", "echo \"# sleep 300\"", "echo a#b # c"} {
+		for _, n := range mustParse(t, src).Nodes {
+			if n.Name == "sleep" {
+				t.Errorf("%q: comment parsed as a command", src)
+			}
 		}
+	}
+}
+
+// Nodes of one list share an arena for argv: appending to one node's argv must
+// never overwrite its neighbour.
+func TestArgvSlicesAreIndependent(t *testing.T) {
+	cl := mustParse(t, "a 1; b 2; c 3")
+	if len(cl.Nodes) != 3 {
+		t.Fatal(len(cl.Nodes))
+	}
+	_ = append(cl.Nodes[0].Argv, model.Word{Lit: "X"})
+	_ = append(cl.Nodes[1].Argv, model.Word{Lit: "Y"})
+	if got := joinLits(cl.Nodes[1].Argv) + "|" + joinLits(cl.Nodes[2].Argv); got != "b 2|c 3" {
+		t.Errorf("argv overwritten: %q", got)
+	}
+}
+
+func TestStripWrappersKeepsInput(t *testing.T) {
+	in := ws("sudo", "-u", "root", "env", "A=1", "cmd", "x")
+	orig := append([]model.Word(nil), in...)
+	rest, _, _ := StripWrappers(in)
+	if !reflect.DeepEqual(in, orig) {
+		t.Error("input argv modified")
+	}
+	if joinLits(rest) != "cmd x" {
+		t.Errorf("rest = %q", joinLits(rest))
 	}
 }
 

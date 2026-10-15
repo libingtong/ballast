@@ -1,7 +1,5 @@
 package model
 
-import "strings"
-
 // ShellReadPaths returns the raw (not normalized) paths that a successfully
 // executed shell command adds to the agent's read set. It is the single
 // definition shared by internal/hook (live PostToolUse) and internal/replay
@@ -29,8 +27,22 @@ func ShellReadPaths(cl *CommandList) []string {
 	changesDir := false
 	for i := range cl.Nodes {
 		n := &cl.Nodes[i]
-		if !changesDir && len(n.Argv) > 0 && !n.Argv[0].Dynamic && isDirChange(cl.Shell, n.Argv[0].Lit) {
-			changesDir = true
+		if !changesDir && len(n.Argv) > 0 && !n.Argv[0].Dynamic {
+			cmd := n.Argv[0].Lit
+			if cl.Shell == ShellPowerShell {
+				lower := []byte(cmd)
+				for j, c := range lower {
+					if c >= 'A' && c <= 'Z' {
+						lower[j] = c + 'a' - 'A'
+					}
+				}
+				switch string(lower) {
+				case "set-location", "push-location", "pop-location", "cd", "sl", "chdir", "pushd", "popd":
+					changesDir = true
+				}
+			} else if cmd == "cd" || cmd == "pushd" || cmd == "popd" {
+				changesDir = true
+			}
 		}
 		for _, r := range n.Reads {
 			if r.Dynamic || r.Path == "" {
@@ -61,23 +73,6 @@ func ShellReadPaths(cl *CommandList) []string {
 	return abs
 }
 
-// isDirChange reports whether cmd (an argv[0] literal) changes the working
-// directory for the given shell.
-func isDirChange(shell ShellKind, cmd string) bool {
-	if shell == ShellPowerShell {
-		switch strings.ToLower(cmd) {
-		case "set-location", "push-location", "pop-location", "cd", "sl", "chdir", "pushd", "popd":
-			return true
-		}
-		return false
-	}
-	switch cmd {
-	case "cd", "pushd", "popd":
-		return true
-	}
-	return false
-}
-
 // IsAbsShellPath reports whether a literal shell path is absolute on any
 // supported platform, without touching the filesystem: it starts with "/"
 // (POSIX, Git Bash "/c/..."), "~/" or "~\" or equals "~", starts with "\\"
@@ -91,7 +86,7 @@ func IsAbsShellPath(p string) bool {
 		return false
 	case p[0] == '/' || p[0] == '~' && (len(p) == 1 || p[1] == '/' || p[1] == '\\'):
 		return true
-	case strings.HasPrefix(p, `\\`):
+	case len(p) >= 2 && p[0] == '\\' && p[1] == '\\':
 		return true
 	case len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/'):
 		c := p[0] | 0x20

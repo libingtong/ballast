@@ -412,6 +412,9 @@ func (w *walker) convertRedirs(rs []*syntax.Redirect) []redirInfo {
 		ri := redirInfo{r: model.Redirect{Op: r.Op.String()}}
 		if r.N != nil {
 			ri.r.Fd = r.N.Value
+			if isNumberWord(r.N.Value) {
+				ri.r.Op = r.N.Value + ri.r.Op // "2>", "3>>", "2>&"
+			}
 		}
 		var tw model.Word
 		if r.Word != nil {
