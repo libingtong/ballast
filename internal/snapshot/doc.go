@@ -31,10 +31,14 @@
 // S (TreeS) = F(index with every tracked entry refreshed) — identical to C(all).
 // Refresh of one entry: lstat; missing ⇒ entry removed (deletion); stat
 // (mtime, ctime, size, ino, dev, mode bits) equal to the index entry AND not
-// racy (entry mtime < index file mtime) ⇒ keep the index sha; otherwise read
+// racy ⇒ keep the index sha; otherwise read
 // the content (symlink ⇒ link target bytes, mode 120000) and hash
 // "blob <len>\0<content>"; executable bit honoured only when core.filemode
 // is true (default true; false on Windows/when configured).
+// Racy (contract v1.3, both halves of git's protection): the entry mtime is
+// not older than the index file mtime (same second or later), OR the
+// entry is "smudged" (size 0 in the index while its id is not the empty
+// blob; git's ce_match_stat_basic rule).
 // F builds tree objects in memory (sorted as git: by name with '/' suffix
 // for trees) and returns the root tree id; nothing is written to .git.
 //
@@ -43,7 +47,13 @@
 // mode 040000 entries), unmerged entries (stage ≠ 0), skip-worktree or
 // intent-to-add flags, sha256 repos, any clean/smudge/eol conversion
 // (.gitattributes lines with filter=, text, eol=, or core.autocrlf set to
-// true/input, core.eol). Fallback = the v0.3 algorithm (copy index →
+// true/input, core.eol; refined in the implementation notes), and for
+// gitlinks (contract v1.3): a checked-out submodule whose HEAD cannot be
+// resolved natively (unborn, reftable, sha256, "commondir" layout, unusual
+// ref names) or whose git directory lacks objects/ or refs/ (not a
+// repository for git, which then fails itself ⇒ caller unknown), a gitlink
+// replaced by a non-directory, and a tracked file or symlink replaced by a
+// directory holding ".git". Fallback = the v0.3 algorithm (copy index →
 // GIT_INDEX_FILE=copy git add -u [-- paths] → git rm --cached -r -q
 // --ignore-unmatch -- ':(glob)<exempt>'... → git write-tree), bounded by
 // Options.Deadline (hook: remaining watchdog budget; runner: none).
@@ -96,19 +106,21 @@
 //     style environment overrides) falls back. NeedsFallback keeps the
 //     strict contract meaning ("any such setting present"); the plain C
 //     form never reads the work tree and ignores all of this.
-//   - Options.Env (default sys.OSEnv) locates the global/system git config
-//     and attributes (HOME, XDG_CONFIG_HOME, GIT_CONFIG_GLOBAL,
-//     GIT_CONFIG_SYSTEM, GIT_CONFIG_NOSYSTEM) and the fallback's TMPDIR.
+//   - Options.Env (default sys.OSEnv; accepted as a contract addition in
+//     v1.3) locates the global/system git config and attributes (HOME,
+//     XDG_CONFIG_HOME, GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM,
+//     GIT_CONFIG_NOSYSTEM) and the fallback's TMPDIR.
 //   - Gitlinks (submodules; mode 160000) are handled like git's add -u: a
 //     missing directory is a removal, a directory without ".git"
 //     (uninitialised submodule) keeps the recorded commit, and a checked-out
 //     submodule records its HEAD, resolved natively (".git" directory or
 //     gitfile; detached id, or a loose ref or packed-refs entry). A HEAD
 //     that cannot be resolved that way (unborn, reftable, sha256, a
-//     "commondir" layout, unusual ref names), a gitlink replaced by a
+//     "commondir" layout, unusual ref names), a git directory without
+//     objects/ and refs/ (git's is_git_directory), a gitlink replaced by a
 //     non-directory and a tracked file or symlink replaced by a directory
 //     holding ".git" (git records the nested repository's HEAD as a gitlink)
-//     fall back; these are fallback conditions beyond the list above.
+//     fall back; v1.3 lifted these into the contract list above.
 //   - TreeC paths form: pathspecs are relative to CommitForm.Dir when set
 //     (else the repo root), absolute paths inside the repo are accepted
 //     (symlinks in them and in Dir are resolved), "--only" is approximated
