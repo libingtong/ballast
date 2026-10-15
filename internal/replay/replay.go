@@ -1,7 +1,7 @@
 package replay
 
 import (
-	"io"
+	"errors"
 	"time"
 
 	"github.com/libingtong/ballast/internal/model"
@@ -44,6 +44,7 @@ type Item struct {
 	ToolUseID string
 	IsError   bool   // tool_result error flag
 	Text      string // prompt / assistant text / tool result text
+	GitBranch string // branch recorded by the client at this item ("" if none)
 }
 
 // TranscriptReader streams items.
@@ -52,11 +53,6 @@ type TranscriptReader interface {
 	Next() (*Item, error)
 	// Skipped reports unparsable lines so far.
 	Skipped() int
-}
-
-// OpenTranscript returns the reader for client c over r.
-func OpenTranscript(c model.ClientID, r io.Reader) (TranscriptReader, error) {
-	panic("unimplemented: replay.OpenTranscript")
 }
 
 // Options for Run.
@@ -88,7 +84,14 @@ type Deps struct {
 	// EvidenceDir is layout.EvidenceDir for auto mode.
 	EvidenceDir string
 	LabelsDir   string
+	// Home is the home directory used to render transcript paths "~/"-relative
+	// ("" ⇒ the process home, via sys.OSEnv).
+	Home string
 }
+
+// ErrUsage marks invalid options (CLI exit 2): unknown format or evidence
+// mode, unsupported client, malformed --initial-state or rules file.
+var ErrUsage = errors.New("replay: usage error")
 
 // Sample is one judgement in the report.
 type Sample struct {
@@ -121,19 +124,4 @@ type Report struct {
 	SkippedLines int            `json:"skipped_lines"`
 	Rules        []RuleSummary  `json:"rules"`
 	Samples      []Sample       `json:"samples"`
-}
-
-// Run replays one transcript.
-func Run(opt Options, deps Deps) (*Report, error) {
-	panic("unimplemented: replay.Run")
-}
-
-// SampleID computes the stable sample id.
-func SampleID(transcriptRef, uuid, ruleID, rulesHash string) string {
-	panic("unimplemented: replay.SampleID")
-}
-
-// RenderMarkdown renders a report as Markdown.
-func RenderMarkdown(r *Report) []byte {
-	panic("unimplemented: replay.RenderMarkdown")
 }
