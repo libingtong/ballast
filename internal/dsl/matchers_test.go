@@ -202,6 +202,24 @@ func TestPathBindings(t *testing.T) {
 	})
 }
 
+func TestShellToolTargetBindings(t *testing.T) {
+	// No shell matcher and no match.path: a shell tool's targets are its
+	// parsed write targets (dsl-semantics §5.2, §9).
+	rule := ruleJSON("PreToolUse", `{"tool":["Edit","Bash"]}`, `[{"path_exists":{}},{"not":{"read_this_session":{}}}]`)
+	exists := model.Fixture{Exists: []string{"a.go"}}
+	runRows(t, newEngine(t), []row{
+		{"write target is bound", rule, bashScn("echo x > a.go", bashList(withWrites(nd("echo", "x"), "a.go"))).with(exists), T, ""},
+		{"write target is bound (miss)", rule, bashScn("echo x > b.go", bashList(withWrites(nd("echo", "x"), "b.go"))).with(exists), F, ""},
+		{"write target already read", rule, bashScn("echo x > a.go", bashList(withWrites(nd("echo", "x"), "a.go"))).
+			with(model.Fixture{Exists: []string{"a.go"}, Read: []string{"a.go"}}), F, ""},
+		{"no write targets: empty binding", rule, bashScn("ls", bashList(nd("ls"))), U, "path_exists:no_target"},
+		{"dynamic write target is unknown", rule, bashScn("echo x > $F", bashList(withDynWrite(nd("echo", "x")))), U, "bash:dynamic_write_target"},
+		{"parse error is unknown", rule, bashScn("x", nil).withErr(errors.New("e")), U, "bash:parse_error"},
+		{"dynamic target does not mask a bound hit", rule,
+			bashScn("echo x > a.go > $F", bashList(withDynWrite(withWrites(nd("echo", "x"), "a.go")))).with(exists), T, ""},
+	})
+}
+
 func TestShellPathBinding(t *testing.T) {
 	// bash node x path binding: the binding target is the matching write.
 	rule := ruleJSON("PreToolUse", `{"bash":{"cmd":"cp"},"path":"**/*.go"}`, `[{"path_exists":{}}]`)

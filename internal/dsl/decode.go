@@ -37,6 +37,11 @@ func DecodeRuleFile(data []byte) (*model.RuleFile, error) {
 			Severity: model.SevError, Code: CodeSchema, Message: "unexpected data after the top-level JSON value",
 		})
 	}
+	// encoding/json folds key case and lets a later duplicate win; the
+	// schema does neither, so check the raw keys.
+	if ds := keyDiagnostics(data); len(ds) > 0 {
+		return nil, newDecodeError(ds...)
+	}
 	return &f, nil
 }
 
@@ -69,7 +74,7 @@ func classifyDecodeError(err error, data []byte) error {
 			Message: fmt.Sprintf("field %q: expected %s, got JSON %s", typ.Field, typ.Type, typ.Value),
 		})
 	case strings.HasPrefix(err.Error(), "json: unknown field"):
-		if ds := unknownFieldDiagnostics(data); len(ds) > 0 {
+		if ds := keyDiagnostics(data); len(ds) > 0 {
 			return newDecodeError(ds...)
 		}
 	}
@@ -83,17 +88,99 @@ var (
 	typeRaw    = reflect.TypeOf(json.RawMessage{})
 )
 
-// unknownFieldDiagnostics walks the loosely decoded document alongside the
-// model types and reports every key the strict decoder rejected, with a
-// JSON pointer. Unknown keys of a Cond are unknown-predicate.
-func unknownFieldDiagnostics(data []byte) []model.Diagnostic {
+// keyDiagnostics reports every object key that the schema would reject but
+// encoding/json accepts or only partly explains: unknown keys (matched
+// case-sensitively, with a JSON pointer; unknown keys of a Cond are
+// unknown-predicate) and duplicate keys within one object.
+func keyDiagnostics(data []byte) []model.Diagnostic {
+	var out []model.Diagnostic
 	var doc any
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil
 	}
-	var out []model.Diagnostic
 	walkUnknown(doc, reflect.TypeOf(model.RuleFile{}), "", &out)
+	dec := json.NewDecoder(bytes.NewReader(data))
+	walkDuplicates(dec, reflect.TypeOf(model.RuleFile{}), "", &out)
 	return out
+}
+
+// walkDuplicates consumes one JSON value from dec, walking it alongside t
+// (nil or an opaque type skips the value) and reporting duplicate keys.
+func walkDuplicates(dec *json.Decoder, t reflect.Type, at string, out *[]model.Diagnostic) bool {
+	for t != nil && t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t == typeSList || t == typeRaw {
+		t = nil
+	}
+	tok, err := dec.Token()
+	if err != nil {
+		return false
+	}
+	d, ok := tok.(json.Delim)
+	if !ok {
+		return true
+	}
+	if t == nil {
+		for depth := 1; depth > 0; {
+			tok, err := dec.Token()
+			if err != nil {
+				return false
+			}
+			if d, ok := tok.(json.Delim); ok {
+				if d == '{' || d == '[' {
+					depth++
+				} else {
+					depth--
+				}
+			}
+		}
+		return true
+	}
+	switch d {
+	case '{':
+		var fields map[string]reflect.Type
+		if t.Kind() == reflect.Struct && t != typeInject {
+			fields = jsonFields(t)
+		}
+		seen := map[string]bool{}
+		for dec.More() {
+			kt, err := dec.Token()
+			if err != nil {
+				return false
+			}
+			k, _ := kt.(string)
+			if seen[k] {
+				*out = append(*out, model.Diagnostic{
+					Severity: model.SevError, Code: CodeSchema, Pointer: at + ptr(k),
+					Message: fmt.Sprintf("duplicate key %q", k),
+				})
+			}
+			seen[k] = true
+			var ct reflect.Type
+			switch {
+			case fields != nil:
+				ct = fields[k]
+			case t.Kind() == reflect.Map:
+				ct = t.Elem()
+			}
+			if !walkDuplicates(dec, ct, at+ptr(k), out) {
+				return false
+			}
+		}
+	case '[':
+		var et reflect.Type
+		if t.Kind() == reflect.Slice {
+			et = t.Elem()
+		}
+		for i := 0; dec.More(); i++ {
+			if !walkDuplicates(dec, et, at+ptr(i), out) {
+				return false
+			}
+		}
+	}
+	_, err = dec.Token()
+	return err == nil
 }
 
 func jsonFields(t reflect.Type) map[string]reflect.Type {
@@ -135,7 +222,7 @@ func walkUnknown(v any, t reflect.Type, at string, out *[]model.Diagnostic) {
 			return
 		}
 		for _, k := range sortedKeys(m) {
-			if !strings.EqualFold(k, "text") && !strings.EqualFold(k, "anchor") {
+			if k != "text" && k != "anchor" {
 				*out = append(*out, unknownKeyDiag(CodeUnknownField, at, k))
 			}
 		}
@@ -159,14 +246,6 @@ func walkUnknown(v any, t reflect.Type, at string, out *[]model.Diagnostic) {
 		sort.Strings(keys)
 		for _, k := range keys {
 			ft, ok := fields[k]
-			if !ok {
-				for name, cand := range fields {
-					if strings.EqualFold(name, k) {
-						ft, ok = cand, true
-						break
-					}
-				}
-			}
 			if !ok {
 				*out = append(*out, unknownKeyDiag(code, at, k))
 				continue

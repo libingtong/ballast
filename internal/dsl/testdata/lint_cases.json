@@ -754,6 +754,41 @@
    ]
   },
   {
+   "name": "top-level key with the wrong case",
+   "raw": "{\"VERSION\":1,\"rules\":[]}",
+   "want": [
+    "error:unknown-field@/VERSION"
+   ]
+  },
+  {
+   "name": "rule key with the wrong case",
+   "raw": "{\"version\":1,\"rules\":[{\"id\":\"a\",\"Action\":\"deny\",\"event\":\"PreToolUse\",\"examples\":[]}]}",
+   "want": [
+    "error:unknown-field@/rules/0/Action"
+   ]
+  },
+  {
+   "name": "predicate key with the wrong case",
+   "raw": "{\"version\":1,\"rules\":[{\"id\":\"a\",\"action\":\"deny\",\"event\":\"PreToolUse\",\"when\":[{\"IS_SUBAGENT\":{}}],\"examples\":[]}]}",
+   "want": [
+    "error:unknown-predicate@/rules/0/when/0/IS_SUBAGENT"
+   ]
+  },
+  {
+   "name": "duplicate rule key",
+   "raw": "{\"version\":1,\"rules\":[{\"id\":\"a\",\"action\":\"log\",\"action\":\"deny\",\"event\":\"PreToolUse\",\"examples\":[]}]}",
+   "want": [
+    "error:schema-invalid@/rules/0/action"
+   ]
+  },
+  {
+   "name": "duplicate top-level key",
+   "raw": "{\"version\":1,\"rules\":[],\"version\":1}",
+   "want": [
+    "error:schema-invalid@/version"
+   ]
+  },
+  {
    "name": "not JSON",
    "raw": "{not json",
    "want": [

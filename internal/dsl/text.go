@@ -132,6 +132,8 @@ func stripInlineCode(line string) string {
 
 var quotePairs = map[rune]rune{'"': '"', '“': '”', '‘': '’', '「': '」', '『': '』'}
 
+// stripQuotes drops quoted spans and blockquote lines. Pairs never span a
+// line break: a stray quote or inch mark must not swallow the lines after it.
 func stripQuotes(text string) string {
 	lines := strings.Split(text, "\n")
 	kept := lines[:0:0]
@@ -139,9 +141,13 @@ func stripQuotes(text string) string {
 		if strings.HasPrefix(strings.TrimLeft(ln, " \t"), ">") {
 			continue
 		}
-		kept = append(kept, ln)
+		kept = append(kept, stripLineQuotes(ln))
 	}
-	rs := []rune(strings.Join(kept, "\n"))
+	return strings.Join(kept, "\n")
+}
+
+func stripLineQuotes(line string) string {
+	rs := []rune(line)
 	// lastAt[c] is the index of the last closer c: an opener after it can
 	// never close, which keeps the scan linear.
 	lastAt := map[rune]int{}

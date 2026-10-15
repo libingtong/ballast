@@ -542,6 +542,35 @@ func (c *evalCtx) bindings(p *program) (bs []binding, uncertain bool, cause stri
 				return bs, false, ""
 			}
 		}
+		// Shell tools expose their write targets (§5.2). A rule without
+		// when conditions cannot observe the binding, so skip the parse.
+		if t != nil && sk != model.ShellNone && len(p.when) > 0 {
+			kind := kindName(sk)
+			cl, why := c.commandList()
+			if cl == nil {
+				note(why)
+			} else {
+				for i := range cl.Nodes {
+					for _, w := range cl.Nodes[i].Writes {
+						if w.Dynamic {
+							note(kind + ":dynamic_write_target")
+							continue
+						}
+						bs = append(bs, binding{node: i, tgt: target{raw: w.Path, ok: true}})
+					}
+				}
+				if cl.Unknown {
+					reason := cl.UnknownReason
+					if reason == "" {
+						reason = "unknown_construct"
+					}
+					note(kind + ":" + reason)
+				}
+			}
+			if len(bs) > 0 || uncertain {
+				return bs, uncertain, cause
+			}
+		}
 		return []binding{{node: -1}}, false, ""
 	}
 	if t == nil {
