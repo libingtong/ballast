@@ -272,7 +272,7 @@ ballast replay path/to/transcript.jsonl --client claude-code --format md
 ballast replay path/to/transcript.jsonl --rules .ballast/rules.json --subagents
 ```
 
-每次评估被分成 `known-hit`、`known-miss`、`approximate`、`unknown` 四类。`verify_fresh` 一类依赖证据的谓词,只在能找到可信的证据记录(`~/.ballast/evidence` 或 `--evidence <文件>`)时才给出确定结论;transcript 里出现过一次 `ballast verify` 调用**不算**证据。
+每次评估被分成 `known-hit`、`known-miss`、`approximate`、`unknown` 四类。`verify_fresh` 一类依赖证据的谓词,只在能找到可信的证据记录(`~/.ballast/evidence` 或 `--evidence <文件>`)时才给出确定结论;transcript 里出现过一次 `ballast verify` 调用**不算**证据。分类按实际求值路径:规则的 `match` 本身就不命中的求值记为 `known-miss`;`path_exists` 只有在不得不读当前磁盘时才是 `approximate`,能由 transcript 里的读写还原时仍是精确的。
 
 ## git pre-commit 模板
 

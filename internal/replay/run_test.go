@@ -485,16 +485,23 @@ func TestRunWorldPredicatesAreApproximate(t *testing.T) {
 	if got := counts(summary(t, rep, "in-ci")); got != [4]int{0, 0, 4, 0} {
 		t.Errorf("in-ci = %v", got)
 	}
-	if got := counts(summary(t, rep, "on-main")); got != [4]int{0, 0, 4, 0} {
-		t.Errorf("on-main = %v", got)
+	if got := counts(summary(t, rep, "on-main")); got != [4]int{0, 1, 3, 0} {
+		t.Errorf("on-main = %v", got) // the Write misses the matcher alone: known-miss
 	}
-	if got := counts(summary(t, rep, "lockfile")); got != [4]int{0, 0, 4, 0} {
+	// lockfile: the Write is a matcher miss; t1 asks the disk (no transcript
+	// fact about go.sum yet) so it stays approximate; t2/t3 are answered from
+	// the transcript (the Write created go.sum), hence exact hits.
+	if got := counts(summary(t, rep, "lockfile")); got != [4]int{2, 1, 1, 0} {
 		t.Errorf("lockfile = %v", got)
 	}
 	var hits []string
 	for _, s := range rep.Samples {
-		if s.Class != Approximate {
-			t.Errorf("sample %+v is not approximate", s)
+		wantClass := Approximate
+		if s.RuleID == "lockfile" {
+			wantClass = KnownHit
+		}
+		if s.Class != wantClass {
+			t.Errorf("sample %+v is not %s", s, wantClass)
 		}
 		hits = append(hits, s.RuleID)
 	}
@@ -1374,5 +1381,58 @@ func TestRunUsesInjectedProjectLoader(t *testing.T) {
 	valid := `{"version":1,"verify":[{"name":"lint","argv":["x"],"required":true}]}`
 	if rep, _ := run(t, true, valid); counts(summary(t, rep, "verify-all")) != [4]int{0, 0, 1, 0} {
 		t.Errorf("strict loader, valid file: counts = %v", counts(summary(t, rep, "verify-all")))
+	}
+}
+
+// The class follows the actual evaluation path (doc.go "Classification"): a
+// call that the matcher already rejects is a known-miss however many
+// world/evidence predicates the rule lists, and path_exists is approximate
+// only when the current disk had to answer.
+func TestRunClassifiesByEvaluationPath(t *testing.T) {
+	// the shape of the default pack's read-before-edit
+	rbe := cr("read-before-edit", model.EventPreToolUse, func(r *model.Rule) {
+		r.Match = &model.Match{Tool: model.StringList{"Edit", "Write", "MultiEdit"}}
+		r.When = []model.Cond{
+			{PathExists: &model.PathArg{Path: model.TargetBinding}},
+			{Not: &model.Cond{ReadThisSession: &model.PathArg{Path: model.TargetBinding}}},
+		}
+	})
+	// the shape of evidence-before-commit
+	ebc := cr("evidence-before-commit", model.EventPreToolUse, func(r *model.Rule) {
+		r.Match = &model.Match{Bash: &model.ShellMatch{Cmd: model.StringList{"git"}}}
+		r.When = []model.Cond{{Not: &model.Cond{VerifyFresh: &model.VerifyFreshArg{}}}}
+	})
+	e := newEnv(t, rset("g", rbe, ebc))
+	if err := os.MkdirAll(e.workdir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.workdir, "old.go"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cwd := e.workdir
+	x := newTx("s", cwd)
+	x.user("go")
+	x.tool("b1", "Bash", map[string]any{"command": "ls"})                                        // matcher miss for both rules
+	x.tool("b2", "Bash", map[string]any{"command": "git commit -m x"})                           // ebc: no evidence -> unknown
+	x.tool("r1", "Read", map[string]any{"file_path": cwd + "/seen.go"}).result("r1", "x", false) // transcript fact: exists + read
+	x.tool("e1", "Edit", map[string]any{"file_path": cwd + "/seen.go"})                          // exact: exists, read -> known-miss
+	x.tool("e2", "Edit", map[string]any{"file_path": cwd + "/old.go"})                           // unread, only the disk knows -> approximate hit
+	x.tool("e3", "Write", map[string]any{"file_path": cwd + "/new.go"})                          // unread, absent on disk -> approximate miss
+	x.tool("b3", "Bash", map[string]any{"command": "git status"})                                // git, but no commit: unknown (no evidence)
+	rep := mustRun(t, e, x.write(t, filepath.Join(e.dir, "s.jsonl")), Options{})
+
+	// read-before-edit: b1, b2, r1(Read), b3 miss the matcher -> 4 known-miss; e1 known-miss;
+	// e2 approximate hit; e3 approximate miss.
+	if got := counts(summary(t, rep, "read-before-edit")); got != [4]int{0, 5, 2, 0} {
+		t.Errorf("read-before-edit = %v", got)
+	}
+	// evidence-before-commit: every non-git call (and the Edits/Read) misses the
+	// matcher; the two git calls stay unknown without trusted evidence.
+	if got := counts(summary(t, rep, "evidence-before-commit")); got != [4]int{0, 5, 0, 2} {
+		t.Errorf("evidence-before-commit = %v", got)
+	}
+	smp := samplesOf(rep, "read-before-edit")
+	if len(smp) != 1 || smp[0].Class != Approximate || !strings.HasSuffix(smp[0].Matched, "old.go") {
+		t.Errorf("samples = %+v", smp)
 	}
 }

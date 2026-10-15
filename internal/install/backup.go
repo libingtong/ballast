@@ -1,6 +1,9 @@
 package install
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -8,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
@@ -18,16 +22,40 @@ const MaxBackups = 10
 
 const backupTimeLayout = "20060102T150405Z"
 
-// EncodeBackupName turns an absolute path into a backup file name: path
-// separators become "%2F". To keep the name reversible and valid on Windows,
-// '%' is escaped as "%25" and the drive colon as "%3A".
+// maxBackupBase is the longest basename (bytes) kept in a backup file name.
+const maxBackupBase = 64
+
+// backupIndexName is the per-backup-directory file mapping backup file names
+// back to the original absolute paths.
+const backupIndexName = "index.json"
+
+// EncodeBackupName turns an absolute path into a fixed-length backup file
+// name: "<sha256(path)[:16] in hex>-<basename>". The basename (split on both
+// '/' and '\\', so Windows paths work on any host) is truncated to
+// maxBackupBase bytes on a rune boundary, which keeps the name far below
+// NAME_MAX however deep the original path is. The mapping back to the full
+// path is recorded in the backup directory's index.json (and in
+// BackupRecord.Files).
 func EncodeBackupName(p string) string {
-	drive := ""
-	if len(p) >= 2 && p[1] == ':' {
-		drive, p = p[:1]+"%3A", p[2:]
+	sum := sha256.Sum256([]byte(p))
+	base := p
+	if i := strings.LastIndexAny(base, `/\`); i >= 0 {
+		base = base[i+1:]
 	}
-	r := strings.NewReplacer("%", "%25", "/", "%2F", `\`, "%2F")
-	return drive + r.Replace(p)
+	base = strings.Map(func(r rune) rune {
+		if r < 0x20 || strings.ContainsRune(`<>:"|?*`, r) {
+			return '_'
+		}
+		return r
+	}, base)
+	if len(base) > maxBackupBase {
+		cut := maxBackupBase
+		for cut > 0 && !utf8.RuneStart(base[cut]) {
+			cut--
+		}
+		base = base[:cut]
+	}
+	return hex.EncodeToString(sum[:8]) + "-" + base
 }
 
 func isBackupDirName(n string) bool {
@@ -84,6 +112,7 @@ func Backup(opt Options, files []string) (*model.BackupRecord, error) {
 		return nil, fmt.Errorf("backup: %w", err)
 	}
 	rec := &model.BackupRecord{Dir: dir, At: now}
+	index := map[string]string{} // backup file name -> original absolute path
 	for _, it := range items {
 		dst := filepath.Join(dir, EncodeBackupName(it.path))
 		if err := sys.WriteFileAtomic(fsys, opt.IDs, dst, it.data, 0o600, true); err != nil {
@@ -91,6 +120,13 @@ func Backup(opt Options, files []string) (*model.BackupRecord, error) {
 			return nil, fmt.Errorf("backup %s: %w", it.path, err)
 		}
 		rec.Files = append(rec.Files, it.path)
+		index[EncodeBackupName(it.path)] = it.path
+	}
+	if ib, err := json.MarshalIndent(index, "", "  "); err == nil {
+		if err := sys.WriteFileAtomic(fsys, opt.IDs, filepath.Join(dir, backupIndexName), append(ib, '\n'), 0o600, true); err != nil {
+			_ = fsys.RemoveAll(dir)
+			return nil, fmt.Errorf("backup index: %w", err)
+		}
 	}
 	rotateBackups(fsys, lay.BackupsDir, filepath.Base(dir))
 	return rec, nil

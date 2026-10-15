@@ -39,6 +39,9 @@
 // whose rules merge to the same generation do not evict each other) stores
 // {sources, merged LoadedRules, settings, notices}. A hit costs 3 stats + 2 small reads + Compile (regexes
 // lazy). Cache/LKG write failures are NOT exceptions (stderr diag only).
+// Cache growth is bounded: when the stat index overflows (64 keys) and is
+// rebuilt, rules files it no longer references are deleted; `ballast gc`
+// (GCCache) also removes unreferenced rules files older than 7 days.
 // LKG bytes: cache/lkg/<layer>-<sha256(abs path)[:12]>.json, rewritten when a
 // valid layer's hash changes.
 //

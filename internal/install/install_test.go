@@ -1172,3 +1172,31 @@ func TestNilOptionFieldsFallBackToTheRealSystem(t *testing.T) {
 		t.Error("not uninstalled")
 	}
 }
+
+// A config directory whose absolute path is far beyond NAME_MAX must not make
+// the backup file name (once derived from the full path) overflow it.
+func TestInstallUninstallWithVeryLongConfigPath(t *testing.T) {
+	e := newTenv(t)
+	long := e.sb.Home
+	for i := 0; i < 3; i++ {
+		long = filepath.Join(long, strings.Repeat("c", 120))
+	}
+	e.lay.ClaudeDir = long
+	if len(e.claudeSettings()) < 300 {
+		t.Fatalf("path is only %d bytes", len(e.claudeSettings()))
+	}
+	orig := "{\n  \"model\": \"opus\"\n}\n"
+	e.write(e.claudeSettings(), orig)
+	opt := e.opts(model.ClientClaude)
+	rep := mustInstall(t, opt)
+	if rep.Backup == nil {
+		t.Fatal("install must back up the existing settings")
+	}
+	if !strings.Contains(e.read(e.claudeSettings()), "ballast") {
+		t.Error("hooks not installed")
+	}
+	mustUninstall(t, opt)
+	if got := e.read(e.claudeSettings()); got != orig {
+		t.Errorf("round trip changed the file: %q", got)
+	}
+}

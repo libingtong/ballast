@@ -30,5 +30,6 @@
 
 ## 仍未核验
 
+- **中断**(计划 M0a 用例之一,case `interrupt`):**未执行**。用户中断一个运行中的工具需要在交互会话里按 Esc,`claude -p` 探针无法脚本化,不做成假数据。间接可见的只有字段形态:`PostToolUseFailure.is_interrupt`(bash-exit1 中为 false)与 `tool_response.interrupted`(bash-ok 中为 false)。中断时是否触发 PostToolUseFailure、这两个字段是否为 true、`error` 文本如何,都没有证据。设计上的处理:两个字段按可选布尔解析;中断只算弱证据,不进入 `verify_failed_since_read`;状态机不假设每个 PreToolUse 都有对应的 Post 事件(见上"对设计的影响"第 5 条)。该 case 记为 `unverifiable`,已加入 `accutil m0-check` 的必需列表,由人工在交互会话里补抓。
 - 托管层行为(A13/A14/A15/A20)属于 M0b(P2)。
 - PostToolUse 在其他工具或更多并发场景下是否真的并发。

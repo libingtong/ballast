@@ -1,6 +1,6 @@
-# Ballast 架构与接口契约(冻结版 v1.3)
+# Ballast 架构与接口契约(冻结版 v1.4)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -119,15 +119,15 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 |---|---|---|---|
 | `rules.json` | 用户 | RuleFile(user 层) | 用户手写 |
 | `state/<repo_inst>/<session>/<agent>.json` | U5 | `state.Record` JSON,`"v":1` | 加锁事务 + 原子替换,不 fsync |
-| `state/<repo_inst>/<session>/<agent>.json.lock` | U5 | 空文件,flock / LockFileEx | DropAgent/DropSession 只在持锁时删状态文件,**从不删除锁文件**;锁文件随会话目录由 GC 清理(v1.3) |
+| `state/<repo_inst>/<session>/<agent>.json.lock` | U5 | 空文件,flock / LockFileEx | DropAgent/DropSession 只在持锁时删状态文件;DropAgent 不删锁文件,DropSession(SessionEnd)随后在持锁状态下尽力删除已无状态文件的锁文件和空会话目录(v1.4,加锁后复核 inode,避免孤儿锁分裂),删不掉的(如 Windows)由 TTL GC 兜底 |
 | `evidence/<repo_inst>/<name>/<t_start 20 位纳秒>-<job_id>.json` | U8 | `model.VerifyRecord` | 原子 + **fsync**,0600 |
 | `jobs/<repo_inst>/<name>/<job_id>.json` | U8 | `model.JobStatus` | 原子 |
 | `jobs/<repo_inst>/<name>/<job_id>.log` | U8 | runner 合并输出 | 追加 |
 | `audit/YYYY-MM.jsonl`、`audit/YYYY-MM.N.jsonl` | U5 | 每行一个 `model.AuditRecord`,≤8 KiB | `O_APPEND` 单次 write |
 | `cache/stat.json` | U4 | `{key(stat 指纹+版本) → generation}` | 原子,失败不算异常 |
-| `cache/rules-<generation>-<key[:8]>.json` | U4 | `{sources, rules([]LoadedRule), settings, notices}`;key = stat 指纹键,避免同 generation 的不同仓库互相覆盖(v1.3) | 原子,失败不算异常;不自动回收(已知局限:升级前的 `rules-<gen>.json` 与各仓库历史 generation 的缓存文件需用户手动清理 `~/.ballast/cache/rules-*.json`,删除后下次加载自动重建) |
+| `cache/rules-<generation>-<key[:8]>.json` | U4 | `{sources, rules([]LoadedRule), settings, notices}`;key = stat 指纹键,避免同 generation 的不同仓库互相覆盖(v1.3) | 原子,失败不算异常;回收(v1.4):`stat.json` 满 64 条重建时同时删除不再被引用的规则缓存文件,`ballast gc` 另删超过 7 天且未被引用的文件;升级前的 `rules-<gen>.json` 旧名文件同样会被 GC 回收 |
 | `cache/lkg/<layer>-<sha256(abs path)[:12]>.json` | U4 | 该层最近一次合法的原始字节 | 原子 |
-| `backups/<UTC yyyymmddThhmmssZ>-<rand6>/` | U10 | 被改写文件的原样副本(文件名为原绝对路径,分隔符转 `%2F`) | 目录 0700、文件 0600,保留最近 10 个 |
+| `backups/<UTC yyyymmddThhmmssZ>-<rand6>/` | U10 | 被改写文件的原样副本(文件名为 `<sha256(绝对路径)前 16 位十六进制>-<basename,最长 64 字节>`,原路径记在目录内 `index.json` 与 `BackupRecord.Files`,保证定长且可逆) | 目录 0700、文件 0600,保留最近 10 个 |
 | `reviews/<rule_id>.json` | U9 | `stats.Review` | 原子 |
 | `labels/<rule_id>.jsonl` | 用户/U9 | `{"sample_id","label":"tp"\|"fp","note"}` | 用户追加 |
 | `install-manifest.json` | U10 | `model.InstallManifest` | 原子 + fsync |
@@ -510,11 +510,30 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 | Cursor `afterAgentResponse` | 归一为 AgentResponse,仅存最终文本供后续 `stop` 规则使用 | Cursor stop payload 可能缺 `last_assistant_message` |
 | shell 读取目标 | `CommandNode.Reads`(bashparse/psparse 提取),Bash/PowerShell 的 PostToolUse 把非动态目标并入已读集合 | Codex 没有 Read 工具;否则 `read-before-edit` 在 Codex 上对每个已存在文件的 `apply_patch` 都命中(审核 major 1) |
 | `verify --check` 与 `GIT_INDEX_FILE` | 热路径忽略;`--check --commit` 由 CLI 读取并经 `CheckOptions.IndexFile` 传入 | pre-commit 阶段 git 指向将要提交的索引,`commit -a`/带路径提交才能判对(审核 major 2) |
+| ConfigChange 审计 hook(计划 M4 内容列) | 归入 P2,本期不实现,也不在安装事件列表中 | M0a 没抓过该事件的 payload(字段【未核验】);T0 下 `no-tamper` 已能检测对 settings 的改写,ConfigChange 只是更晚的第二信号;补抓 payload 后再做(计划 v0.4 变更 §4) |
+| 卸载不关闭 `[features] hooks = true`(§5.2) | 维持;计划 M4"往返 diff 为空"改为"除 `features.hooks` 外为空",`install-e2e.sh` 对"原文件没有 hooks 键"的夹具显式断言该残留 | 同一 `hooks.json` 里可能有别的工具的 hook 依赖该开关,关掉会静默失效;manifest 里的 `set_by_ballast` 只用于提示 |
+| 提交作者邮箱 | 发布前由仓库所有者决定是否改写历史(`git filter-repo --mailmap` → noreply 邮箱,并设置仓库级 `user.email`) | 历史里的工作邮箱公开后无法撤回;发布动作不由实现任务代做 |
 | `git add && git commit` 同一命令 | 不并入 commit 形式,列为已知局限并在 message 中提示 | 模拟前序节点副作用会让 FreshQuery 依赖整条 CommandList,收益小、风险大 |
 
 ---
 
 ## 14. 修订记录
+
+### v1.4(2026-10-16,第 1 轮系统审计修复)
+
+| 审计项 | 级别 | 处理 | 涉及文件 |
+|---|---|---|---|
+| 备份文件名随绝对路径变长,深目录下 `ENAMETOOLONG` | major | 备份文件名改为 `<sha256(路径)前 16 位>-<basename 至多 64 字节>`,目录内 `index.json` 记录映射,`BackupRecord.Files` 仍记原路径;`accept-m4.sh` 加深 `TMPDIR` 回归 | `internal/install/backup.go`、§3.1、`scripts/accept-m4.sh`、`scripts/install-e2e.sh` |
+| `cache/rules-*.json` 无界增长 | minor | `stat.json` 重建时删除不再被引用的规则缓存;`ballast gc` 清理 7 天未引用的缓存文件(`config.GCCache`) | `internal/config/cache.go`、`internal/config/cache_gc.go`、`internal/cli/cmd_misc.go`、§3.1 |
+| SessionEnd 后残留 `.lock` 与会话目录 | minor | `DropSession` 在持锁状态下尽力删除已无状态文件的锁文件与空目录;加锁后复核 inode(`os.SameFile`),避免孤儿锁分裂;`DropAgent` 仍不删锁文件;这是对 v1.3"永不删锁文件"的收窄修订 | `internal/state/store.go`、`ports.StateStore` 注释、§3.1 |
+| replay 对带 `path_exists`/`verify` 的规则一律 approximate | minor | 分类改为按实际求值路径(matcher 不命中 → known-miss;`path_exists` 仅在回退磁盘时 approximate),先改 `internal/replay/doc.go` 契约再改代码,补单测与端到端用例 | `internal/replay/doc.go`、`analyze.go`、`run.go` |
+| M0a 缺"中断"用例 | minor | 登记为 `unverifiable` 并说明理由,加入 `m0-check` 必需列表 | `docs/facts/`、`scripts/tools/accutil/m0check.go` |
+| 计划 M4 的 ConfigChange 未登记 | minor | 归入 P2,见 §13 | §13、计划 v0.4 变更 §4 |
+| Codex 往返残留 `features.hooks` | minor | 维持契约,同步计划措辞并加显式 e2e 断言,见 §13 | `scripts/install-e2e.sh`、计划 v0.4 变更 §4 |
+| M3 真实 replay 与 ≥ 20 条标注未执行 | minor | 依赖用户本机操作,步骤写入计划与 `scripts/README.md`;保持"未核验" | 计划 v0.4 变更 §4、`scripts/README.md` |
+| 提交作者邮箱 | minor | 发布前决定,见 §13 | — |
+
+导出签名:未修改已有导出签名;追加 `config.GCCache`、`config.CacheTTL`。
 
 ### v1.3(2026-10-16,U1–U11 实现后的契约跟进)
 

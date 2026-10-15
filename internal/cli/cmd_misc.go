@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libingtong/ballast/internal/audit"
+	"github.com/libingtong/ballast/internal/config"
 	"github.com/libingtong/ballast/internal/evidence"
 	"github.com/libingtong/ballast/internal/sys"
 	"github.com/libingtong/ballast/internal/version"
@@ -21,7 +22,7 @@ func runVersion(a *app, c *command, args []string) int {
 	return ExitOK
 }
 
-// runGC removes expired session state, audit files and evidence, then
+// runGC removes expired session state, audit files, evidence and stale rules cache files, then
 // refreshes gc.stamp. It is internal (spawned detached by SessionStart), so
 // failures only go to stderr.
 func runGC(a *app, c *command, args []string) int {
@@ -37,6 +38,9 @@ func runGC(a *app, c *command, args []string) int {
 	}
 	if err := evidence.NewStore(a.evidenceOptions()).GC(); err != nil {
 		errs = append(errs, fmt.Errorf("evidence: %w", err))
+	}
+	if _, err := config.GCCache(a.fs, a.lay.CacheDir, a.clock.Now(), 0); err != nil {
+		errs = append(errs, fmt.Errorf("cache: %w", err))
 	}
 	if err := touchStamp(a.fs, a.lay.GCStamp, a.clock.Now()); err != nil {
 		errs = append(errs, fmt.Errorf("gc.stamp: %w", err))

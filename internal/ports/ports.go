@@ -115,10 +115,12 @@ type StateStore interface {
 	Commit(key model.ScopeKey, d *model.StateDelta) (model.StateCommitInfo, error)
 	// DropAgent removes one agent state file (SubagentStop); DropSession
 	// removes every agent state file of the session (SessionEnd). Missing ⇒
-	// nil. Both remove a file only while holding its lock and never unlink
-	// "<file>.lock" (a held lock would otherwise be split in two); lock
-	// files and the emptied directory are left to GC. Best effort: a lock
-	// timeout leaves the file for GC and returns nil (contract v1.3).
+	// nil. Both remove a file only while holding its lock. DropAgent leaves
+	// "<file>.lock" alone; DropSession (v1.4) then unlinks the orphaned lock
+	// files, each only while holding it (lockers re-verify the inode after
+	// locking, so a lock is never split in two), and removes the emptied
+	// session directory. Best effort: whatever survives is left to GC, and a
+	// lock timeout leaves the file for GC and returns nil (contract v1.3).
 	DropAgent(key model.ScopeKey) error
 	DropSession(key model.ScopeKey) error
 }

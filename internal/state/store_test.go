@@ -500,7 +500,8 @@ func TestDropAgentAndSession(t *testing.T) {
 	if _, err := os.Stat(e.store.Path(sub)); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("%s still exists", e.store.Path(sub))
 	}
-	// The lock file is never unlinked (contract v1.3; GC removes it).
+	// DropAgent keeps the lock file (the session goes on); DropSession and GC
+	// remove it.
 	if _, err := os.Stat(e.store.Path(sub) + ".lock"); err != nil {
 		t.Errorf("lock file must survive DropAgent: %v", err)
 	}
@@ -519,9 +520,13 @@ func TestDropAgentAndSession(t *testing.T) {
 		if _, li := mustLoad(t, e.store, k); li.Exists {
 			t.Errorf("DropSession left %+v", k)
 		}
-		if _, err := os.Stat(e.store.Path(k) + ".lock"); err != nil {
-			t.Errorf("lock file must survive DropSession: %v", err)
+		// Windows cannot unlink a file it holds open: GC cleans up there.
+		if _, err := os.Stat(e.store.Path(k) + ".lock"); runtime.GOOS != "windows" && !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("DropSession should remove the orphaned lock file of %+v: %v", k, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Dir(e.store.Path(key))); runtime.GOOS != "windows" && !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the emptied session directory should be gone: %v", err)
 	}
 	if _, li := mustLoad(t, e.store, other); !li.Exists {
 		t.Error("DropSession removed another session")
@@ -774,5 +779,76 @@ func TestConcurrentLoadDuringCommits(t *testing.T) {
 	wg.Wait()
 	if bad != 0 {
 		t.Errorf("%d of %d lock-free loads saw a torn file", bad, reads)
+	}
+}
+
+// SessionEnd leaves no residue: state files, their lock files and the
+// session directory are gone, while a sibling session and the repo directory
+// (still used by it) stay.
+func TestDropSessionLeavesNoResidue(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("an open lock file cannot be unlinked on Windows; GC removes it")
+	}
+	e := newRealEnv(t)
+	sub := model.ScopeKey{RepoInst: key.RepoInst, Session: key.Session, Agent: "agent-3"}
+	other := model.ScopeKey{RepoInst: key.RepoInst, Session: "sess-other", Agent: "main"}
+	for _, k := range []model.ScopeKey{key, sub, other} {
+		mustCommit(t, e.store, k, model.StateDelta{ToolCall: true})
+	}
+	if err := e.store.DropSession(key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Dir(e.store.Path(key))); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("session directory left behind: %v", err)
+	}
+	if _, li := mustLoad(t, e.store, other); !li.Exists {
+		t.Error("the other session lost its state")
+	}
+	if err := e.store.DropSession(other); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Dir(filepath.Dir(e.store.Path(other)))); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("emptied repo directory left behind: %v", err)
+	}
+	if _, err := os.Stat(e.lay.StateDir); err != nil {
+		t.Errorf("state root lost: %v", err)
+	}
+	// the session can start again afterwards
+	mustCommit(t, e.store, key, model.StateDelta{ToolCall: true})
+	if _, li := mustLoad(t, e.store, key); !li.Exists {
+		t.Error("cannot commit after the session directory was removed")
+	}
+}
+
+// A process that opened a lock file which was unlinked and recreated meanwhile
+// must notice that it holds an orphaned inode.
+func TestLockIsCurrentDetectsReplacedLockFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("an open lock file cannot be unlinked on Windows")
+	}
+	e := newRealEnv(t)
+	lp := e.store.Path(key) + ".lock"
+	if err := os.MkdirAll(filepath.Dir(lp), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := e.store.openLock(e.store.Path(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if !e.store.lockIsCurrent(f, lp) {
+		t.Fatal("a fresh lock file is current")
+	}
+	if err := os.Remove(lp); err != nil {
+		t.Fatal(err)
+	}
+	if e.store.lockIsCurrent(f, lp) {
+		t.Error("an unlinked lock file is not current")
+	}
+	if err := os.WriteFile(lp, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if e.store.lockIsCurrent(f, lp) {
+		t.Error("a recreated lock file is a different file")
 	}
 }

@@ -5,20 +5,36 @@
 // compiled and evaluated through injected ports (RuleCompiler,
 // RuleEvaluator, BashParser, PowerShellParser, PathService).
 //
-// Classification of every (rule, synthesized event) evaluation (frozen):
-//   - known-hit / known-miss: outcome true/false and every predicate the
-//     rule used is reconstructable from the transcript itself
-//     (read_this_session, tool_count_since_inject, prev_prompt_regex,
-//     prior_hit, is_subagent, matchers).
-//   - approximate: the rule depends on env_equals, branch_glob, or
-//     path_exists of historical paths (answered from the transcript when the
-//     file was read/written earlier, else from the current disk), or is a
-//     Stop-family rule evaluated on the final assistant text of the turn
-//     (stop_hook_summary lines are reference only, never payload).
+// Classification of every (rule, synthesized event) evaluation (frozen;
+// revised in contract v1.4 to follow the ACTUAL evaluation path rather than
+// the static dependencies of the rule):
+//   - known-miss, by the matcher: the outcome is false AND the rule's `match`
+//     alone (the rule evaluated without its `when` conditions) is already
+//     false for this event. Matchers read only the hook payload, so this is
+//     exact whatever predicates the `when` list uses: a Bash call never
+//     reaches read-before-edit's path_exists. It does not apply to Stop-family
+//     rules (see approximate), and it takes precedence over the verify
+//     evidence requirement below. Needs Deps.Compiler to compile the
+//     matcher-only variant of the rules; without it this step is skipped and
+//     the rules below apply unchanged.
+//   - known-hit / known-miss, otherwise: outcome true/false and every
+//     predicate the evaluation consulted is reconstructable from the
+//     transcript itself (read_this_session, tool_count_since_inject,
+//     prev_prompt_regex, prior_hit, is_subagent, matchers, and path_exists
+//     answered from the transcript: a path read/written/deleted earlier in
+//     the replay).
+//   - approximate: the evaluation consulted env_equals or branch_glob; or a
+//     path_exists that had to fall back to the CURRENT disk (no transcript
+//     fact about the path; judged per evaluated event, so every
+//     path_exists rule of an event whose evaluation touched the disk is
+//     approximate); or is a Stop-family rule evaluated on the final assistant
+//     text of the turn (stop_hook_summary lines are reference only, never
+//     payload); or a verify rule with evidence (freshness is inferred); or a
+//     state-dependent rule on Cursor (its transcripts record no tool results).
 //   - unknown: outcome unknown; or verify_fresh / verify_failed_since_read
 //     without TRUSTED evidence (records under ~/.ballast/evidence matched by
-//     session_id and time, or --evidence <file>). A `ballast verify` call in
-//     the transcript is NOT evidence.
+//     session_id and time, or --evidence <file>) unless the matcher already
+//     missed. A `ballast verify` call in the transcript is NOT evidence.
 //
 // Session state (frozen): replay does NOT import internal/hook or
 // internal/state (archtest allowlist). It keeps its own in-memory

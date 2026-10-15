@@ -30,9 +30,14 @@
 // GC: removes session dirs whose newest file mtime is older than TTL (7d);
 // invoked by `ballast gc` (detached from SessionStart, ≤ once/day).
 // DropAgent/DropSession (contract v1.3) remove state files only while
-// holding their lock and never unlink "<file>.lock"; the lock files and the
-// emptied session directory are left to GC. A lock timeout leaves the file
-// for GC (nil error).
+// holding their lock. DropAgent never unlinks "<file>.lock" (the session goes
+// on). DropSession (SessionEnd; contract v1.4) afterwards unlinks the lock
+// files whose state file is gone, each only while holding it, then removes the
+// empty session and repo directories, all best effort (Windows cannot unlink
+// an open file; GC is the backstop). To keep that safe, every lock
+// acquisition re-checks after locking that its open file is still the one at
+// the lock path (os.SameFile) and otherwise retries, so nobody works under an
+// orphaned inode. A lock timeout leaves the file for GC (nil error).
 //
 // Implementation notes:
 //   - Every non-duplicate delta consumes one event_seq (with or without a

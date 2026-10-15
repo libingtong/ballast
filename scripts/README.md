@@ -34,6 +34,17 @@
 | `BALLAST_ACCEPT_MATRIX_REAL=1` | `accept-m2.sh` 额外跑 `matrix.sh --mode real` |
 | `BALLAST_MATRIX_ALLOW_NET=1` | `matrix.sh --mode real` 允许需要联网下载依赖的栈在本地运行 |
 
+## 需要你在本机完成的验收
+
+下面这一项无法在仓库内自动完成(transcript 含私人内容,不入库),`accept-m3.sh` 对它显式 SKIP;完成之前它在计划里保持"未核验":
+
+1. 在 `~/.ballast/replay-set.txt` 列出至少 3 份本机 transcript(每行一个路径,`#` 为注释),其中至少 1 份大于 10 MB。
+2. 用 `ballast replay <transcript> --format json` 与 `ballast stats --rule <规则 id> --sample 20` 取样本。
+3. 在 `~/.ballast/labels/<规则 id>.jsonl` 里写入至少 20 条标注,每行 `{"sample_id":"…","label":"tp"|"fp","note":"…"}`。
+4. `BALLAST_ACCEPT_REAL_REPLAY=1 bash scripts/accept-m3.sh`。
+
+默认规则包的 known-hit 可能凑不够 20 条(默认规则大多是 `log`、命中稀少):此时把 `rules/optional/` 里的规则加进标注集,或增加 transcript。
+
 ## 与 `scripts/bench` 的约定
 
 性能门槛由 U12c 的 `scripts/bench`(Go 程序)负责,真实接口是 `go run ./scripts/bench -bin <二进制> -base <临时目录> -root <仓库根> [-only <场景 id 正则>] [-n N] [-warm N]`(`-bin` 与 `-base` 必填,缺一退出 2;用 `-list` 列出场景 id)。`accept-m1.sh` 与 `accept-m2.sh` 通过 `lib.sh` 的 `run_bench` 调用它:`-bin` 是脚本已构建的共用二进制,`-base` 是 `$TMP_ROOT/bench`(临时目录内,不在任何 git 仓库里),其余参数原样透传。`accept-m1.sh` 不加参数,跑全部场景;`accept-m2.sh` 传 `-only '^6[abcd]$'`,只测 `git commit` 检查场景(6a/6b 为 1k/10k 文件的 `git commit`,6c/6d 为 `git commit -a`)。没有 `scripts/bench` 目录时显式 SKIP(`CI=true` 时失败)。也可以直接用 U12c 的 `scripts/bench.sh`(用 `ONLY` 环境变量缩小范围)。

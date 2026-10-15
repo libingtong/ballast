@@ -86,5 +86,6 @@
    "assertion": "A1: 公共字段按事件有条件出现",
    "result": "pass",
    "observation": "SessionStart(startup) 无 prompt_id/permission_mode/effort;scratchpad_dir 在本次所有样本中都未出现;agent_id/agent_type 只在子 agent 内出现;effort 为对象 {level}",
-   "evidence": ["payloads/"]}
+   "evidence": ["payloads/"]},
+  {"case_id": "interrupt", "events": ["PreToolUse", "PostToolUseFailure"], "schema_keys": {"PostToolUseFailure": ["is_interrupt"], "PostToolUse.tool_response": ["interrupted"]}, "assertion": "计划用例\"中断\":用户中断(Esc)一个运行中的工具调用时的 payload 形态(PostToolUseFailure.is_interrupt 或 tool_response.interrupted)", "result": "unverifiable", "observation": "未执行:中断需要在交互会话里由人按 Esc,`claude -p` 无头探针无法脚本化。只有字段形态间接可见:bash-exit1 的 PostToolUseFailure 带 is_interrupt(普通失败为 false),bash-ok 的 tool_response 带 interrupted(正常完成为 false)。中断时这两个字段是否为 true、是否仍触发 PostToolUseFailure、error 文本形态,均未核验。设计上的处理:is_interrupt/interrupted 按可选布尔解析;中断只作为弱证据,不进入 verify_failed_since_read 的判定;状态机不假设中断后一定有 Post* 事件(见 M0a-CONCLUSIONS 对设计的影响 5)", "evidence": ["payloads/bash-exit1/"]}
 ]

@@ -23,6 +23,9 @@ func TestAnalyzeRuleWalksNestedConditions(t *testing.T) {
 		}
 	})
 	m := analyzeRule(&c)
+	if !m.hasWhen {
+		t.Error("a rule with conditions has hasWhen")
+	}
 	if !m.usesEnv || !m.usesPathExists || !m.usesBranch || !m.usesVerify || !m.usesState {
 		t.Errorf("meta = %+v", m)
 	}
@@ -48,30 +51,41 @@ func TestClassify(t *testing.T) {
 		m         *ruleMeta
 		r         model.RuleResult
 		evidence  bool
+		facts     evalFacts // hasEvidence is taken from the evidence column
 		client    model.ClientID
 		want      Class
 		wantCause string
 	}{
-		{"plain hit", meta(nil), res(model.TriTrue, ""), false, model.ClientClaude, KnownHit, ""},
-		{"plain miss", meta(nil), res(model.TriFalse, ""), false, model.ClientClaude, KnownMiss, ""},
-		{"unknown outcome", meta(nil), res(model.TriUnknown, "dynamic_argv"), false, model.ClientClaude, Unknown, "dynamic_argv"},
-		{"unknown without cause", meta(nil), res(model.TriUnknown, ""), false, model.ClientClaude, Unknown, "unknown"},
-		{"state predicates are reconstructable", meta(func(m *ruleMeta) { m.usesState = true }), res(model.TriTrue, ""), false, model.ClientClaude, KnownHit, ""},
-		{"state on cursor is approximate", meta(func(m *ruleMeta) { m.usesState = true }), res(model.TriTrue, ""), false, model.ClientCursor, Approximate, ""},
-		{"env", meta(func(m *ruleMeta) { m.usesEnv = true }), res(model.TriFalse, ""), false, model.ClientClaude, Approximate, ""},
-		{"branch", meta(func(m *ruleMeta) { m.usesBranch = true }), res(model.TriTrue, ""), false, model.ClientClaude, Approximate, ""},
-		{"path_exists", meta(func(m *ruleMeta) { m.usesPathExists = true }), res(model.TriTrue, ""), false, model.ClientClaude, Approximate, ""},
-		{"stop family", meta(func(m *ruleMeta) { m.event = model.EventStop }), res(model.TriFalse, ""), false, model.ClientClaude, Approximate, ""},
-		{"subagent stop", meta(func(m *ruleMeta) { m.event = model.EventSubagentStop }), res(model.TriTrue, ""), false, model.ClientClaude, Approximate, ""},
-		{"stop with unknown outcome stays unknown", meta(func(m *ruleMeta) { m.event = model.EventStop }), res(model.TriUnknown, "x"), false, model.ClientClaude, Unknown, "x"},
-		{"verify without evidence even when the outcome is false", meta(func(m *ruleMeta) { m.usesVerify = true }), res(model.TriFalse, ""), false, model.ClientClaude, Unknown, "no_trusted_evidence"},
-		{"verify without evidence and hit", meta(func(m *ruleMeta) { m.usesVerify = true }), res(model.TriTrue, ""), false, model.ClientClaude, Unknown, "no_trusted_evidence"},
-		{"verify with evidence", meta(func(m *ruleMeta) { m.usesVerify = true }), res(model.TriTrue, ""), true, model.ClientClaude, Approximate, ""},
-		{"verify with evidence but unknown outcome", meta(func(m *ruleMeta) { m.usesVerify = true }), res(model.TriUnknown, "snapshot_error"), true, model.ClientClaude, Unknown, "snapshot_error"},
+		{"plain hit", meta(nil), res(model.TriTrue, ""), false, evalFacts{}, model.ClientClaude, KnownHit, ""},
+		{"plain miss", meta(nil), res(model.TriFalse, ""), false, evalFacts{}, model.ClientClaude, KnownMiss, ""},
+		{"unknown outcome", meta(nil), res(model.TriUnknown, "dynamic_argv"), false, evalFacts{}, model.ClientClaude, Unknown, "dynamic_argv"},
+		{"unknown without cause", meta(nil), res(model.TriUnknown, ""), false, evalFacts{}, model.ClientClaude, Unknown, "unknown"},
+		{"state predicates are reconstructable", meta(func(m *ruleMeta) { m.usesState = true }), res(model.TriTrue, ""), false, evalFacts{}, model.ClientClaude, KnownHit, ""},
+		{"state on cursor is approximate", meta(func(m *ruleMeta) { m.usesState = true }), res(model.TriTrue, ""), false, evalFacts{}, model.ClientCursor, Approximate, ""},
+		{"env", meta(func(m *ruleMeta) { m.usesEnv = true }), res(model.TriFalse, ""), false, evalFacts{}, model.ClientClaude, Approximate, ""},
+		{"branch", meta(func(m *ruleMeta) { m.usesBranch = true }), res(model.TriTrue, ""), false, evalFacts{}, model.ClientClaude, Approximate, ""},
+		{"path_exists answered from the transcript", meta(func(m *ruleMeta) { m.usesPathExists = true }), res(model.TriTrue, ""), false, evalFacts{}, model.ClientClaude, KnownHit, ""},
+		{"path_exists answered from the disk", meta(func(m *ruleMeta) { m.usesPathExists = true }), res(model.TriTrue, ""), false, evalFacts{diskUsed: true}, model.ClientClaude, Approximate, ""},
+		{"path_exists miss from the disk", meta(func(m *ruleMeta) { m.usesPathExists = true }), res(model.TriFalse, ""), false, evalFacts{diskUsed: true}, model.ClientClaude, Approximate, ""},
+		{"matcher miss beats path_exists", meta(func(m *ruleMeta) { m.usesPathExists = true }), res(model.TriFalse, ""), false, evalFacts{diskUsed: true, matcherMiss: true}, model.ClientClaude, KnownMiss, ""},
+		{"matcher miss beats env and branch", meta(func(m *ruleMeta) { m.usesEnv, m.usesBranch = true, true }), res(model.TriFalse, ""), false, evalFacts{matcherMiss: true}, model.ClientClaude, KnownMiss, ""},
+		{"matcher miss beats missing verify evidence", meta(func(m *ruleMeta) { m.usesVerify = true }), res(model.TriFalse, ""), false, evalFacts{matcherMiss: true}, model.ClientClaude, KnownMiss, ""},
+		{"matcher miss on cursor with state", meta(func(m *ruleMeta) { m.usesState = true }), res(model.TriFalse, ""), false, evalFacts{matcherMiss: true}, model.ClientCursor, KnownMiss, ""},
+		{"matcher miss does not apply to the stop family", meta(func(m *ruleMeta) { m.event = model.EventStop }), res(model.TriFalse, ""), false, evalFacts{matcherMiss: true}, model.ClientClaude, Approximate, ""},
+		{"a hit is never a matcher miss", meta(func(m *ruleMeta) { m.usesPathExists = true }), res(model.TriTrue, ""), false, evalFacts{matcherMiss: true, diskUsed: true}, model.ClientClaude, Approximate, ""},
+		{"stop family", meta(func(m *ruleMeta) { m.event = model.EventStop }), res(model.TriFalse, ""), false, evalFacts{}, model.ClientClaude, Approximate, ""},
+		{"subagent stop", meta(func(m *ruleMeta) { m.event = model.EventSubagentStop }), res(model.TriTrue, ""), false, evalFacts{}, model.ClientClaude, Approximate, ""},
+		{"stop with unknown outcome stays unknown", meta(func(m *ruleMeta) { m.event = model.EventStop }), res(model.TriUnknown, "x"), false, evalFacts{}, model.ClientClaude, Unknown, "x"},
+		{"verify without evidence even when the outcome is false", meta(func(m *ruleMeta) { m.usesVerify = true }), res(model.TriFalse, ""), false, evalFacts{}, model.ClientClaude, Unknown, "no_trusted_evidence"},
+		{"verify without evidence and hit", meta(func(m *ruleMeta) { m.usesVerify = true }), res(model.TriTrue, ""), false, evalFacts{}, model.ClientClaude, Unknown, "no_trusted_evidence"},
+		{"verify with evidence", meta(func(m *ruleMeta) { m.usesVerify = true }), res(model.TriTrue, ""), true, evalFacts{}, model.ClientClaude, Approximate, ""},
+		{"verify with evidence but unknown outcome", meta(func(m *ruleMeta) { m.usesVerify = true }), res(model.TriUnknown, "snapshot_error"), true, evalFacts{}, model.ClientClaude, Unknown, "snapshot_error"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, cause := classify(tc.m, tc.r, tc.evidence, tc.client)
+			f := tc.facts
+			f.hasEvidence = tc.evidence
+			got, cause := classify(tc.m, tc.r, f, tc.client)
 			if got != tc.want || cause != tc.wantCause {
 				t.Errorf("classify = %s/%q, want %s/%q", got, cause, tc.want, tc.wantCause)
 			}

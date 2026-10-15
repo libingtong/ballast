@@ -227,7 +227,7 @@ client_suite() {
   local bfile found=0
   for bfile in "$BALLAST_HOME"/backups/*/*; do
     case "$bfile" in
-      *"%2F$(basename "$f")") if cmp -s "$bfile" "$cfgsave"; then found=1; fi ;;
+      *"-$(basename "$f")") if cmp -s "$bfile" "$cfgsave"; then found=1; fi ;;
     esac
   done
   if [ "$found" = 1 ]; then
@@ -374,6 +374,28 @@ expect_rc "codex: uninstall" 0
 after="$(mktmp after-trust)"
 snap "$after"
 same_tree "codex: the trust round trip leaves no diff" "$before" "$after"
+
+section "codex: a config.toml without a features.hooks key (documented residue)"
+new_client_sandbox codex
+seed_client codex
+# The seed already enables hooks; replace it with a config that does not.
+write_file "$SB_HOME/.codex/config.toml" 'model = "gpt"
+'
+cfg_before="$(cat "$SB_HOME/.codex/config.toml")"
+install_c codex
+expect_rc "codex: install without a features.hooks key" 0
+check_contains "codex: install switched features.hooks on" "$(cat "$SB_HOME/.codex/config.toml")" "hooks = true"
+bl uninstall --client codex
+expect_rc "codex: uninstall" 0
+cfg_after="$(cat "$SB_HOME/.codex/config.toml")"
+# Contract (architecture 5.2): the switch Ballast turned on is never switched
+# off again, because other hook sources may rely on it. This is the one
+# documented exception to the empty round-trip diff.
+check_eq "codex: the original text plus the features.hooks switch remain" "$cfg_after" "$cfg_before
+
+[features]
+hooks = true"
+check_lacks "codex: and no Ballast text remains" "$cfg_after" "ballast"
 
 section "cursor: the managed ballast.mdc"
 new_client_sandbox cursor

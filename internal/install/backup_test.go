@@ -1,6 +1,7 @@
 package install
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -8,25 +9,75 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
 )
 
 func TestEncodeBackupName(t *testing.T) {
-	for in, want := range map[string]string{
-		"/home/u/.claude/settings.json": "%2Fhome%2Fu%2F.claude%2Fsettings.json",
-		`C:\Users\u\x.json`:             "C%3A%2FUsers%2Fu%2Fx.json",
-		"/a%2Fb":                        "%2Fa%252Fb",
-		"/opt/a:b/c":                    "%2Fopt%2Fa:b%2Fc",
-		"relative.json":                 "relative.json",
+	for _, in := range []string{
+		"/home/u/.claude/settings.json",
+		`C:\Users\u\x.json`,
+		"/a%2Fb",
+		"/opt/a:b/c",
+		"relative.json",
+		"/" + strings.Repeat("d", 300) + "/settings.json",
+		"/x/" + strings.Repeat("é", 200),
 	} {
-		if got := EncodeBackupName(in); got != want {
-			t.Errorf("EncodeBackupName(%q) = %q, want %q", in, got, want)
+		got := EncodeBackupName(in)
+		if got != EncodeBackupName(in) {
+			t.Errorf("%q: not deterministic", in)
 		}
-		if strings.ContainsAny(EncodeBackupName(in), `/\`) {
-			t.Errorf("%q: encoded name still contains a separator", in)
+		if strings.ContainsAny(got, `/\:`) {
+			t.Errorf("%q: encoded name %q contains a separator", in, got)
 		}
+		if len(got) > 16+1+maxBackupBase {
+			t.Errorf("%q: encoded name is %d bytes", in, len(got))
+		}
+		if !utf8.ValidString(got) {
+			t.Errorf("%q: encoded name is not valid UTF-8", in)
+		}
+	}
+	if got := EncodeBackupName("/home/u/.claude/settings.json"); !strings.HasSuffix(got, "-settings.json") || len(got) != 16+1+len("settings.json") {
+		t.Errorf("name = %q", got)
+	}
+	if EncodeBackupName("/a/settings.json") == EncodeBackupName("/b/settings.json") {
+		t.Error("same basename in different directories must not collide")
+	}
+	if got := EncodeBackupName(`C:\Users\u\x.json`); !strings.HasSuffix(got, "-x.json") {
+		t.Errorf("windows basename: %q", got)
+	}
+}
+
+func TestBackupVeryLongPaths(t *testing.T) {
+	e := newTenv(t)
+	// Directory names are capped at NAME_MAX, so nest several long ones to
+	// exceed 300 characters for the whole path.
+	long := e.sb.Home
+	for i := 0; i < 3; i++ {
+		long = filepath.Join(long, strings.Repeat("l", 200))
+	}
+	f := filepath.Join(long, "settings.json")
+	if len(f) < 300 {
+		t.Fatalf("path is only %d bytes", len(f))
+	}
+	e.write(f, "payload")
+	rec, err := Backup(e.opts(), []string{f})
+	if err != nil {
+		t.Fatalf("backup of a %d byte path: %v", len(f), err)
+	}
+	got, err := os.ReadFile(filepath.Join(rec.Dir, EncodeBackupName(f)))
+	if err != nil || string(got) != "payload" {
+		t.Fatalf("backup content %q %v", got, err)
+	}
+	ib, err := os.ReadFile(filepath.Join(rec.Dir, backupIndexName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var idx map[string]string
+	if err := json.Unmarshal(ib, &idx); err != nil || idx[EncodeBackupName(f)] != f {
+		t.Errorf("index.json = %s (%v)", ib, err)
 	}
 }
 

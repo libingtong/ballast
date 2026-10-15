@@ -37,8 +37,8 @@ func TestRunCursorIsApproximateForStatefulRules(t *testing.T) {
 		`{"role":"assistant","message":{"content":[{"type":"text","text":"finished"}]}}`,
 	})
 	rep := mustRun(t, e, path, Options{Client: model.ClientCursor})
-	if got := counts(summary(t, rep, "cursor-write")); got != [4]int{0, 0, 2, 0} {
-		t.Errorf("cursor-write = %v", got) // Write (hit) + Shell (miss), both approximate
+	if got := counts(summary(t, rep, "cursor-write")); got != [4]int{0, 1, 1, 0} {
+		t.Errorf("cursor-write = %v", got) // Write (hit) is approximate; the Shell call misses the matcher alone: known-miss
 	}
 	if got := counts(summary(t, rep, "any-shell")); got != [4]int{1, 1, 0, 0} {
 		t.Errorf("any-shell = %v (stateless rules stay known)", got)

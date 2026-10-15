@@ -70,6 +70,7 @@ type runner struct {
 	batchAfter int
 
 	needsEvidence bool
+	probe         *model.CompiledRuleSet // matcher-only variant of the rules that have `when` (nil: none)
 	initial       *initialState
 	scopes        map[scopeKey]*scope
 	// per-session facts
@@ -293,6 +294,7 @@ func (r *runner) setRules(rs *model.CompiledRuleSet) {
 		r.rulesHash = hex.EncodeToString(sum[:])[:16]
 	}
 	r.metas = map[string]*ruleMeta{}
+	r.probe = nil
 	r.eventRules = map[model.EventName]bool{}
 	r.anchorEvery, r.batchAfter = model.DefaultAnchorEvery, model.DefaultBatchAfterTools
 	if in := rs.Settings.Inject; in != nil {
@@ -315,6 +317,57 @@ func (r *runner) setRules(rs *model.CompiledRuleSet) {
 		r.order = append(r.order, m.id)
 		r.summaries[m.id] = &RuleSummary{RuleID: m.id, Counts: map[Class]int{KnownHit: 0, KnownMiss: 0, Unknown: 0, Approximate: 0}}
 	}
+	r.probe = r.buildProbe(rs)
+}
+
+// buildProbe compiles the matcher-only variant of every rule that has `when`
+// conditions: the same rules with `when` removed. Evaluating it tells whether
+// a false outcome was already decided by the matcher (doc.go "Classification").
+// nil when there is nothing to probe, no Compiler, or compiling fails (the
+// classification then simply does not use matcher misses).
+func (r *runner) buildProbe(rs *model.CompiledRuleSet) *model.CompiledRuleSet {
+	if r.deps.Compiler == nil {
+		return nil
+	}
+	var loaded []model.LoadedRule
+	for i := range rs.Rules {
+		cr := &rs.Rules[i]
+		if m := r.metas[cr.Rule.ID]; m == nil || !m.hasWhen {
+			continue
+		}
+		lr := cr.LoadedRule
+		lr.Rule.When = nil
+		loaded = append(loaded, lr)
+	}
+	if len(loaded) == 0 {
+		return nil
+	}
+	probe, err := r.deps.Compiler.Compile(loaded, rs.Settings, rs.Generation)
+	if err != nil {
+		return nil
+	}
+	return probe
+}
+
+// matcherMisses evaluates the probe rule set and returns the ids of the rules
+// whose match alone is false for the event.
+func (r *runner) matcherMisses(in *model.EvalInput, sc *scope) map[string]bool {
+	if r.probe == nil {
+		return nil
+	}
+	pin := *in
+	pin.World = &replayWorld{r: r, sc: sc} // own world: its disk flag must not leak
+	v, err := r.deps.Engine.Evaluate(r.probe, &pin)
+	if err != nil || v == nil {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, res := range v.Results {
+		if res.Outcome == model.TriFalse {
+			out[res.RuleID] = true
+		}
+	}
+	return out
 }
 
 // -------------------------------------------------------- initial state ---
@@ -870,7 +923,7 @@ func (r *runner) runRules(sc *scope, ev *model.Event, it *Item, ts time.Time) []
 	ctx := r.pathContext(sc)
 	in := &model.EvalInput{
 		Event: ev, Client: r.client, Paths: ctx, Session: sc.st, SessionReadable: true,
-		World: &replayWorld{r: r, sc: sc}, Now: ts,
+		Now: ts,
 	}
 	if ev.Tool != nil && ev.Tool.Shell != model.ShellNone {
 		tool := ev.Tool
@@ -887,6 +940,8 @@ func (r *runner) runRules(sc *scope, ev *model.Event, it *Item, ts time.Time) []
 		in.Evidence = newEvidenceView(recs, ts, r.lastWriteAt(sc.session, ts)).withRequired(r.requiredNames(ctx))
 	}
 
+	world := &replayWorld{r: r, sc: sc}
+	in.World = world
 	verdict, err := r.deps.Engine.Evaluate(r.rs, in)
 	var results []model.RuleResult
 	var hits []model.RuleHit
@@ -900,6 +955,8 @@ func (r *runner) runRules(sc *scope, ev *model.Event, it *Item, ts time.Time) []
 		results, hits = verdict.Results, verdict.Hits
 	}
 
+	var misses map[string]bool
+	probed := false
 	var hitIDs []string
 	for _, h := range hits {
 		hitIDs = append(hitIDs, h.RuleID)
@@ -910,7 +967,18 @@ func (r *runner) runRules(sc *scope, ev *model.Event, it *Item, ts time.Time) []
 		if m == nil || sum == nil {
 			continue
 		}
-		class, cause := classify(m, res, hasEvidence, r.client)
+		facts := evalFacts{hasEvidence: hasEvidence, diskUsed: world.disk}
+		if res.Outcome == model.TriFalse {
+			if !m.hasWhen {
+				facts.matcherMiss = true // match is the whole rule
+			} else {
+				if !probed {
+					probed, misses = true, r.matcherMisses(in, sc)
+				}
+				facts.matcherMiss = misses[res.RuleID]
+			}
+		}
+		class, cause := classify(m, res, facts, r.client)
 		sum.Counts[class]++
 		switch {
 		case res.Outcome == model.TriTrue && class != Unknown:
@@ -998,14 +1066,16 @@ func (r *runner) norm(sc *scope, p string) string {
 // replayWorld answers path_exists from the transcript first, then from the
 // current disk (approximate); env and branch come from the transcript.
 type replayWorld struct {
-	r  *runner
-	sc *scope
+	disk bool // some path_exists answer came from the current disk (approximate)
+	r    *runner
+	sc   *scope
 }
 
 func (w *replayWorld) PathExists(norm string) model.Tri {
 	if v, ok := w.sc.exists[norm]; ok {
 		return model.TriOf(v)
 	}
+	w.disk = true
 	_, err := w.r.deps.FS.Stat(filepath.FromSlash(norm))
 	switch {
 	case err == nil:

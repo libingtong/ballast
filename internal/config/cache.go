@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
@@ -142,7 +143,8 @@ func (l *Loader) cacheStore(idx statIndex, key string, res MergeResult, gen stri
 		l.diag("cannot write rules cache: %v", err)
 		return
 	}
-	if idx.Keys == nil || len(idx.Keys) >= maxStatKeys {
+	reset := idx.Keys == nil || len(idx.Keys) >= maxStatKeys
+	if reset {
 		idx.Keys = make(map[string]string)
 	}
 	idx.V = cacheFormat
@@ -154,5 +156,12 @@ func (l *Loader) cacheStore(idx statIndex, key string, res MergeResult, gen stri
 	}
 	if err := sys.WriteFileAtomic(l.fs(), l.ids(), filepath.Join(l.opt.Layout.CacheDir, statIndexName), ib, 0o600, false); err != nil {
 		l.diag("cannot write stat index: %v", err)
+		return
+	}
+	if reset {
+		// The old index is gone, so every rules file it referenced is
+		// unreachable. Drop them; a racing writer whose file is removed here
+		// only suffers one cache miss.
+		pruneRulesCache(l.fs(), l.opt.Layout.CacheDir, referencedRulesFiles(idx), time.Time{}, 0)
 	}
 }

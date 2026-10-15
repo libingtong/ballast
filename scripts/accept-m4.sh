@@ -3,7 +3,7 @@
 # accept-m4.sh - milestone M4 core (install, uninstall, org template, doctor):
 #
 #   * unit tests of internal/install
-#   * install-e2e.sh: all four clients - round trip with an empty diff,
+#   * install-e2e.sh (also under a ~300 byte TMPDIR): all four clients - round trip with an empty diff,
 #     idempotence, the user's own hooks survive, a missing original file,
 #     refusal under a managed deployment and on unparsable configuration,
 #     backup cap
@@ -24,6 +24,22 @@ rc=0
 if [ "$rc" = 0 ]; then ok "go test ./internal/install"; else bad "go test ./internal/install" "exit $rc"; fi
 
 run_child "install-e2e.sh" install-e2e.sh
+
+# Regression: backup file names used to embed the whole config path, so a deep
+# TMPDIR (or CLAUDE_CONFIG_DIR) pushed them past NAME_MAX and install failed
+# with ENAMETOOLONG. Run the whole install e2e again under a ~300 byte path.
+section "deep TMPDIR"
+if [ "$IS_WINDOWS" = 1 ]; then
+  skip "install-e2e.sh under a deep TMPDIR" "MAX_PATH on Windows"
+else
+  deep_tmp="$TMP_ROOT/deep"
+  for _i in 1 2 3; do deep_tmp="$deep_tmp/$(printf 'd%.0s' $(seq 1 90))"; done
+  mkdir -p "$deep_tmp"
+  saved_tmpdir="${TMPDIR-}"
+  export TMPDIR="$deep_tmp"
+  run_child "install-e2e.sh (TMPDIR of ${#deep_tmp} bytes)" install-e2e.sh
+  if [ -n "$saved_tmpdir" ]; then export TMPDIR="$saved_tmpdir"; else unset TMPDIR; fi
+fi
 
 sandbox_new org
 section "org render"

@@ -601,6 +601,16 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - **git 回退路径**:用 `exec.CommandContext` 并按进程组 kill;临时索引不得写入用户的 `.git/`;看门狗退出前完成清理(来自 M0c 审计)。
 - **bench 门槛**:同时满足 `Bad==0`、样本数齐全、`p95≤30`;每个 `--client` 至少有一个 PreToolUse 场景(来自 M0c 审计)。
 
+### 4. 第 1 轮系统审计后的修订(v0.4.1,优先于正文)
+- **M0a 用例"中断"**:未执行,case `interrupt` 登记为 `unverifiable`(中断要在交互会话里按 Esc,无头探针无法脚本化),理由见 `docs/facts/M0a-CONCLUSIONS.md`,并已加入 `accutil m0-check` 的必需列表;由人工在交互会话补抓。
+- **M4 的"ConfigChange 审计 hook"**:**归入 P2,本期不实现**。理由:M0a 没有抓取过 ConfigChange 的 payload,事件字段【未核验】;T0 下 `no-tamper` 已能检测对 `settings.json`、`~/.ballast/**` 等的改写并写入审计,ConfigChange 只是更晚的第二信号;做成 log-only 也要把新事件纳入安装事件列表与 install golden,收益小于风险。P2 补抓 payload 后再做。
+- **M4 的"往返 diff 为空"**:对 Claude Code、Cursor、Hermes 与 Codex 的 `hooks.json` 逐字节为空;Codex 的 `config.toml` 例外:**除 `[features] hooks = true` 外为空**。这一行是安装器在原文件没有该开关时写入的,契约 §5.2 有意不在卸载时关闭(同一个 `hooks.json` 里可能还有别的工具的 hook 依赖它,关掉会静默失效),只提示。`install-e2e.sh` 用"没有 hooks 键"的夹具显式断言这条残留。
+- **备份文件名定长**:`<sha256(绝对路径)前 16 位>-<basename,最长 64 字节>`,原路径记在备份目录的 `index.json` 和 `BackupRecord.Files`;此前整条路径做百分号编码,深目录(`TMPDIR`、`CLAUDE_CONFIG_DIR` ≥ 约 237 字节)下会 `ENAMETOOLONG`,既装不上也卸不了。`accept-m4.sh` 加了深 `TMPDIR`(约 300 字节)的回归。
+- **缓存与会话状态不再无界增长**:`stat.json` 满 64 条整表重建时,同时删掉不再被引用的 `cache/rules-*.json`;`ballast gc` 另外清理超过 7 天且未被引用的缓存文件。SessionEnd 清理会话状态时,在持锁状态下尽力删除已无状态文件的 `.lock` 与空会话目录,删不掉的由 7 天 TTL GC 兜底;所有加锁处在加锁后复核 inode,避免孤儿锁分裂。
+- **replay 分类按实际求值路径**(契约见 `internal/replay/doc.go`):`match` 本身就不命中的求值记 known-miss,不再因规则用了 `path_exists`/`verify` 而整体降为 approximate/unknown;`path_exists` 只有在不得不读当前磁盘时才是 approximate,能由 transcript 内的读写还原时是精确的。目的是让 `read-before-edit` 这类默认规则也能积累 known 样本与精确率。
+- **需要用户在本机完成的验收**(无法在仓库内自动完成,`accept-m3.sh` 对此显式 SKIP):M3 的"replay ≥ 3 份真实 transcript、标注 ≥ 20 条"。步骤:在 `~/.ballast/replay-set.txt` 列出至少 3 份 transcript(其中至少 1 份 > 10 MB);用 `ballast replay <transcript> --format json` 与 `ballast stats --rule <id> --sample N` 取样本;在 `~/.ballast/labels/<rule_id>.jsonl` 写入 ≥ 20 条 `{"sample_id","label":"tp"|"fp","note"}`;然后 `BALLAST_ACCEPT_REAL_REPLAY=1 bash scripts/accept-m3.sh`。默认包的 known-hit 可能不够(默认规则多为 `log`、命中稀少):此时在标注集里加入 `rules/optional/` 的规则,或增加 transcript。该项在用户完成前保持"未核验"。
+- **提交作者邮箱**:公开发布前由仓库所有者确认是否接受历史中的工作邮箱;不接受就用 `git filter-repo --mailmap` 改写为 noreply 邮箱并设置仓库级 `user.email`(见 `docs/architecture.md` §13)。这是发布动作,不由实现任务代做。
+
 ## 已定事项(无需再裁决)
 - 合并语义:采用 B4 的方案,org 整体不可变,原问题 3 的备选方案升格为正式方案,以消除歧义。
 - ~~Codex:只预留 Adapter 接口~~ → 已被 v0.4 多客户端支持取代(用户 2026-10-16 要求)。

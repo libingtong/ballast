@@ -163,7 +163,16 @@ func TestGC(t *testing.T) {
 	writeFile(t, old, "")
 	recent := filepath.Join(s.sb.BallastHome, "audit", time.Now().UTC().Format("2006-01")+".jsonl")
 	writeFile(t, recent, "")
+	staleCache := filepath.Join(s.sb.BallastHome, "cache", "rules-0123456789abcdef-aaaaaaaa.json")
+	writeFile(t, staleCache, "{}")
+	longAgo := time.Now().Add(-30 * 24 * time.Hour)
+	if err := os.Chtimes(staleCache, longAgo, longAgo); err != nil {
+		t.Fatal(err)
+	}
 	s.mustExit(0, "", "", "gc")
+	if _, err := os.Stat(staleCache); err == nil {
+		t.Error("gc should delete unreferenced rules cache files older than 7 days")
+	}
 	if _, err := os.Stat(old); err == nil {
 		t.Error("gc should delete audit files past retention")
 	}

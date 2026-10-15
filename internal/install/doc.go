@@ -33,7 +33,8 @@
 //  3. Diff old/new; --dry-run prints a unified diff and stops.
 //  4. Back up every file that will change into one new directory
 //     ~/.ballast/backups/<UTC yyyymmddThhmmssZ>-<rand6>/ (dir 0700, files
-//     0600, original absolute path encoded as path with separators → "%2F"),
+//     0600, file name "<sha256(abs path)[:16]>-<basename ≤64B>", original paths
+//     recorded in the directory's index.json so long paths never hit NAME_MAX),
 //     rotate to keep the 10 newest directories.
 //  5. Write each file atomically (fsync), then the manifest (fsync).
 //

@@ -15,7 +15,7 @@ import (
 var m0RequiredCases = []string{
 	"bash-ok", "bash-exit1", "grep-exit1", "bash-startfail", "exit1-json-deny",
 	"updatedinput-no-allow", "updatedinput-allow", "warn-additionalcontext",
-	"stop-systemmessage", "stop-cap", "parallel-posttooluse", "subagent", "compact", "common-fields",
+	"stop-systemmessage", "stop-cap", "parallel-posttooluse", "interrupt", "subagent", "compact", "common-fields",
 }
 
 type m0Case struct {

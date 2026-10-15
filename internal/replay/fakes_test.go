@@ -419,7 +419,14 @@ func (e *miniEngine) cond(c *model.Cond, in *model.EvalInput, target string) mod
 		}
 		return model.TriFalse
 	case c.PathExists != nil:
-		return in.World.PathExists((fakePaths{}).Normalize(c.PathExists.Path, in.Event.Cwd, in.Paths))
+		p := c.PathExists.Path
+		if p == model.TargetBinding {
+			p = target
+		}
+		if p == "" {
+			return model.TriFalse
+		}
+		return in.World.PathExists((fakePaths{}).Normalize(p, in.Event.Cwd, in.Paths))
 	case c.VerifyFresh != nil:
 		if in.Evidence == nil {
 			return model.TriUnknown

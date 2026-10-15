@@ -99,13 +99,7 @@ func (s *Store) Commit(key model.ScopeKey, d *model.StateDelta) (model.StateComm
 	}
 	path := s.Path(key)
 
-	lf, err := s.openLock(path)
-	if err != nil {
-		return info, err
-	}
-	defer lf.Close() // closing also drops the OS lock should unlock fail
-
-	unlock, waited, err := TryLock(lf, LockBudget, s.opt.Clock)
+	lf, unlock, waited, err := s.acquire(path, lockCreateDirs)
 	info.LockWait = waited
 	if err != nil {
 		if errors.Is(err, model.ErrLockTimeout) {
@@ -114,6 +108,7 @@ func (s *Store) Commit(key model.ScopeKey, d *model.StateDelta) (model.StateComm
 		}
 		return info, err
 	}
+	defer lf.Close() // closing also drops the OS lock should unlock fail
 	defer func() { _ = unlock() }()
 
 	rec, load, err := s.read(path)
@@ -142,14 +137,77 @@ func (s *Store) Commit(key model.ScopeKey, d *model.StateDelta) (model.StateComm
 // openLock opens (creating when needed) the lock sibling of path.
 func (s *Store) openLock(path string) (sys.File, error) {
 	lp := path + ".lock"
-	f, err := s.opt.FS.OpenFile(lp, os.O_CREATE|os.O_RDWR, 0o600)
-	if err == nil || !errors.Is(err, fs.ErrNotExist) {
-		return f, err
-	}
-	if err := s.opt.FS.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, err
+	var f sys.File
+	var err error
+	// A concurrent SessionEnd may remove the (emptied) directory between the
+	// failed open and MkdirAll, so the pair is retried a few times.
+	for i := 0; i < 3; i++ {
+		f, err = s.opt.FS.OpenFile(lp, os.O_CREATE|os.O_RDWR, 0o600)
+		if err == nil || !errors.Is(err, fs.ErrNotExist) {
+			return f, err
+		}
+		if err = s.opt.FS.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return nil, err
+		}
 	}
 	return s.opt.FS.OpenFile(lp, os.O_CREATE|os.O_RDWR, 0o600)
+}
+
+type lockMode int
+
+const (
+	lockExisting   lockMode = iota // the lock file must exist
+	lockCreate                     // create the lock file; the directory must exist
+	lockCreateDirs                 // create the lock file and its directories
+)
+
+// acquire opens the lock sibling of path (creating it per mode) and
+// takes the OS lock within LockBudget. SessionEnd cleanup may unlink a lock
+// file while holding it, so a process that opened the old file and then won
+// the lock on an orphaned inode must not proceed: after locking, the open
+// file has to still be the one at the lock path, otherwise it retries on the
+// current one. (Windows cannot unlink an open file, so it skips the check.)
+// The returned file is open and locked; the caller closes it.
+func (s *Store) acquire(path string, mode lockMode) (lf sys.File, unlock func() error, waited time.Duration, err error) {
+	lp := path + ".lock"
+	for attempt := 0; ; attempt++ {
+		switch mode {
+		case lockCreateDirs:
+			lf, err = s.openLock(path)
+		case lockCreate:
+			lf, err = s.opt.FS.OpenFile(lp, os.O_CREATE|os.O_RDWR, 0o600)
+		default:
+			lf, err = s.opt.FS.OpenFile(lp, os.O_RDWR, 0o600)
+		}
+		if err != nil {
+			return nil, nil, waited, err
+		}
+		var w time.Duration
+		unlock, w, err = TryLock(lf, LockBudget, s.opt.Clock)
+		waited += w
+		if err != nil {
+			lf.Close()
+			return nil, nil, waited, err
+		}
+		if runtime.GOOS == "windows" || attempt >= 4 || s.lockIsCurrent(lf, lp) {
+			return lf, unlock, waited, nil
+		}
+		_ = unlock()
+		lf.Close()
+	}
+}
+
+// lockIsCurrent reports whether the open lock file is still the file at lp.
+func (s *Store) lockIsCurrent(lf sys.File, lp string) bool {
+	a, err := lf.Stat()
+	if err != nil {
+		return true
+	}
+	b, err := s.opt.FS.Stat(lp)
+	if err != nil {
+		return false // unlinked
+	}
+	return os.SameFile(a, b)
 }
 
 // writeAtomic replaces path via a temp file and rename, without fsync. On
@@ -173,18 +231,19 @@ func (s *Store) writeAtomic(path string, data []byte) error {
 }
 
 // DropAgent implements ports.StateStore. The state file is removed while
-// holding its lock, and "<file>.lock" itself is never unlinked: deleting a
-// lock file that another process holds (or is about to open) would let two
-// committers each own "the" lock and lose updates. Orphan lock files go away
-// with their session directory in GC. Drop is best-effort cleanup: a lock
+// holding its lock, and "<file>.lock" itself is not unlinked here (the
+// session may go on; only DropSession unlinks lock files, while holding
+// them, and acquire detects an orphaned inode). Orphans go away with their
+// session directory in DropSession or GC. Drop is best-effort cleanup: a lock
 // timeout leaves the file for GC and returns nil (contract v1.3).
 func (s *Store) DropAgent(key model.ScopeKey) error {
 	return s.dropLocked(s.Path(key))
 }
 
 // DropSession implements ports.StateStore: every agent state file of the
-// session is dropped as in DropAgent. The directory and its lock files stay
-// until GC (same lock-file reasoning). Missing ⇒ nil.
+// session is dropped as in DropAgent, then the now orphaned lock files and the
+// empty session directory are removed best effort (see cleanupSessionDir);
+// whatever survives is left to GC. Missing ⇒ nil.
 func (s *Store) DropSession(key model.ScopeKey) error {
 	dir := filepath.Dir(s.Path(key))
 	ents, err := s.opt.FS.ReadDir(dir)
@@ -204,7 +263,39 @@ func (s *Store) DropSession(key model.ScopeKey) error {
 			first = err
 		}
 	}
+	s.cleanupSessionDir(dir)
 	return first
+}
+
+// cleanupSessionDir is the best-effort tail of DropSession: it unlinks the
+// lock files whose state file is gone (each only while holding its lock, see
+// acquire) and then removes the session directory and its repo directory when
+// empty. Every failure is ignored; the TTL GC is the backstop.
+func (s *Store) cleanupSessionDir(dir string) {
+	ents, err := s.opt.FS.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, de := range ents {
+		name := de.Name()
+		if de.IsDir() || !strings.HasSuffix(name, ".json.lock") {
+			continue
+		}
+		state := filepath.Join(dir, strings.TrimSuffix(name, ".lock"))
+		if _, err := s.opt.FS.Lstat(state); !errors.Is(err, fs.ErrNotExist) {
+			continue // state still there (lock timeout, error): leave both
+		}
+		lf, unlock, _, err := s.acquire(state, lockExisting)
+		if err != nil {
+			continue
+		}
+		_ = s.opt.FS.Remove(state + ".lock") // fails on Windows while open: left to GC
+		_ = unlock()
+		lf.Close()
+	}
+	if s.opt.FS.Remove(dir) == nil {
+		_ = s.opt.FS.Remove(filepath.Dir(dir)) // the repo directory, only if now empty
+	}
 }
 
 // dropLocked removes one state file under its lock (see DropAgent).
@@ -212,21 +303,17 @@ func (s *Store) dropLocked(path string) error {
 	if _, err := s.opt.FS.Lstat(path); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
-	lf, err := s.opt.FS.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	lf, unlock, _, err := s.acquire(path, lockCreate)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil // the session directory vanished (GC)
 		}
-		return err
-	}
-	defer lf.Close()
-	unlock, _, err := TryLock(lf, LockBudget, s.opt.Clock)
-	if err != nil {
 		if errors.Is(err, model.ErrLockTimeout) {
 			return nil
 		}
 		return err
 	}
+	defer lf.Close()
 	defer unlock()
 	tries := 1
 	if runtime.GOOS == "windows" {
