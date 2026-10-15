@@ -220,6 +220,16 @@ func st(e *env, l model.Layer) model.StatKey {
 	return k
 }
 
+// rulesCacheFile returns the single cache/rules-<gen>-<key8>.json name.
+func rulesCacheFile(t *testing.T, dir, gen string) string {
+	t.Helper()
+	m, err := filepath.Glob(filepath.Join(dir, "rules-"+gen+"-*.json"))
+	if err != nil || len(m) != 1 {
+		t.Fatalf("rules cache files for %s: %v (err=%v)", gen, m, err)
+	}
+	return filepath.Base(m[0])
+}
+
 func TestLoadCacheHitSkipsParsing(t *testing.T) {
 	e := newEnv(t)
 	e.write(model.LayerOrg, rulesJSON(`{"inject":{"anchor_every":2}}`, on("org-rule")))
@@ -228,7 +238,7 @@ func TestLoadCacheHitSkipsParsing(t *testing.T) {
 	if e.comp.parses.Load() != 2 {
 		t.Fatalf("parses = %d", e.comp.parses.Load())
 	}
-	for _, f := range []string{"stat.json", "rules-" + first.Generation + ".json"} {
+	for _, f := range []string{"stat.json", rulesCacheFile(t, e.lay.CacheDir, first.Generation)} {
 		if _, err := os.Stat(filepath.Join(e.lay.CacheDir, f)); err != nil {
 			t.Fatalf("cache file %s: %v", f, err)
 		}
@@ -311,7 +321,7 @@ func TestLoadCorruptCacheIsAMiss(t *testing.T) {
 	e := newEnv(t)
 	e.write(model.LayerUser, rulesJSON("", on("aaa-rule")))
 	first := e.load()
-	for _, name := range []string{"rules-" + first.Generation + ".json", "stat.json"} {
+	for _, name := range []string{rulesCacheFile(t, e.lay.CacheDir, first.Generation), "stat.json"} {
 		p := filepath.Join(e.lay.CacheDir, name)
 		if err := os.WriteFile(p, []byte("{not json"), 0o600); err != nil {
 			t.Fatal(err)

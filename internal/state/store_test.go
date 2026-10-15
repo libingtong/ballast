@@ -497,10 +497,12 @@ func TestDropAgentAndSession(t *testing.T) {
 	if err := e.store.DropAgent(sub); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{e.store.Path(sub), e.store.Path(sub) + ".lock"} {
-		if _, err := os.Stat(f); !errors.Is(err, fs.ErrNotExist) {
-			t.Errorf("%s still exists", f)
-		}
+	if _, err := os.Stat(e.store.Path(sub)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("%s still exists", e.store.Path(sub))
+	}
+	// The lock file is never unlinked (contract v1.3; GC removes it).
+	if _, err := os.Stat(e.store.Path(sub) + ".lock"); err != nil {
+		t.Errorf("lock file must survive DropAgent: %v", err)
 	}
 	if _, li := mustLoad(t, e.store, key); !li.Exists {
 		t.Error("DropAgent removed a sibling agent")
@@ -509,11 +511,17 @@ func TestDropAgentAndSession(t *testing.T) {
 		t.Errorf("dropping a missing agent: %v", err)
 	}
 
+	mustCommit(t, e.store, sub, model.StateDelta{ToolCall: true})
 	if err := e.store.DropSession(key); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Dir(e.store.Path(key))); !errors.Is(err, fs.ErrNotExist) {
-		t.Error("session directory still exists")
+	for _, k := range []model.ScopeKey{key, sub} {
+		if _, li := mustLoad(t, e.store, k); li.Exists {
+			t.Errorf("DropSession left %+v", k)
+		}
+		if _, err := os.Stat(e.store.Path(k) + ".lock"); err != nil {
+			t.Errorf("lock file must survive DropSession: %v", err)
+		}
 	}
 	if _, li := mustLoad(t, e.store, other); !li.Exists {
 		t.Error("DropSession removed another session")
@@ -530,6 +538,60 @@ func TestDropAgentAndSession(t *testing.T) {
 	}
 	if _, li := mustLoad(t, e.store, other); !li.Exists {
 		t.Error("zero-key DropSession removed unrelated state")
+	}
+}
+
+// DropAgent/DropSession while another process holds the lock must not
+// unlink the lock file: a later Commit still waits on the same lock
+// (contract v1.3, review u5 minor).
+func TestDropKeepsHeldLock(t *testing.T) {
+	for _, drop := range []string{"agent", "session"} {
+		t.Run(drop, func(t *testing.T) {
+			e := newRealEnv(t)
+			mustCommit(t, e.store, key, model.StateDelta{ToolCall: true})
+			p := e.store.Path(key)
+			holder, err := os.OpenFile(p+".lock", os.O_RDWR, 0o600)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer holder.Close()
+			unlock, _, err := TryLock(holder, LockBudget, sys.RealClock{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if drop == "agent" {
+				err = e.store.DropAgent(key)
+			} else {
+				err = e.store.DropSession(key)
+			}
+			if err != nil {
+				t.Fatalf("drop under a held lock must be a nil best-effort: %v", err)
+			}
+			if _, err := os.Stat(p + ".lock"); err != nil {
+				t.Fatalf("lock file unlinked: %v", err)
+			}
+			if _, err := os.Stat(p); err != nil {
+				t.Errorf("state removed without holding the lock: %v", err)
+			}
+			info, err := e.store.Commit(key, &model.StateDelta{ToolCall: true})
+			if err != nil || !info.LockTimeout {
+				t.Fatalf("second commit = %+v, %v; want LockTimeout", info, err)
+			}
+			if err := unlock(); err != nil {
+				t.Fatal(err)
+			}
+			if drop == "agent" {
+				err = e.store.DropAgent(key)
+			} else {
+				err = e.store.DropSession(key)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(p); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("state not dropped after unlock: %v", err)
+			}
+		})
 	}
 }
 

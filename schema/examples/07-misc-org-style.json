@@ -35,7 +35,7 @@
     },
     {
       "id": "secret-in-output",
-      "description": "PostToolUse:工具输出中疑似出现密钥时提醒(工具已执行,只能 warn)。",
+      "description": "PostToolUse:工具输出中疑似出现密钥时提醒(工具已执行,只能 warn)。Hermes 的 post_tool_call 不能 warn(只能 log),所以用 clients 排除。",
       "action": "warn",
       "event": "PostToolUse",
       "clients": ["claude-code", "codex", "cursor"],

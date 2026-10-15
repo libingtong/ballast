@@ -95,7 +95,7 @@ type JobStatus struct {
 	State     JobState  `json:"state"`
 	PID       int       `json:"pid"`
 	StartedAt time.Time `json:"started_at"`
-	Deadline  time.Time `json:"deadline"` // started_at + timeout_s
+	Deadline  time.Time `json:"deadline"` // started_at + timeout_s + evidence.JobDeadlineSlack (10 min; contract v1.3)
 	Outcome   Outcome   `json:"outcome,omitempty"`
 }
 

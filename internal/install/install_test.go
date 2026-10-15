@@ -165,12 +165,12 @@ func TestMissingOriginalFileIsCreatedThenDeleted(t *testing.T) {
 					t.Errorf("%s should have been deleted", p.Path)
 				}
 			}
-			// the client directory itself stays (it may have pre-existed, and it is
-			// how the client is detected); directories below it are cleaned up
-			if c != model.ClientCodex {
-				if ents, err := os.ReadDir(e.lay.ClientDir(c)); err != nil || len(ents) != 0 {
-					t.Errorf("%s should be left as an empty directory: %v %v", e.lay.ClientDir(c), ents, err)
-				}
+			// install created the client directory itself (--force, nothing
+			// existed), so uninstall removes it again (contract v1.3 flag
+			// dir:kept); a pre-existing one stays (see
+			// TestUninstallKeepsPreexistingEmptyClientDirs)
+			if c != model.ClientCodex && e.exists(e.lay.ClientDir(c)) {
+				t.Errorf("%s was created by install and should be gone", e.lay.ClientDir(c))
 			}
 			if e.exists(e.lay.Manifest) {
 				m, _ := LoadManifest(e.fs, e.lay.Manifest)
@@ -644,6 +644,18 @@ func TestUninstallKeepsAndReportsUserModifiedEntries(t *testing.T) {
 	if len(m.Entries) != 2 {
 		t.Errorf("manifest keeps %d records, want the 2 modified ones", len(m.Entries))
 	}
+	assertNoDuplicateFlags(t, m)
+	for _, file := range []string{e.claudeSettings(), e.hermesConfig()} {
+		kept := 0
+		for _, f := range m.Flags {
+			if f.File == file && f.Key == flagDirKept {
+				kept++
+			}
+		}
+		if kept != 1 {
+			t.Errorf("dir:kept flags for %s after partial uninstall = %d, want exactly 1", filepath.Base(file), kept)
+		}
+	}
 	// a second uninstall warns again and changes nothing
 	before := dirSnapshot(t, e.sb.Home)
 	rep = mustUninstall(t, opt)
@@ -655,6 +667,17 @@ func TestUninstallKeepsAndReportsUserModifiedEntries(t *testing.T) {
 	delete(after, e.lay.Manifest)
 	if !equalMaps(stripBackups(before, e), stripBackups(after, e)) {
 		t.Error("second uninstall changed files")
+	}
+}
+
+func assertNoDuplicateFlags(t *testing.T, m *model.InstallManifest) {
+	t.Helper()
+	seen := map[model.ManagedFlag]bool{}
+	for _, f := range m.Flags {
+		if seen[f] {
+			t.Errorf("duplicate manifest flag %+v", f)
+		}
+		seen[f] = true
 	}
 }
 
@@ -1011,6 +1034,38 @@ func TestUninstallKeepsPreexistingEmptyClientDirs(t *testing.T) {
 			if d := cl.Detect(e.lay, e.fs, e.sb.Env()); cl.ID() == c && !d.Installed {
 				t.Errorf("%s: no longer detected after uninstall", c)
 			}
+		}
+	}
+}
+
+// TestUninstallKeepsPreexistingCursorRulesDir: a user's empty
+// ~/.cursor/rules survives install + uninstall (contract v1.3 flag
+// dir:kept), one created by install is pruned, also after a re-install.
+func TestUninstallKeepsPreexistingCursorRulesDir(t *testing.T) {
+	for _, pre := range []bool{true, false} {
+		e := newTenv(t)
+		e.mkClientDirs()
+		rules := filepath.Dir(e.cursorMDC())
+		if pre {
+			if err := os.MkdirAll(rules, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		opt := e.opts(model.ClientCursor)
+		mustInstall(t, opt)
+		mustInstall(t, opt) // re-install carries the record over
+		if !e.exists(e.cursorMDC()) {
+			t.Fatal("mdc not installed")
+		}
+		mustUninstall(t, opt)
+		if e.exists(e.cursorMDC()) {
+			t.Error("mdc not removed")
+		}
+		if got := e.exists(rules); got != pre {
+			t.Errorf("pre-existing=%v: rules dir exists after uninstall = %v", pre, got)
+		}
+		if !e.exists(e.lay.CursorDir) {
+			t.Error("client directory removed")
 		}
 	}
 }

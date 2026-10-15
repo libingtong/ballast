@@ -51,7 +51,8 @@ func (t *hermesTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManifest
 	m = nonNilManifest(m)
 	goos := firstNonEmpty(spec.GOOS, t.goos, runtime.GOOS)
 	doc := parseYAMLDoc(cur)
-	if _, err := doc.section(); err != nil {
+	orig, err := doc.section()
+	if err != nil {
 		return nil, t.parseErr(err)
 	}
 	res := &PlanResult{Path: t.path, Format: FormatYAML, Before: cur, Created: cur == nil}
@@ -68,6 +69,27 @@ func (t *hermesTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManifest
 		byHash[r.Hash] = r
 	}
 	binaries := ownerBinaries(model.ClientHermes, goos, spec.Binary, m, recs)
+
+	// Structural flags (v1.3): remember whether the hooks: header and each
+	// event key existed, and their original text, so uninstall restores it.
+	sf := structFlags(m, model.ClientHermes, t.path)
+	hdrText := ""
+	if orig.hdr >= 0 {
+		hdrText = doc.lines[orig.hdr].text
+	}
+	noteStruct(sf, model.ClientHermes, t.path, flagYAMLHooks, orig.hdr >= 0, len(recs) > 0, hdrText)
+	for _, ne := range events {
+		e := orig.event(ne.Native)
+		text := ""
+		if e != nil {
+			text = doc.lines[e.keyLine].text
+		}
+		owned := false
+		for _, r := range recs {
+			owned = owned || r.Native == ne.Native
+		}
+		noteStruct(sf, model.ClientHermes, t.path, flagYAMLEventPrefix+ne.Native, e != nil, owned, text)
+	}
 
 	processed := map[string]bool{}
 	for _, ne := range events {
@@ -144,6 +166,7 @@ func (t *hermesTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManifest
 	}
 	res.After = doc.bytes()
 	res.Files = []model.ManagedFile{{Client: model.ClientHermes, Path: t.path, Hash: sha256Hex(res.After), Created: res.Created}}
+	res.Flags = flagList(sf)
 	return res, nil
 }
 
@@ -196,6 +219,7 @@ func (t *hermesTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanResult
 	recs := entriesFor(m, model.ClientHermes, t.path)
 	prior := fileRec(m, t.path)
 	binaries := ownerBinaries(model.ClientHermes, goos, "", m, recs)
+	sf := structFlags(m, model.ClientHermes, t.path)
 	removed := false
 	for _, r := range recs {
 		sec, err := doc.section()
@@ -220,7 +244,12 @@ func (t *hermesTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanResult
 			removed = true
 			if sec2, err := doc.section(); err == nil {
 				if e2 := sec2.event(r.Native); e2 != nil && len(e2.items) == 0 && !e2.emptyFlow {
-					doc.remove(e2.keyLine, e2.keyLine+1)
+					key := flagYAMLEventPrefix + r.Native
+					if createdByBallast(sf, key) {
+						doc.remove(e2.keyLine, e2.keyLine+1)
+					} else {
+						doc.lines[e2.keyLine].text = sf[key].Value // e.g. "  pre_tool_call: []"
+					}
 				}
 			}
 		case foreign:
@@ -231,15 +260,21 @@ func (t *hermesTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanResult
 	}
 	if removed {
 		if sec, err := doc.section(); err == nil && sec.hdr >= 0 && !sec.hasContent && !sec.hasComment {
-			from := sec.hdr
-			if from > 0 && doc.blank(from-1) {
-				from--
+			if createdByBallast(sf, flagYAMLHooks) {
+				from := sec.hdr
+				if from > 0 && doc.blank(from-1) {
+					from--
+				}
+				doc.remove(from, sec.last+1)
+			} else {
+				// The user's header (with its comment or flow value) comes back.
+				doc.lines[sec.hdr].text = sf[flagYAMLHooks].Value
 			}
-			doc.remove(from, sec.last+1)
 		}
 	}
 	if len(res.Entries) > 0 && prior != nil {
 		res.Files = []model.ManagedFile{*prior}
+		res.Flags = flagList(sf) // still needed by a later uninstall
 	}
 	if prior != nil && prior.Created && doc.isBlankDoc() {
 		return res, nil // After == nil: delete

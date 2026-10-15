@@ -26,7 +26,7 @@ type Layout struct {
 	EvidenceDir string // ~/.ballast/evidence/<repo_inst>/<name>/<t_start_ns>-<job_id>.json
 	JobsDir     string // ~/.ballast/jobs/<repo_inst>/<name>/<job_id>.{json,log}
 	AuditDir    string // ~/.ballast/audit/YYYY-MM[.N].jsonl
-	CacheDir    string // ~/.ballast/cache/rules-<generation>.json, cache/stat.json
+	CacheDir    string // ~/.ballast/cache/rules-<generation>-<key[:8]>.json, cache/stat.json
 	LKGDir      string // ~/.ballast/cache/lkg/<layer>-<sha256(path)[:12]>.json
 	BackupsDir  string // ~/.ballast/backups/<UTC yyyymmddThhmmssZ>-<rand6>/
 	ReviewsDir  string // ~/.ballast/reviews/<rule_id>.json

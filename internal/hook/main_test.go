@@ -11,88 +11,20 @@ import (
 	"time"
 
 	"github.com/libingtong/ballast/internal/layout"
-	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
 )
 
 const childEnv = "BALLAST_U7_CHILD"
 
-// TestMain installs a stand-in for model.ShellReadPaths while U2's
-// implementation is still a panic stub, and doubles as the re-exec entry for
-// the multi-process tests (the child runs hook.Main with fake ports and
-// the real process stdio, exit code and watchdog).
+// TestMain doubles as the re-exec entry for the multi-process tests (the
+// child runs hook.Main with fake ports and the real process stdio, exit code
+// and watchdog). model.ShellReadPaths is U2's real implementation; the
+// earlier test-only stand-in was removed in contract v1.3.
 func TestMain(m *testing.M) {
-	if modelShellReadPathsPanics() {
-		shellReadPaths = replicaShellReadPaths
-	}
 	if os.Getenv(childEnv) == "1" {
 		os.Exit(childMain())
 	}
 	os.Exit(m.Run())
-}
-
-func modelShellReadPathsPanics() (panics bool) {
-	defer func() {
-		if recover() != nil {
-			panics = true
-		}
-	}()
-	model.ShellReadPaths(nil)
-	return false
-}
-
-// replicaShellReadPaths follows the frozen rule of model.ShellReadPaths.
-func replicaShellReadPaths(cl *model.CommandList) []string {
-	if cl == nil {
-		return nil
-	}
-	var out []string
-	seen := map[string]bool{}
-	cd := false
-	for _, n := range cl.Nodes {
-		if len(n.Argv) > 0 && !n.Argv[0].Dynamic {
-			name := n.Argv[0].Lit
-			if cl.Shell == model.ShellPowerShell {
-				name = strings.ToLower(name)
-				switch name {
-				case "set-location", "push-location", "pop-location", "cd", "sl", "chdir", "pushd", "popd":
-					cd = true
-				}
-			} else {
-				switch name {
-				case "cd", "pushd", "popd":
-					cd = true
-				}
-			}
-		}
-		for _, r := range n.Reads {
-			if r.Dynamic || r.Path == "" || seen[r.Path] {
-				continue
-			}
-			seen[r.Path] = true
-			out = append(out, r.Path)
-		}
-	}
-	if !cd {
-		return out
-	}
-	var abs []string
-	for _, p := range out {
-		if replicaIsAbs(p) {
-			abs = append(abs, p)
-		}
-	}
-	return abs
-}
-
-func replicaIsAbs(p string) bool {
-	switch {
-	case p == "~", strings.HasPrefix(p, "~/"), strings.HasPrefix(p, `~\`):
-		return true
-	case strings.HasPrefix(p, "/"), strings.HasPrefix(p, `\\`):
-		return true
-	}
-	return len(p) >= 3 && (p[0]|0x20 >= 'a' && p[0]|0x20 <= 'z') && p[1] == ':' && (p[2] == '\\' || p[2] == '/')
 }
 
 // childMain is `ballast hook` with fake ports and the real process stdio.

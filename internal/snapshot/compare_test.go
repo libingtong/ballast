@@ -510,3 +510,55 @@ func checkAllForms(t *testing.T, f *fixture, sc scenario) {
 		}
 	}
 }
+
+// TestDamagedSubmoduleFallsBack: a checked-out submodule whose git
+// directory is not a repository for git (no objects/ or refs/, e.g. a .git
+// holding only HEAD) must not get a native gitlink id; git itself fails on
+// it, so the native path falls back (contract v1.3, review u8a minor).
+func TestDamagedSubmoduleFallsBack(t *testing.T) {
+	damage := map[string]func(f *fixture){
+		"objects removed": func(f *fixture) {
+			if err := os.RemoveAll(f.path("vendor/sub/.git/objects")); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"refs removed": func(f *fixture) {
+			if err := os.RemoveAll(f.path("vendor/sub/.git/refs")); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"HEAD only": func(f *fixture) {
+			head := f.gitIn(f.path("vendor/sub"), nil, "rev-parse", "HEAD")
+			if err := os.RemoveAll(f.path("vendor/sub/.git")); err != nil {
+				t.Fatal(err)
+			}
+			f.write("vendor/sub/.git/HEAD", strings.TrimSpace(head)+"\n")
+		},
+	}
+	for name, mutate := range damage {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			baseRepo(f)
+			nestedRepo(f, "vendor/sub")
+			f.git("add", "vendor/sub")
+			f.git("commit", "-qm", "add submodule")
+			mutate(f)
+			f.relocate()
+			filt := mustFilter(t)
+			for _, form := range []struct {
+				name string
+				call func(o Options) (model.TreeID, error)
+			}{
+				{"S", func(o Options) (model.TreeID, error) { return TreeS(o, f.repo, filt) }},
+				{"C all", func(o Options) (model.TreeID, error) {
+					return TreeC(o, f.repo, model.CommitForm{Kind: model.CommitAll}, filt)
+				}},
+			} {
+				if id, err := form.call(f.opts(false)); !errors.Is(err, model.ErrFallback) {
+					t.Errorf("%s native: id %s, err %v; want ErrFallback", form.name, id, err)
+				}
+				form.call(f.opts(true)) // git reports the damage; must not panic or hang
+			}
+		})
+	}
+}

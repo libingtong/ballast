@@ -142,12 +142,17 @@
     },
     {
       "id": "no-hack-commit-message",
-      "description": "pinrule long_term 的提交说明检测(long_term.py:58-64):git commit 的 -m / --message 说明(前 80 字)含 quick fix、hack、temp、workaround、临时、凑数。PowerShell 的 -m 及其值按 cmdlet 参数处理,不一定出现在 argv 中,所以只写 bash 变体。",
+      "description": "pinrule long_term 的提交说明检测(long_term.py:58-64):git commit 的 -m / --message 说明(前 80 字)含 quick fix、hack、temp、workaround、临时、凑数。外部可执行文件(git)的参数在 PowerShell 下同样保留在 argv 中,所以 bash 与 ps 变体使用同一个 args_regex。",
       "action": "log",
       "target": "deny",
       "event": "PreToolUse",
       "match": {
         "bash": {
+          "cmd": "git",
+          "git_sub": "commit",
+          "args_regex": "(?i)(?:\\s-[a-zA-Z]*m\\s+|\\s--message[=\\s])[^\\n]{0,80}?(?:quick\\s*fix|\\bhack\\b|\\btemp\\b|workaround|临时|凑数)|\\s-[a-zA-Z]*m(?:quick\\s*fix|hack\\b|temp\\b|workaround|临时|凑数)"
+        },
+        "ps": {
           "cmd": "git",
           "git_sub": "commit",
           "args_regex": "(?i)(?:\\s-[a-zA-Z]*m\\s+|\\s--message[=\\s])[^\\n]{0,80}?(?:quick\\s*fix|\\bhack\\b|\\btemp\\b|workaround|临时|凑数)|\\s-[a-zA-Z]*m(?:quick\\s*fix|hack\\b|temp\\b|workaround|临时|凑数)"
@@ -163,6 +168,8 @@
         {"name": "long message flag with equals", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit --message=hack"}}},
         {"name": "value attached to -m", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m\"temp\""}}},
         {"name": "normal message", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'fix: handle nil pointer in parser'"}}},
+        {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git commit -m 'quick fix'"}}},
+        {"name": "PowerShell normal message", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git.exe commit -m 'fix: parser'"}}},
         {"name": "not a commit", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "echo quick fix"}}}
       ]
     }

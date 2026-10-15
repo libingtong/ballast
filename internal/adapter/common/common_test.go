@@ -242,14 +242,20 @@ func TestFlattenStrings(t *testing.T) {
 	}
 }
 
-func TestFlattenStringsDepthBound(t *testing.T) {
-	deep := strings.Repeat(`{"a":`, 200) + `"x"` + strings.Repeat(`}`, 200)
-	if got := FlattenStrings(json.RawMessage(deep)); got != nil {
-		t.Errorf("beyond the depth bound nothing is collected: %v", got)
+func TestFlattenStringsDeepLeaves(t *testing.T) {
+	// No depth cut-off (contract v1.3): deep leaves stay visible to
+	// input_regex, and the cost stays linear.
+	for _, depth := range []int{10, 200, 9000} {
+		deep := strings.Repeat(`{"a":`, depth) + `"x"` + strings.Repeat(`}`, depth)
+		got := FlattenStrings(json.RawMessage(deep))
+		want := strings.TrimSuffix(strings.Repeat("a.", depth), ".")
+		if len(got) != 1 || len(got[want]) != 1 || got[want][0] != "x" {
+			t.Errorf("depth %d: leaf not collected (%d keys)", depth, len(got))
+		}
 	}
-	ok := strings.Repeat(`{"a":`, 10) + `"x"` + strings.Repeat(`}`, 10)
-	if got := FlattenStrings(json.RawMessage(ok)); len(got) != 1 {
-		t.Errorf("shallow nesting collected: %v", got)
+	arr := `{"k":` + strings.Repeat(`[`, 500) + `"y"` + strings.Repeat(`]`, 500) + `}`
+	if got := FlattenStrings(json.RawMessage(arr)); len(got["k"]) != 1 {
+		t.Errorf("deep array leaf: %v", got)
 	}
 }
 
