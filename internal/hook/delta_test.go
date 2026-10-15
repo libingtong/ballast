@@ -142,8 +142,10 @@ func TestBuildDeltaByEvent(t *testing.T) {
 				t.Errorf("delta: %+v", d)
 			}
 		}},
-		{"AgentResponse stores text only", &model.Event{Name: model.EventAgentResponse, LastAssistantMessage: strings.Repeat("a", 5000)}, func(t *testing.T, d *model.StateDelta) {
-			if len([]rune(d.LastAssistantText)) != 4000 || !strings.HasSuffix(d.LastAssistantText, "…") {
+		{"AgentResponse stores text only", &model.Event{Name: model.EventAgentResponse, LastAssistantMessage: "head " + strings.Repeat("a", 5000) + " 已完成"}, func(t *testing.T, d *model.StateDelta) {
+			// The tail is kept (contract v1.3): tail-window text rules must
+			// still see the end of the message.
+			if len([]rune(d.LastAssistantText)) != 4000 || !strings.HasSuffix(d.LastAssistantText, " 已完成") || strings.Contains(d.LastAssistantText, "head") {
 				t.Errorf("assistant text has %d runes", len([]rune(d.LastAssistantText)))
 			}
 			if d.Summary != nil || d.ToolCall || d.FlushEvals {

@@ -1190,6 +1190,53 @@ func TestRunEvidenceUsesWritesAsOfEvent(t *testing.T) {
 	}
 }
 
+// A sub-agent write that happens after the last verify pass makes a LATER
+// main-agent event stale, although sub-agent streams are replayed after the
+// main one (contract v1.3, review u9 minor).
+func TestRunMainEventSeesEarlierSubagentWrites(t *testing.T) {
+	rule := cr("stop-verify", model.EventStop, func(r *model.Rule) {
+		r.When = []model.Cond{{Not: &model.Cond{VerifyFresh: &model.VerifyFreshArg{Names: []string{"test"}}}}}
+	})
+	base := time.Date(2026, 10, 10, 9, 0, 0, 0, time.UTC)
+	run := func(t *testing.T, subWrites bool) *Report {
+		e := newEnv(t, rset("g", rule))
+		main := newTx("S", e.workdir)
+		main.user("delegate")
+		main.tool("m1", "Task", map[string]any{"description": "d"})
+		main.ts = main.ts.Add(100 * time.Second) // the main agent stops long after the sub-agent
+		main.final("all done")
+		path := main.write(t, filepath.Join(e.dir, "S.jsonl"))
+
+		sub := newTx("S", e.workdir)
+		sub.agent, sub.side = "ag1", true
+		sub.user("sub task")
+		if subWrites {
+			sub.tool("s1", "Edit", map[string]any{"file_path": e.workdir + "/a.go"}).result("s1", "ok", false) // 09:00:03
+		} else {
+			sub.tool("s1", "Read", map[string]any{"file_path": e.workdir + "/a.go"}).result("s1", "ok", false)
+		}
+		sub.final("done")
+		sub.write(t, filepath.Join(e.dir, "S", "subagents", "agent-ag1.jsonl"))
+
+		rec := model.VerifyRecord{V: 1, JobID: "j1", Name: "test", RepoInst: "ri", Tier: model.TierT0, SStart: "T", SEnd: "T",
+			TStart: base.Add(1200 * time.Millisecond), TEnd: base.Add(1500 * time.Millisecond), Outcome: model.OutcomePass, SessionID: "S"}
+		dir := filepath.Join(e.evDir, "ri", "test")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "1.json"), []byte(mustJSON(t, rec)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return mustRun(t, e, path, Options{Subagents: true})
+	}
+	if smp := samplesOf(run(t, true), "stop-verify"); len(smp) != 1 {
+		t.Errorf("a sub-agent write after the pass must make the main Stop stale: %+v", smp)
+	}
+	if smp := samplesOf(run(t, false), "stop-verify"); len(smp) != 0 {
+		t.Errorf("without a write the pass stays fresh: %+v", smp)
+	}
+}
+
 func TestRunVerifyFreshWithoutNamesUsesProjectRequired(t *testing.T) {
 	rule := cr("verify-all", model.EventStop, func(r *model.Rule) {
 		r.When = []model.Cond{{Not: &model.Cond{VerifyFresh: &model.VerifyFreshArg{}}}}
@@ -1251,5 +1298,81 @@ func TestRunVerifyFreshWithoutNamesUsesProjectRequired(t *testing.T) {
 				t.Errorf("counts = %v (the required list is unknown: unknown, not approximate)", got)
 			}
 		})
+	}
+}
+
+// strictProject stands in for U8's project.Loader: unknown keys are invalid.
+type strictProject struct{ roots *[]string }
+
+func (p strictProject) LoadProject(root string) (*model.ProjectConfig, error) {
+	*p.roots = append(*p.roots, root)
+	data, err := os.ReadFile(filepath.Join(root, ".ballast", "project.json"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec.DisallowUnknownFields()
+	var pc model.ProjectConfig
+	if err := dec.Decode(&pc); err != nil {
+		return nil, err
+	}
+	return &pc, nil
+}
+
+// With Deps.Project injected, project.json is classified like the hook's
+// evidence provider (contract v1.3, review u9 minor): a file the strict
+// loader rejects is project_invalid ⇒ unknown, not a lenient approximate.
+func TestRunUsesInjectedProjectLoader(t *testing.T) {
+	rule := cr("verify-all", model.EventStop, func(r *model.Rule) {
+		r.When = []model.Cond{{Not: &model.Cond{VerifyFresh: &model.VerifyFreshArg{}}}}
+	})
+	base := time.Date(2026, 10, 10, 9, 0, 0, 0, time.UTC)
+	project := `{"version":1,"verify":[{"name":"lint","argv":["x"],"required":true}],"bogus":1}`
+	run := func(t *testing.T, strict bool, body string) (*Report, []string) {
+		e := newEnv(t, rset("g", rule))
+		var roots []string
+		if strict {
+			e.deps.Project = strictProject{&roots}
+		}
+		if err := os.MkdirAll(filepath.Join(e.workdir, ".ballast"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if body != "" {
+			if err := os.WriteFile(filepath.Join(e.workdir, ".ballast", "project.json"), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rec := model.VerifyRecord{V: 1, JobID: "j1", Name: "lint", RepoInst: "ri", Tier: model.TierT0, SStart: "T", SEnd: "T",
+			TStart: base.Add(time.Second), TEnd: base.Add(2 * time.Second), Outcome: model.OutcomePass, SessionID: "S"}
+		dir := filepath.Join(e.evDir, "ri", "lint")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "1.json"), []byte(mustJSON(t, rec)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		x := newTx("S", e.workdir)
+		x.user("go").final("done")
+		return mustRun(t, e, x.write(t, filepath.Join(e.dir, "S.jsonl")), Options{}), roots
+	}
+	if rep, _ := run(t, false, project); counts(summary(t, rep, "verify-all")) != [4]int{0, 0, 1, 0} {
+		t.Errorf("lenient fallback: counts = %v", counts(summary(t, rep, "verify-all")))
+	}
+	rep, roots := run(t, true, project)
+	if got := counts(summary(t, rep, "verify-all")); got != [4]int{0, 0, 0, 1} {
+		t.Errorf("strict loader: counts = %v, want unknown", got)
+	}
+	if len(roots) != 1 {
+		t.Errorf("loader roots = %v", roots)
+	}
+	if rep, _ := run(t, true, ""); counts(summary(t, rep, "verify-all")) != [4]int{0, 0, 0, 1} {
+		t.Errorf("strict loader, no project.json: counts = %v", counts(summary(t, rep, "verify-all")))
+	}
+	valid := `{"version":1,"verify":[{"name":"lint","argv":["x"],"required":true}]}`
+	if rep, _ := run(t, true, valid); counts(summary(t, rep, "verify-all")) != [4]int{0, 0, 1, 0} {
+		t.Errorf("strict loader, valid file: counts = %v", counts(summary(t, rep, "verify-all")))
 	}
 }

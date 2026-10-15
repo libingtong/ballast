@@ -30,6 +30,15 @@
 // `sed -n`/`cat` reads satisfy read_this_session offline too; prompt tail;
 // prior hits; tool_count_since_inject reset on synthesized anchors.
 //
+// Contract v1.3 additions: with --subagents (Claude) the sub-agent
+// transcripts are pre-scanned for successful file-tool writes BEFORE the
+// main stream is replayed, so verify_fresh views of later main-agent events
+// see earlier sub-agent writes (writes are tracked per session). The
+// required verify names come from Deps.Project (U8's strict loader, wired
+// by the CLI) when set — missing ⇒ no_project, invalid ⇒ project_invalid,
+// both unknown, exactly like the hook — and from a lenient decode only when
+// Deps.Project is nil.
+//
 // --initial-state <file> (Options.InitialState), frozen format: one JSON
 // object decoded strictly as model.Fixture, of which ONLY the state keys
 // are allowed: "read" (paths, relative to the transcript cwd),

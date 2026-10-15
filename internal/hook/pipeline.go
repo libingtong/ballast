@@ -24,7 +24,7 @@ import (
 //     stdout commit and never fails the invocation.
 
 // shellReadPaths is the single shared shell-read rule (U2). It is a variable
-// only so tests can stand in until model.ShellReadPaths is implemented.
+// only so tests can substitute it.
 var shellReadPaths = model.ShellReadPaths
 
 // maxNewJobs bounds the finished-job list handed to the injector.
@@ -147,7 +147,7 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 	if ev.IsInternalCompactAgent() {
 		// Claude's compaction helper: no rules, no bookkeeping, state dropped.
 		res := &Result{Event: ev, Decision: &model.Decision{Event: ev.Name, Native: ev.Native, Action: model.ActionNone}}
-		return res, inv.post(ev, key, false), nil
+		return res, inv.post(ev, key, nil), nil
 	}
 
 	if ev.Name.IsStopFamily() && !ev.HasLastAssistantMessage && readable {
@@ -280,7 +280,7 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 	if err := inv.fault(FaultRender); err != nil {
 		return nil, nil, err
 	}
-	return &Result{Stdout: out, Decision: dec, Audit: recs, Event: ev}, inv.post(ev, key, true), nil
+	return &Result{Stdout: out, Decision: dec, Audit: recs, Event: ev}, inv.post(ev, key, ab), nil
 }
 
 // deadlineSpan is how long after the start expensive predicate work may run.
@@ -433,7 +433,11 @@ func newJobs(ev *model.Event, caps model.CapabilitySet, st model.SessionState, v
 }
 
 // post returns the cleanup that follows the stdout commit (and audit write).
-func (inv *invocation) post(ev *model.Event, key model.ScopeKey, spawnGC bool) func() {
+// ab is nil on the short path that never spawns GC; otherwise a GC spawn
+// failure is audited as diag gc_spawn_failed in a second, best-effort
+// Append whose error is ignored (architecture §10: Spawner failure is not an
+// exception but is audited; contract v1.3).
+func (inv *invocation) post(ev *model.Event, key model.ScopeKey, ab *auditBuilder) func() {
 	return func() {
 		defer func() { _ = recover() }()
 		d := inv.deps
@@ -445,8 +449,13 @@ func (inv *invocation) post(ev *model.Event, key model.ScopeKey, spawnGC bool) f
 		case model.EventSessionEnd:
 			_ = d.State.DropSession(key)
 		case model.EventSessionStart:
-			if spawnGC {
-				inv.maybeSpawnGC()
+			if ab == nil {
+				return
+			}
+			if stage, err := inv.maybeSpawnGC(); err != nil {
+				r := ab.base(model.AuditDiag)
+				r.Detail = diag{name: "gc_spawn_failed", fields: map[string]any{"stage": stage, "error": err.Error()}}.detail()
+				_ = d.Audit.Append([]model.AuditRecord{r})
 			}
 		}
 	}
@@ -454,20 +463,29 @@ func (inv *invocation) post(ev *model.Event, key model.ScopeKey, spawnGC bool) f
 
 // maybeSpawnGC starts a detached `ballast gc` when gc.stamp is missing or
 // older than GCInterval. The stamp is touched first so concurrent session
-// starts do not spawn a storm; any failure is ignored.
-func (inv *invocation) maybeSpawnGC() {
+// starts do not spawn a storm. A failure is reported (stage "stamp" or
+// "spawn") for the caller to audit; after a failed spawn the stamp is
+// removed again so a later SessionStart retries. The child inherits the
+// hook's environment and gets no log file (logPath ""): `ballast gc` writes
+// its own diagnostics to stderr, which the detached child discards
+// (contract v1.3, ports.Spawner).
+func (inv *invocation) maybeSpawnGC() (stage string, err error) {
 	d := inv.deps
 	if d.Spawner == nil || d.Self == "" || d.Layout.GCStamp == "" {
-		return
+		return "", nil
 	}
 	now := d.Clock.Now()
 	if fi, err := d.FS.Stat(d.Layout.GCStamp); err == nil && now.Sub(fi.ModTime()) < GCInterval {
-		return
+		return "", nil
 	}
 	if err := touchFile(d, d.Layout.GCStamp); err != nil {
-		return
+		return "stamp", err
 	}
-	_, _ = d.Spawner.SpawnDetached([]string{d.Self, "gc"}, d.Env.Environ(), "")
+	if _, err := d.Spawner.SpawnDetached([]string{d.Self, "gc"}, d.Env.Environ(), ""); err != nil {
+		_ = d.FS.Remove(d.Layout.GCStamp)
+		return "spawn", err
+	}
+	return "", nil
 }
 
 func touchFile(d *Deps, path string) error {

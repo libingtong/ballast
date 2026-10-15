@@ -172,26 +172,6 @@ func TestFileToolReadRegistration(t *testing.T) {
 	}
 }
 
-// TestReplicaMatchesModel cross-checks the stand-in with the real
-// model.ShellReadPaths once U2's implementation is merged.
-func TestReplicaMatchesModel(t *testing.T) {
-	if modelShellReadPathsPanics() {
-		t.Skip("model.ShellReadPaths is still the U2 stub")
-	}
-	lists := []*model.CommandList{
-		nil,
-		{Shell: model.ShellBash, Nodes: []model.CommandNode{node("cat", rd("a", "cat"), dynRd("cat"), rd("a", "cat"))}},
-		{Shell: model.ShellBash, Nodes: []model.CommandNode{node("cd"), node("cat", rd("a", "cat"), rd("/b", "cat"), rd("~/c", "cat"), rd(`C:\d`, "cat"), rd("C:d", "cat"))}},
-		{Shell: model.ShellPowerShell, Nodes: []model.CommandNode{node("Set-Location"), node("get-content", rd("a", "x"), rd(`\\srv\share\f`, "x"), rd("//srv/x", "x"))}},
-		{Shell: model.ShellBash, Nodes: []model.CommandNode{node("CD"), node("cat", rd("a", "cat"))}},
-	}
-	for i, cl := range lists {
-		if got, want := replicaShellReadPaths(cl), model.ShellReadPaths(cl); !reflect.DeepEqual(append([]string{}, got...), append([]string{}, want...)) {
-			t.Errorf("list %d: replica = %v, model = %v", i, got, want)
-		}
-	}
-}
-
 func TestWorldPathExists(t *testing.T) {
 	h := newHarness(t)
 	dir := t.TempDir()

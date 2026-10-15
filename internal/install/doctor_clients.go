@@ -151,8 +151,8 @@ func (codexClient) Doctor(lay layout.Layout, fsys sys.FS, m *model.InstallManife
 	cfg := filepath.Join(lay.CodexDir, "config.toml")
 	var trust []model.ManagedFlag
 	for _, fl := range m.Flags {
-		if fl.Client != model.ClientCodex {
-			continue
+		if fl.Client != model.ClientCodex || isStructFlag(fl.Key) {
+			continue // structural flags belong to hooks.json, not config.toml
 		}
 		if fl.File != "" {
 			cfg = fl.File

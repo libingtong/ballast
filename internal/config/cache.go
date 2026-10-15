@@ -23,7 +23,9 @@ type statIndex struct {
 	Keys map[string]string `json:"keys"`
 }
 
-// cachedRules is cache/rules-<generation>.json.
+// cachedRules is cache/rules-<generation>-<key[:8]>.json (contract v1.3:
+// the key suffix keeps two repos whose rules merge to the same generation
+// from overwriting each other's sources on alternate loads).
 type cachedRules struct {
 	V          int                  `json:"v"`
 	Generation string               `json:"generation"`
@@ -56,8 +58,11 @@ func validGeneration(g string) bool {
 	return true
 }
 
-func (l *Loader) rulesCachePath(gen string) string {
-	return filepath.Join(l.opt.Layout.CacheDir, "rules-"+gen+".json")
+func (l *Loader) rulesCachePath(gen, key string) string {
+	if len(key) > 8 {
+		key = key[:8]
+	}
+	return filepath.Join(l.opt.Layout.CacheDir, "rules-"+gen+"-"+key+".json")
 }
 
 func (l *Loader) readStatIndex() statIndex {
@@ -70,8 +75,8 @@ func (l *Loader) readStatIndex() statIndex {
 }
 
 // matchSources checks that the cached sources describe the current layer
-// stats and returns the sources to report. rules-<generation>.json is shared
-// by every load context with the same merged rules, so a layer that is
+// stats and returns the sources to report. A rules file may still be reached
+// from another load context whose key prefix collides, so a layer that is
 // missing both in the cache and now may differ only in its path (another
 // repo without repo rules); it contributes no rules, and its source is
 // re-stamped with the current stat.
@@ -103,7 +108,7 @@ func (l *Loader) cacheLookup(idx statIndex, key string, stats []model.StatKey) (
 	if !ok || !validGeneration(gen) {
 		return nil, false
 	}
-	b, err := l.fs().ReadFile(l.rulesCachePath(gen))
+	b, err := l.fs().ReadFile(l.rulesCachePath(gen, key))
 	if err != nil {
 		return nil, false
 	}
@@ -133,7 +138,7 @@ func (l *Loader) cacheStore(idx statIndex, key string, res MergeResult, gen stri
 		l.diag("cannot encode rules cache: %v", err)
 		return
 	}
-	if err := sys.WriteFileAtomic(l.fs(), l.ids(), l.rulesCachePath(gen), body, 0o600, false); err != nil {
+	if err := sys.WriteFileAtomic(l.fs(), l.ids(), l.rulesCachePath(gen, key), body, 0o600, false); err != nil {
 		l.diag("cannot write rules cache: %v", err)
 		return
 	}

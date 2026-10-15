@@ -57,7 +57,9 @@
 // -i/--include + paths ⇒ paths(include); -o/--only or bare paths ⇒ paths;
 // "--" separates paths; -m/-F/-C/-c/--author/--date/... consume a value;
 // --dry-run/--porcelain ⇒ still commit form; --interactive/-p/--patch ⇒
-// unparseable; dynamic words ⇒ unparseable; --fixup/--squash values consumed.
+// unparseable; dynamic words ⇒ unparseable, EXCEPT the value of a
+// value-taking option (-m "$(…)", -F "$f"), which is accepted (contract
+// v1.3, see the implementation note); --fixup/--squash values consumed.
 // Dir = clean(join(cwd, Git.Cwd)) when Git.Cwd is set. It sees only the
 // commit node: a preceding `git add ... &&` in the same command has NOT run
 // at PreToolUse time, so `git add -A && git commit -m x` is judged on the
@@ -108,7 +110,7 @@
 //   - ParseCommitForm leaves CommitForm.Reason empty (the acceptance table
 //     compares whole forms). Unknown options, --git-dir/--work-tree, a -a
 //     with paths and -i/-o without paths are unparseable.
-//   - DEVIATION, pending U0/architect confirmation (it relaxes the frozen
+//   - Accepted in contract v1.3 (formerly a deviation; it relaxes the
 //     "dynamic words => unparseable" rule, which still holds for the
 //     subcommand, -C, options and paths): a dynamic word that is the value of
 //     a value-taking option (-m "$(...)") is accepted, since a quoted value

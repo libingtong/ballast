@@ -109,9 +109,46 @@ func TestHermesInlineEmptyHooks(t *testing.T) {
 		if strings.Contains(installed, "{}") || !strings.Contains(installed, "hooks:\n  on_session_start:") {
 			t.Errorf("%q: not converted to a block:\n%s", v, installed)
 		}
-		if string(r.After) != "model: x\nlogging: 1\n" {
+		// The user's own header comes back byte for byte (contract v1.3).
+		if string(r.After) != orig {
 			t.Errorf("%q: uninstall left %q", v, r.After)
 		}
+	}
+}
+
+// TestHermesUserStructureRoundTrip: headers, header comments and empty
+// event keys the user had before the install survive the uninstall
+// (contract v1.3 structural flags, review u10 minor).
+func TestHermesUserStructureRoundTrip(t *testing.T) {
+	for _, orig := range []string{
+		"hooks: # c\n",
+		"model: x\nhooks: {}\n",
+		"---\nhooks:\n",
+		"hooks:\n  pre_tool_call: []\n",
+		"hooks:\n  pre_tool_call: [] # keep me\n  stop: []\n",
+		"hooks:\n  pre_tool_call:\n",
+	} {
+		installed, r := hermesRoundTrip(t, orig)
+		if !strings.Contains(installed, "ballast hook --client hermes") {
+			t.Errorf("%q: nothing installed:\n%s", orig, installed)
+		}
+		if string(r.After) != orig {
+			t.Errorf("%q: uninstall left %q", orig, r.After)
+		}
+	}
+	// A re-install keeps the original structure on record.
+	tg := gHermesT()
+	spec := gspec(model.ClientHermes)
+	orig := "hooks: # c\n"
+	p1, _ := tg.Plan([]byte(orig), spec, nil)
+	m := manifestFrom(gBinary, p1)
+	p2, err := tg.Plan(p1.After, spec, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := tg.Remove(p2.After, manifestFrom(gBinary, p2))
+	if err != nil || string(r.After) != orig {
+		t.Errorf("after re-install + uninstall: %q, %v", r.After, err)
 	}
 }
 

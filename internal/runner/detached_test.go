@@ -98,6 +98,11 @@ func TestSupersedeStopsRunningJob(t *testing.T) {
 	})
 	aCmd := readPIDs(t, pidfile)[0]
 	jsA, _ := f.store.ReadJob(f.inst(), "test", a[0].JobID)
+	// The live detached runner must hold its job lock, so supersede signals
+	// it (not only the once-a-second marker poll; review u8b minor).
+	if jsA == nil || !f.opt.withDefaults().runnerHoldsLock(jsA) {
+		t.Fatal("live runner does not hold its job lock")
+	}
 
 	b, err := Start(f.opt, f.root, nil)
 	if err != nil {
@@ -123,7 +128,6 @@ func TestSupersedeStopsRunningJob(t *testing.T) {
 		log, _ := os.ReadFile(f.store.LogPath(f.inst(), "test", a[0].JobID))
 		return strings.Contains(string(log), "# ballast outcome=")
 	})
-	_ = jsA
 
 	// B passes once released; A's record stays superseded.
 	waitFor(t, "B's command to start", 20*time.Second, func() bool {

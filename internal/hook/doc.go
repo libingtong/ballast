@@ -52,10 +52,18 @@
 //   - SubagentStop ⇒ evaluate, flush eval_summary, then DropAgent AFTER the
 //     audit write. SessionEnd ⇒ flush eval_summary, DropSession; empty stdout.
 //   - SessionStart ⇒ no rules; full injection; if gc.stamp is older than 24h
-//     (or missing) Spawner.SpawnDetached([self, "gc"]) and failures ignored.
+//     (or missing) touch gc.stamp, then Spawner.SpawnDetached([self, "gc"],
+//     Env.Environ(), "") after the stdout commit. A stamp or spawn failure
+//     never fails the invocation but is audited as diag gc_spawn_failed
+//     {stage: "stamp"|"spawn", error} in a second best-effort Append; after
+//     a failed spawn the stamp is removed so a later SessionStart retries
+//     (v1.3). The hook alone maintains gc.stamp; `ballast gc` does not.
 //   - Stop/SubagentStop flush eval_summary (FlushEvals) every time.
 //   - AgentResponse (Cursor) ⇒ store LastAssistantText; empty stdout.
-//   - Cursor stop without last_assistant_message ⇒ use state LastAssistantText.
+//   - Stop/SubagentStop without last_assistant_message (any client; in
+//     practice Cursor) ⇒ the engine falls back to state LastAssistantText;
+//     no fallback when the state is unreadable (dsl-semantics §5.5).
+//     LastAssistantText stores the LAST 4000 runes of the message (v1.3).
 //   - Dedupe: StateDelta.DedupeKey = "<Event>:<tool_use_id>"; a duplicate
 //     delivery still evaluates and renders the same decision but does not
 //     double count.
@@ -73,6 +81,35 @@
 //     consulted: a PostToolUse means the client considered the call run. PreToolUse and PostToolUseFailure never add
 //     shell reads (the command has not run / failed). Shell Writes are not
 //     added to the read set.
+//
+// Decisions recorded in contract v1.3 (previously implementation choices):
+//   - ErrNotRepo ⇒ diag not_a_repo is audited ONCE per session, on
+//     SessionStart (architecture §10 "audited as diag" is satisfied per
+//     session, not per event). Any other Locate error ⇒ degrade to no repo
+//     and audit diag repo_locate_failed on that event.
+//   - Config notices (rule_dropped, rule_shadowed, config_invalid) are
+//     audited exactly when the injection surfaced them (Injection.Kinds has
+//     InjectNotices), not on every event.
+//   - A blocking decision (deny/ask) renders no injection text, so none of
+//     the injection bookkeeping (AnchorEmitted, FullEmitted, ReportedJobs,
+//     Generation/RuleDigest) is recorded for it.
+//   - Generation and RuleDigest are recorded together, exactly when the
+//     injector returned a non-nil Injection.RuleDigest (it does so on every
+//     event the client can inject on); events that cannot carry a
+//     generation summary never consume the change.
+//   - BuildDelta has no SessionState: it only sets FlushEvals; the
+//     pipeline copies FlushedEvals from the lock-free Load afterwards (and
+//     only when the state was readable).
+//   - Verify job reports: "unreported finished jobs" are those finished
+//     after LastJobReportAt, or after the session's StartedAt when nothing
+//     was reported yet; with neither, nothing is reported (a new session is
+//     not flooded with the repo's history). At most 16 per event.
+//   - EventSummary.Text is redacted by a local minimal redactor (the hook
+//     may not import audit); audit.Writer redacts again on write, so the
+//     state ring is the only place holding the narrower redaction.
+//   - State readability: readable ⇔ Load returned no error (and, for
+//     defensive fakes, not Exists && !Readable && !Corrupt); see
+//     ports.StateStore.Load.
 //
 // Acceptance (U7): scripts/fault.sh with a `-tags ballast_fault` build:
 // for every FaultPoint × {error, panic, hang} ⇒ stdout empty, exit 1,

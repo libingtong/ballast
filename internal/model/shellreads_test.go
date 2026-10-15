@@ -119,6 +119,17 @@ func TestShellReadPaths(t *testing.T) {
 		{"ps popd", list(ps, node("POPD", false), node("x", false, "rel", "/a")), []string{"/a"}},
 		{"ps without cd keeps relative", list(ps, node("x", false, "rel", "/a")), []string{"rel", "/a"}},
 		{"ps Set-Location dynamic", list(ps, node("Set-Location", true), node("x", false, "rel")), []string{"rel"}},
+		{"builtin cd", list(bash, model.CommandNode{Argv: []model.Word{{Lit: "builtin"}, {Lit: "cd"}, {Lit: "/x"}}},
+			node("cat", false, "rel", "/abs")), []string{"/abs"}},
+		{"builtin builtin pushd", list(bash, model.CommandNode{Argv: []model.Word{{Lit: "builtin"}, {Lit: "builtin"}, {Lit: "pushd"}}},
+			node("cat", false, "rel", "/abs")), []string{"/abs"}},
+		{"builtin with dynamic argument is not cd", list(bash, model.CommandNode{Argv: []model.Word{{Lit: "builtin"}, {Lit: "cd", Dynamic: true}}},
+			node("cat", false, "rel")), []string{"rel"}},
+		{"builtin echo is not cd", list(bash, model.CommandNode{Argv: []model.Word{{Lit: "builtin"}, {Lit: "echo"}, {Lit: "cd"}}},
+			node("cat", false, "rel")), []string{"rel"}},
+		{"bare builtin", list(bash, node("builtin", false), node("cat", false, "rel")), []string{"rel"}},
+		{"ps does not look through builtin", list(ps, model.CommandNode{Argv: []model.Word{{Lit: "builtin"}, {Lit: "cd"}}},
+			node("x", false, "rel")), []string{"rel"}},
 		{"node without argv", list(bash, model.CommandNode{Reads: []model.WriteTarget{{Path: "a", Via: "cat"}}}), []string{"a"}},
 	}
 	for _, tc := range tests {
@@ -147,6 +158,8 @@ func TestShellReadPathsParsed(t *testing.T) {
 		{"sed -i s/a/b/ f.txt", nil},
 		{"python3 -c 'open(\"a\")'", nil},
 		{"pushd /x >/dev/null && head -n 5 y /z", []string{"/z"}},
+		{"builtin cd /x && cat rel /abs", []string{"/abs"}},
+		{"command cd /x && cat rel /abs", []string{"/abs"}},
 	}
 	for _, tc := range bashTests {
 		cl, err := bashparse.Parse(tc.src, bashparse.Options{})

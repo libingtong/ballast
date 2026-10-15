@@ -29,6 +29,10 @@
 // ReportedJobsCap 64, LastAssistantText ≤ 4000 runes, PrevPromptTail ≤ 200 runes.
 // GC: removes session dirs whose newest file mtime is older than TTL (7d);
 // invoked by `ballast gc` (detached from SessionStart, ≤ once/day).
+// DropAgent/DropSession (contract v1.3) remove state files only while
+// holding their lock and never unlink "<file>.lock"; the lock files and the
+// emptied session directory are left to GC. A lock timeout leaves the file
+// for GC (nil error).
 //
 // Implementation notes:
 //   - Every non-duplicate delta consumes one event_seq (with or without a

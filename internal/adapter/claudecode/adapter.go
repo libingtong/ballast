@@ -25,30 +25,13 @@ func (*Adapter) Capabilities() model.CapabilitySet { return model.Capabilities(m
 // NativeEvents implements ports.Adapter.
 func (*Adapter) NativeEvents() []model.NativeEvent { return model.NativeEventTable[model.ClientClaude] }
 
-// parseOnly lists Claude events that are not installed (absent from
-// model.NativeEventTable) but whose payloads still parse.
-func parseOnly(native string) (model.EventName, bool) {
-	switch native {
-	case "PreCompact":
-		return model.EventPreCompact, true
-	case "PostCompact":
-		return model.EventPostCompact, true
-	case "SubagentStart":
-		return model.EventSubagentStart, true
-	}
-	return "", false
-}
-
 // ParseEvent implements ports.Adapter.
 func (a *Adapter) ParseEvent(native string, stdin []byte) (*model.Event, error) {
-	name, ok := parseOnly(native)
-	if !ok {
-		ne, err := common.Lookup(model.ClientClaude, native)
-		if err != nil {
-			return nil, err
-		}
-		name = ne.Event
+	ne, err := common.Lookup(model.ClientClaude, native)
+	if err != nil {
+		return nil, err
 	}
+	name := ne.Event
 	f, err := common.DecodeObject(stdin)
 	if err != nil {
 		return nil, err
