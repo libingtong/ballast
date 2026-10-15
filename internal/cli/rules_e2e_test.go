@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -121,7 +122,8 @@ func TestTestRulesAllContentFiles(t *testing.T) {
 	if !strings.Contains(r.stdout, "0 失败") {
 		t.Errorf("test-rules summary: %s", r.stdout)
 	}
-	if strings.Contains(r.stdout, "0 通过") {
+	// "300 通过" must not look like "0 通过": match the whole number.
+	if regexp.MustCompile(`(^|[^0-9])0 通过`).MatchString(r.stdout) {
 		t.Errorf("no example ran: %s", r.stdout)
 	}
 	// The regression file alone, as architecture §8.3 lists it separately.

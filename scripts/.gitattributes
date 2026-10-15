@@ -1,0 +1,6 @@
+# The acceptance scripts run under Git Bash on Windows, where a CRLF checkout
+# would break them (a stray \r ends up in every word). Keep LF everywhere here.
+*.sh text eol=lf
+*.json text eol=lf
+*.go text eol=lf
+*.md text eol=lf

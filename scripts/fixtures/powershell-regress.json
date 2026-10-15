@@ -1,0 +1,61 @@
+{
+  "$schema": "../../schema/rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "regress-ps-long-sleep",
+      "description": "PowerShell 回归(scripts/regress.sh):前台 Start-Sleep 不得 >= 60 秒;别名、-Milliseconds、脚本块与循环写法。",
+      "action": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "run_in_background": false,
+        "ps": {"cmd": "start-sleep", "sleep_s": {"gte": 60}, "async": false}
+      },
+      "message": "回归规则:PowerShell 前台 sleep 不得 >= 60 秒。",
+      "examples": [
+        {"name": "Start-Sleep -Seconds 300", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Start-Sleep -Seconds 300"}}},
+        {"name": "alias sleep", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "sleep 300"}}},
+        {"name": "boundary 60", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Start-Sleep -Seconds 60"}}},
+        {"name": "boundary 59", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Start-Sleep -Seconds 59"}}},
+        {"name": "milliseconds", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Start-Sleep -Milliseconds 90000"}}},
+        {"name": "short sleeps in a bounded loop", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "foreach ($i in 1,2,3) { Start-Sleep 30 }"}}},
+        {"name": "call operator with a script block", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "& { Start-Sleep 300 }"}}},
+        {"name": "second statement", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "echo hi; Start-Sleep 300"}}},
+        {"name": "quoted text", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "echo \"Start-Sleep 300\""}}},
+        {"name": "comment", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "# Start-Sleep 300"}}},
+        {"name": "tool-level background", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Start-Sleep 300", "run_in_background": true}}},
+        {"name": "Start-Job runs it in the background", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Start-Job { Start-Sleep 300 }"}}}
+      ]
+    },
+    {
+      "id": "regress-ps-git-commit",
+      "description": "PowerShell 回归:git 全局参数(含反斜杠路径)之后的子命令仍是 commit。",
+      "action": "deny",
+      "event": "PreToolUse",
+      "match": {"ps": {"cmd": "git", "git_sub": "commit"}},
+      "message": "回归规则:PowerShell 下的 git commit。",
+      "examples": [
+        {"name": "-C with a backslash path", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git -C ..\\x commit -m m"}}},
+        {"name": "git.exe", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git.exe commit -m m"}}},
+        {"name": "status is not commit", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git status"}}}
+      ]
+    },
+    {
+      "id": "regress-ps-protected-write",
+      "description": "PowerShell 回归:写入 cmdlet 与重定向的目标落在 protected/ 下;读取不算写入。",
+      "action": "deny",
+      "event": "PreToolUse",
+      "match": {"tool": ["PowerShell"], "path": ["**/protected/**"]},
+      "message": "回归规则:PowerShell 不得写入 protected/。",
+      "examples": [
+        {"name": "Set-Content", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Set-Content -Path protected/a.txt -Value x"}}},
+        {"name": "Out-File", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Get-Date | Out-File protected/d.txt"}}},
+        {"name": "Add-Content", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Add-Content protected/a.txt more"}}},
+        {"name": "redirect", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "echo x > protected/a.txt"}}},
+        {"name": "Remove-Item", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Remove-Item protected/a.txt"}}},
+        {"name": "Get-Content only reads", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Get-Content protected/a.txt"}}},
+        {"name": "write outside protected", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Set-Content -Path src/a.txt -Value x"}}}
+      ]
+    }
+  ]
+}
