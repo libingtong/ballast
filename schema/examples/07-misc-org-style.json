@@ -38,6 +38,7 @@
       "description": "PostToolUse:工具输出中疑似出现密钥时提醒(工具已执行,只能 warn)。",
       "action": "warn",
       "event": "PostToolUse",
+      "clients": ["claude-code", "codex", "cursor"],
       "match": {
         "tool": ["Bash", "PowerShell", "Read", "mcp__*"],
         "text": {"source": "tool_response", "regex": ["AKIA[0-9A-Z]{16}", "-----BEGIN [A-Z ]*PRIVATE KEY-----"]}
