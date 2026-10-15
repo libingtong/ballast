@@ -79,7 +79,7 @@ func TestDecodeValid(t *testing.T) {
 		{"empty verify", `{"version":1,"verify":[]}`, model.ProjectConfig{Version: 1}},
 		{"null verify", `{"verify":null}`, model.ProjectConfig{}},
 		{"minimal", `{"verify":[{"name":"test","argv":["go","test","./..."]}]}`,
-			model.ProjectConfig{Verify: []model.VerifySpec{{Name: "test", Argv: []string{"go", "test", "./..."}}}}},
+			model.ProjectConfig{Verify: []model.VerifySpec{{Name: "test", Argv: []string{"go", "test", "./..."}, TimeoutS: DefaultTimeoutS}}}},
 		{"full", `{"version":1,"verify":[{"name":"t_1-x","argv":["a"],"timeout_s":86400,"required":true,"env":["A=","B=c=d"],"cwd":"sub/dir"},
 			{"name":"` + long + `","argv":["b","--flag"],"timeout_s":1,"cwd":"."}],"exempt":["**/*.md","docs/**","{a,b}/*.txt","[ab]c"]}`,
 			model.ProjectConfig{Version: 1,
@@ -89,7 +89,7 @@ func TestDecodeValid(t *testing.T) {
 				},
 				Exempt: []string{"**/*.md", "docs/**", "{a,b}/*.txt", "[ab]c"}}},
 		{"digit first name", `{"verify":[{"name":"9lives","argv":["x"]}]}`,
-			model.ProjectConfig{Verify: []model.VerifySpec{{Name: "9lives", Argv: []string{"x"}}}}},
+			model.ProjectConfig{Verify: []model.VerifySpec{{Name: "9lives", Argv: []string{"x"}, TimeoutS: DefaultTimeoutS}}}},
 		{"whitespace and newline", "  \n{\"verify\":[]}\n\n", model.ProjectConfig{}},
 	}
 	for _, tc := range tests {
@@ -210,7 +210,7 @@ func FuzzDecode(f *testing.F) {
 				t.Fatalf("accepted invalid entry %+v", v)
 			}
 			seen[v.Name] = true
-			if v.TimeoutS != 0 && (v.TimeoutS < 1 || v.TimeoutS > MaxTimeoutS) {
+			if v.TimeoutS < 1 || v.TimeoutS > MaxTimeoutS {
 				t.Fatalf("timeout %d", v.TimeoutS)
 			}
 		}

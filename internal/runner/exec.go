@@ -44,6 +44,12 @@ func (o Options) runExisting(js *model.JobStatus, tee io.Writer) (*model.VerifyR
 		}
 		return nil, fmt.Errorf("%w: %w", ErrInfra, err)
 	}
+	if o.isSuperseded(js) {
+		// markPID may have overwritten the superseder's job file.
+		js.State, js.Outcome = model.JobDone, model.OutcomeSuperseded
+		_ = o.Evidence.WriteJob(js)
+		return o.recordOf(js), nil
+	}
 
 	logPath := o.Evidence.LogPath(js.RepoInst, js.Name, js.JobID)
 	rec := &model.VerifyRecord{
@@ -55,7 +61,7 @@ func (o Options) runExisting(js *model.JobStatus, tee io.Writer) (*model.VerifyR
 	o.execute(js, side, rec, logPath, tee)
 
 	// A job superseded meanwhile leaves its record to the superseder.
-	if cur, err := o.Evidence.ReadJob(js.RepoInst, js.Name, js.JobID); err == nil && cur != nil && cur.Outcome == model.OutcomeSuperseded {
+	if o.isSuperseded(js) {
 		return o.recordOf(js), nil
 	}
 	if err := o.Evidence.WriteRecord(rec); err != nil {
@@ -205,12 +211,18 @@ loop:
 			interrupted = sigName(s)
 			stop()
 		case <-tick.C:
-			if cur, err := o.Evidence.ReadJob(js.RepoInst, js.Name, js.JobID); err == nil && cur != nil && cur.Outcome == model.OutcomeSuperseded {
+			if o.isSuperseded(js) {
 				stop()
 			}
 		case <-killTimer:
 			tree.kill()
 		}
+	}
+
+	if stopping {
+		// The leader may be gone while other members of the group ignore
+		// SIGTERM (the kill timer never fired): finish them off.
+		tree.kill()
 	}
 
 	switch {
@@ -222,6 +234,13 @@ loop:
 		return model.OutcomeSignal, nil, "SIGTERM", nil // superseded: the caller discards it
 	}
 	if waitErr == nil {
+		z := 0
+		return model.OutcomePass, &z, "", nil
+	}
+	if errors.Is(waitErr, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		// The command succeeded but a leftover process still holds its
+		// output pipe; the outcome is the command's, as for a background job.
+		fmt.Fprintf(logf, "# ballast: command exited 0 but left a process holding its output (%v)\n", waitErr)
 		z := 0
 		return model.OutcomePass, &z, "", nil
 	}

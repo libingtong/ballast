@@ -185,6 +185,13 @@ func (o Options) supersedeRunning(repoInst, name string) error {
 		side, _ := o.readSpec(&js)
 		now := o.Clock.Now()
 		pid := js.PID
+		// The marker comes first and is created exclusively: the job's
+		// runner polls it, and no read-modify-write of the job file can
+		// lose it.
+		if err := o.markSuperseded(&js); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		js.State, js.Outcome = model.JobDone, model.OutcomeSuperseded
 		if err := o.Evidence.WriteJob(&js); err != nil {
 			errs = append(errs, err)
@@ -207,6 +214,28 @@ func (o Options) supersedeRunning(repoInst, name string) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// markSuperseded creates the supersede marker of js (idempotent).
+func (o Options) markSuperseded(js *model.JobStatus) error {
+	f, err := o.FS.OpenFile(o.Evidence.SupersededPath(js.RepoInst, js.Name, js.JobID), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return nil
+		}
+		return err
+	}
+	return f.Close()
+}
+
+// isSuperseded reports whether a newer run replaced job js: its marker exists
+// (or, for a job file written before markers, it says superseded).
+func (o Options) isSuperseded(js *model.JobStatus) bool {
+	if _, err := o.FS.Stat(o.Evidence.SupersededPath(js.RepoInst, js.Name, js.JobID)); err == nil {
+		return true
+	}
+	cur, err := o.Evidence.ReadJob(js.RepoInst, js.Name, js.JobID)
+	return err == nil && cur != nil && cur.Outcome == model.OutcomeSuperseded
 }
 
 func (o Options) readSpec(js *model.JobStatus) (jobSpec, error) {

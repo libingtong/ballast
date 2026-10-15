@@ -36,8 +36,9 @@
 //
 // Implementation notes (U8b; additive):
 //
-//   - Decode leaves timeout_s at 0 when absent (readers apply
-//     DefaultTimeoutS); an explicit 0 or out-of-range value is an error.
+//   - Decode fills DefaultTimeoutS when timeout_s is absent, so every
+//     decoded entry has TimeoutS in 1..86400; an explicit 0 or out-of-range
+//     value is an error.
 //     env entries must be KEY=VALUE. Exempt globs must also be repo-relative
 //     and free of ".." (what snapshot.CompileExempt requires).
 //   - Loader.LoadProjectBytes also returns the file bytes (for Hash).

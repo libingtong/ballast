@@ -26,7 +26,10 @@ const (
 
 	recordSuffix = ".json"
 	specSuffix   = ".spec.json" // runner sidecar next to a job file
-	logSuffix    = ".log"
+	// supersededSuffix marks a job as superseded; created exclusively, never
+	// rewritten, so it cannot be lost to a read-modify-write of the job file.
+	supersededSuffix = ".superseded"
+	logSuffix        = ".log"
 
 	// tsDigits is the width of the zero-padded t_start in record file names.
 	tsDigits = 20
@@ -115,6 +118,12 @@ func (s *Store) LogPath(repoInst, name, jobID string) string {
 // created). The store only knows the name so that GC can remove it.
 func (s *Store) SpecPath(repoInst, name, jobID string) string {
 	return filepath.Join(s.opt.Layout.JobsDir, repoInst, name, jobID+specSuffix)
+}
+
+// SupersededPath returns the path of a job's supersede marker: the file whose
+// existence tells the job's runner that a newer run replaced it.
+func (s *Store) SupersededPath(repoInst, name, jobID string) string {
+	return filepath.Join(s.opt.Layout.JobsDir, repoInst, name, jobID+supersededSuffix)
 }
 
 func (s *Store) writeRecord(rec *model.VerifyRecord) error {
@@ -515,6 +524,8 @@ func (s *Store) gc() error {
 				switch {
 				case strings.HasSuffix(n, specSuffix):
 					id = strings.TrimSuffix(n, specSuffix)
+				case strings.HasSuffix(n, supersededSuffix):
+					id = strings.TrimSuffix(n, supersededSuffix)
 				case strings.HasSuffix(n, logSuffix):
 					id = strings.TrimSuffix(n, logSuffix)
 				default:
@@ -532,7 +543,7 @@ func (s *Store) gc() error {
 }
 
 func (s *Store) removeJobFiles(dir, id string, note func(error)) {
-	for _, suf := range []string{recordSuffix, specSuffix, logSuffix} {
+	for _, suf := range []string{recordSuffix, specSuffix, logSuffix, supersededSuffix} {
 		note(s.opt.FS.Remove(filepath.Join(dir, id+suf)))
 	}
 }

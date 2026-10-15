@@ -86,7 +86,8 @@
 //   - Options.Env (optional) feeds snapshot (global git config, TMPDIR); nil
 //     means the process environment.
 //   - Store also exposes JobPath, LogPath, SpecPath (the runner's per-job
-//     sidecar, removed by GC with the job), ReadJob and JobActive.
+//     sidecar) and SupersededPath (the runner's supersede marker); GC removes
+//     both with the job. ReadJob and JobActive are exported as well.
 //   - A running job whose PID is not recorded yet (the detached child writes
 //     its own PID when it starts) counts as running for JobStartGrace (30s);
 //     afterwards only a live PID before the job Deadline counts.
@@ -95,10 +96,15 @@
 //   - FreshQuery.Kind "" is treated as worktree; any other unknown kind is
 //     unknown(unparseable_commit).
 //   - ParseCommitForm leaves CommitForm.Reason empty (the acceptance table
-//     compares whole forms). A dynamic word is unparseable except as the
-//     value of a value-taking option (-m "$(...)" cannot change which tree is
-//     committed). Unknown options, --git-dir/--work-tree, a -a with paths and
-//     -i/-o without paths are unparseable.
+//     compares whole forms). Unknown options, --git-dir/--work-tree, a -a
+//     with paths and -i/-o without paths are unparseable.
+//   - DEVIATION, pending U0/architect confirmation (it relaxes the frozen
+//     "dynamic words => unparseable" rule, which still holds for the
+//     subcommand, -C, options and paths): a dynamic word that is the value of
+//     a value-taking option (-m "$(...)") is accepted, since it cannot change
+//     which tree is committed. The deviation only turns unknown into false
+//     (never into a pass), and the pre-commit --check on the real index
+//     remains the backstop for an unquoted -m $MSG split into several words.
 //   - Check resolves a relative CheckOptions.IndexFile against cwd.
 //   - FinishedSince reads only files whose t_start is within 25h before
 //     `since` (a record cannot run longer than the 86400s timeout cap).

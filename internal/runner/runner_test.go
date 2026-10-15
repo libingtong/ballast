@@ -282,6 +282,124 @@ func TestTimeoutKillsProcessGroup(t *testing.T) {
 	}
 }
 
+// A group member that ignores TERM must not outlive a timeout even though
+// the leader exits on TERM (the kill timer would never fire), on the pipe-less
+// background path as well as on Foreground.
+func TestTimeoutKillsStragglerAfterLeaderExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process groups are unix")
+	}
+	run := map[string]func(f *fx) (*model.VerifyRecord, error){
+		"foreground": func(f *fx) (*model.VerifyRecord, error) { return Foreground(f.opt, f.root, "test") },
+		"background": func(f *fx) (*model.VerifyRecord, error) {
+			tgt, err := f.opt.withDefaults().resolve(f.root, []string{"test"})
+			if err != nil {
+				return nil, err
+			}
+			js, err := f.opt.createJob(tgt, tgt.specs[0])
+			if err != nil {
+				return nil, err
+			}
+			return f.opt.withDefaults().runExisting(js, nil)
+		},
+	}
+	for name, fn := range run {
+		t.Run(name, func(t *testing.T) {
+			f := newFx(t)
+			pidfile := filepath.Join(f.sb.Root, "pids")
+			spec := helperSpec("test", "term-leader", "BALLAST_HELPER_PIDFILE="+pidfile)
+			spec.TimeoutS = 1
+			f.setProject(spec)
+			rec, err := fn(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rec.Outcome != model.OutcomeTimeout {
+				t.Fatalf("record = %+v", rec)
+			}
+			b, err := os.ReadFile(pidfile)
+			if err != nil {
+				t.Fatalf("helper never wrote its pids: %v", err)
+			}
+			fields := strings.Fields(string(b))
+			if len(fields) != 2 {
+				t.Fatalf("pidfile = %q", b)
+			}
+			for _, s := range fields {
+				pid, _ := strconv.Atoi(s)
+				waitFor(t, "process "+s+" to die", 2*time.Second, func() bool { return processGone(pid) })
+			}
+		})
+	}
+}
+
+// A successful command that leaves a process holding its output is a pass
+// on Foreground, exactly as in the background.
+func TestForegroundPassDespiteLeftoverOutputHolder(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("covered by the Job Object path")
+	}
+	f := newFx(t)
+	pidfile := filepath.Join(f.sb.Root, "pids")
+	f.setProject(helperSpec("test", "leave-child", "BALLAST_HELPER_PIDFILE="+pidfile))
+	t.Cleanup(func() {
+		b, _ := os.ReadFile(pidfile)
+		if fields := strings.Fields(string(b)); len(fields) == 2 { // leader (gone), leftover
+			if pid, err := strconv.Atoi(fields[1]); err == nil {
+				if p, err := os.FindProcess(pid); err == nil {
+					_ = p.Kill()
+				}
+			}
+		}
+	})
+	rec, err := Foreground(f.opt, f.root, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Outcome != model.OutcomePass || rec.ExitCode == nil || *rec.ExitCode != 0 || rec.Error != "" {
+		t.Fatalf("record = %+v", rec)
+	}
+	log, _ := os.ReadFile(rec.LogPath)
+	if !strings.Contains(string(log), "left a process holding its output") {
+		t.Errorf("log lacks the note: %q", log)
+	}
+}
+
+// The supersede marker survives the old job's markPID read-modify-write.
+func TestSupersedeMarkerSurvivesMarkPID(t *testing.T) {
+	f := newFx(t)
+	f.setProject(helperSpec("test", "exit", "BALLAST_HELPER_CODE=0"))
+	tgt, err := f.opt.withDefaults().resolve(f.root, []string{"test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := f.opt.createJob(tgt, tgt.specs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The superseder acts between the child's read and write of the job file.
+	stale := *old
+	if _, err := f.opt.createJob(tgt, tgt.specs[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.WriteJob(&stale); err != nil { // the child's lost-update write
+		t.Fatal(err)
+	}
+	rec, err := f.opt.withDefaults().runExisting(&stale, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec == nil || rec.Outcome != model.OutcomeSuperseded {
+		t.Fatalf("record = %+v", rec)
+	}
+	if js, _ := f.store.ReadJob(old.RepoInst, old.Name, old.JobID); js == nil || js.State != model.JobDone || js.Outcome != model.OutcomeSuperseded {
+		t.Errorf("job file = %+v", js)
+	}
+	if _, err := os.Stat(f.store.SupersededPath(old.RepoInst, old.Name, old.JobID)); err != nil {
+		t.Errorf("marker: %v", err)
+	}
+}
+
 func TestCommandKilledBySignal(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no signals on Windows")

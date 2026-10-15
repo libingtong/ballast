@@ -85,7 +85,7 @@ type rawConfig struct {
 
 // Decode strictly decodes and validates project.json bytes. Unknown fields,
 // trailing data and every violation of the package-doc rules are errors.
-// timeout_s stays 0 when absent (readers apply DefaultTimeoutS).
+// timeout_s is DefaultTimeoutS when absent.
 func Decode(data []byte) (*model.ProjectConfig, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
@@ -123,7 +123,7 @@ func Decode(data []byte) (*model.ProjectConfig, error) {
 				return nil, fmt.Errorf("invalid project.json: verify %q: argv contains NUL", rs.Name)
 			}
 		}
-		spec := model.VerifySpec{Name: rs.Name, Argv: rs.Argv, Required: rs.Required, Env: rs.Env, Cwd: rs.Cwd}
+		spec := model.VerifySpec{Name: rs.Name, Argv: rs.Argv, TimeoutS: DefaultTimeoutS, Required: rs.Required, Env: rs.Env, Cwd: rs.Cwd}
 		if rs.TimeoutS != nil {
 			t := *rs.TimeoutS
 			if t < 1 || t > MaxTimeoutS {

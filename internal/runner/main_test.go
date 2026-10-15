@@ -97,6 +97,31 @@ func helperMain(mode string) int {
 		signal.Ignore(syscall.SIGTERM)
 		writePID()
 		time.Sleep(60 * time.Second)
+	case "term-leader":
+		// A leader that dies on TERM, with a member that ignores it.
+		exe, _ := os.Executable()
+		child := exec.Command(exe)
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		child.Env = append(os.Environ(), "BALLAST_HELPER=ignoreterm", "BALLAST_HELPER_PIDFILE=")
+		if err := child.Start(); err != nil {
+			return 98
+		}
+		writePID(child.Process.Pid)
+		time.Sleep(60 * time.Second)
+	case "leave-child":
+		// Exits 0 at once, leaving a process that holds stdout for a while
+		// (longer than WaitDelay even with the race detector's exit delay).
+		exe, _ := os.Executable()
+		child := exec.Command(exe)
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		child.Env = append(os.Environ(), "BALLAST_HELPER=nap", "BALLAST_HELPER_PIDFILE=")
+		if err := child.Start(); err != nil {
+			return 98
+		}
+		writePID(child.Process.Pid)
+		return 0
+	case "nap":
+		time.Sleep(8 * time.Second)
 	case "kill-self":
 		selfKill()
 		time.Sleep(10 * time.Second)

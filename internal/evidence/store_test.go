@@ -407,6 +407,8 @@ func TestGC(t *testing.T) {
 		paths[label] = st.JobPath("inst", "test", js.JobID)
 		writeFile(t, st.SpecPath("inst", "test", js.JobID), "{}")
 		paths[label+"/spec"] = st.SpecPath("inst", "test", js.JobID)
+		writeFile(t, st.SupersededPath("inst", "test", js.JobID), "")
+		paths[label+"/superseded"] = st.SupersededPath("inst", "test", js.JobID)
 		if withLog {
 			writeFile(t, st.LogPath("inst", "test", js.JobID), "log")
 			paths[label+"/log"] = st.LogPath("inst", "test", js.JobID)
@@ -427,11 +429,11 @@ func TestGC(t *testing.T) {
 	for label, want := range map[string]bool{
 		"test-old": false, "test-older": false, "test-mid": true, "test-new": true,
 		"lint-only": true, "fmt-old": true, "fmt-older": false,
-		"done-old": false, "done-old/spec": false, "done-old/log": false,
-		"done-new": true, "done-new/spec": true, "done-new/log": true,
+		"done-old": false, "done-old/spec": false, "done-old/log": false, "done-old/superseded": false,
+		"done-new": true, "done-new/spec": true, "done-new/log": true, "done-new/superseded": true,
 		"running-live": true, "running-live/log": true,
 		"running-dead": true, "running-dead/log": true,
-		"running-ancient": false, "running-ancient/spec": false,
+		"running-ancient": false, "running-ancient/spec": false, "running-ancient/superseded": false,
 	} {
 		if exists(paths[label]) != want {
 			t.Errorf("%s exists = %v, want %v", label, !want, want)
