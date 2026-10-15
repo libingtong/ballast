@@ -24,6 +24,30 @@
       "user": [["u-01", true], ["u-02", true], ["u-03", true]],
       "want_active": ["o-01", "o-02", "o-03", "o-04", "o-05", "o-06", "r-01", "r-03", "r-04", "r-05", "u-01", "u-02"],
       "want_notices": [["rule_dropped", "user", "u-03"]]
+    },
+    {
+      "desc": "a disabled org rule is still immutable",
+      "org":  [["a-rule", false]],
+      "repo": [["a-rule", true]],
+      "user": [],
+      "want_active": [],
+      "want_notices": [["rule_shadowed", "repo", "a-rule"]]
+    },
+    {
+      "desc": "repo object wins entirely even when disabled",
+      "org":  [],
+      "repo": [["b-rule", false]],
+      "user": [["b-rule", true], ["c-rule", true]],
+      "want_active": ["c-rule"],
+      "want_notices": [["rule_shadowed", "user", "b-rule"]]
+    },
+    {
+      "desc": "org above the cap is dropped in order and reported",
+      "org":  [["o-01", true], ["o-02", true], ["o-03", true], ["o-04", true], ["o-05", true], ["o-06", true], ["o-07", true], ["o-08", true], ["o-09", true], ["o-10", true], ["o-11", true], ["o-12", true], ["o-13", true]],
+      "repo": [["r-01", true]],
+      "user": [],
+      "want_active": ["o-01", "o-02", "o-03", "o-04", "o-05", "o-06", "o-07", "o-08", "o-09", "o-10", "o-11", "o-12"],
+      "want_notices": [["rule_dropped", "org", "o-13"], ["rule_dropped", "repo", "r-01"]]
     }
   ],
   "settings": [

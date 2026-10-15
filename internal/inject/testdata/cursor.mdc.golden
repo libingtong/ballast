@@ -1,0 +1,9 @@
+---
+description: Ballast rules (generation 0123456789abcdef)
+alwaysApply: true
+---
+<!-- ballast-managed: do not edit; regenerate with `ballast install --client cursor` -->
+Ballast rules (generation 0123456789abcdef):
+- [read-before-edit] Read the file before editing it.
+Second line.
+- [no-tamper] Do not touch .ballast.
