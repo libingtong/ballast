@@ -1,0 +1,44 @@
+{
+  "$schema": "../../schema/rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "claim-needs-evidence",
+      "description": "pinrule evidence 的回复侧检测(evidence.py:105-132)的 DSL 版:Stop 时若最终回复(去掉代码块与引用、取末尾 600 字)在 40 字内同时出现「代码任务词」与「完成词/弱声明词」,而当前工作树没有新鲜的 verify 证据,则命中。原实现的 40 字上下文窗口(evidence.py:34、62-67)用两个方向的正则表达。影子模式:action=log,target=deny。",
+      "action": "log",
+      "target": "deny",
+      "event": "Stop",
+      "match": {
+        "text": {
+          "source": "last_assistant_message",
+          "preprocess": ["strip_code_blocks", "strip_quotes"],
+          "window": {"tail_chars": 600},
+          "regex": [
+            "(?is)(?:\\b(?:tests?|code|fix|build|deploy|commit|merge|pull request|PR|feature|bug)\\b|测试|代码|修复|实现|实施|部署|功能|跑通|过了|跑过|装好)[^\\n]{0,40}(?:\\b(?:done|fixed|all set|all done|finished|completed|wrapped up|shipped|landed|implemented|deployed|tests? (?:are )?pass(?:ed|ing)|build (?:passes|passing|green)|tests green|all green|works now|working now)\\b|完成|搞定|搞好|做完|修复完|弄好|弄完|处理完|跑通|跑过|全部通过|测试通过)",
+            "(?is)(?:\\b(?:done|fixed|all set|all done|finished|completed|wrapped up|shipped|landed|implemented|deployed|tests? (?:are )?pass(?:ed|ing)|build (?:passes|passing|green)|tests green|all green|works now|working now)\\b|完成|搞定|搞好|做完|修复完|弄好|弄完|处理完|跑通|跑过|全部通过|测试通过)[^\\n]{0,40}(?:\\b(?:tests?|code|fix|build|deploy|commit|merge|pull request|PR|feature|bug)\\b|测试|代码|修复|实现|实施|部署|功能|跑通|过了|跑过|装好)",
+            "(?is)(?:\\b(?:tests?|code|fix|build|deploy|commit|merge|pull request|PR|feature|bug)\\b|测试|代码|修复|实现|实施|部署|功能|跑通|过了|跑过|装好)[^\\n]{0,40}(?:\\b(?:should work|should be (?:fine|ok|okay)|probably (?:works|fine|ok|okay)|might (?:work|be fine)|i think (?:it works|it's fine|it should)|likely (?:works|fine)|seems to work|appears to work)\\b|应该(?:可以|没问题|没事|能|差不多)|大概率|估计(?:可以|没问题|差不多)|看起来没问题|看上去没问题|似乎(?:可以|没问题)|好像(?:可以|没问题))",
+            "(?is)(?:\\b(?:should work|should be (?:fine|ok|okay)|probably (?:works|fine|ok|okay)|might (?:work|be fine)|i think (?:it works|it's fine|it should)|likely (?:works|fine)|seems to work|appears to work)\\b|应该(?:可以|没问题|没事|能|差不多)|大概率|估计(?:可以|没问题|差不多)|看起来没问题|看上去没问题|似乎(?:可以|没问题)|好像(?:可以|没问题))[^\\n]{0,40}(?:\\b(?:tests?|code|fix|build|deploy|commit|merge|pull request|PR|feature|bug)\\b|测试|代码|修复|实现|实施|部署|功能|跑通|过了|跑过|装好)"
+          ],
+          "not_regex": [
+            "(?i)\\bnot (?:yet )?(?:done|completed|finished|fixed)\\b",
+            "(?i)\\b(?:still|remaining) (?:fail|broken)",
+            "(?:未完成|还没|尚未|没有完成|没完成)"
+          ]
+        }
+      },
+      "when": [{"not": {"verify_fresh": {}}}],
+      "message": "你声称已完成、测试通过,或给出了「应该可以」之类未经验证的判断,但当前工作树没有一致的 ballast verify 通过记录。请运行 `ballast verify` 并用 --status 确认结果,再附上证据汇报。",
+      "inject": {"text": "声称完成或测试通过之前,先运行 `ballast verify` 并附上结果;不要用「应该可以」代替验证。", "anchor": "完成要有 verify 证据"},
+      "examples": [
+        {"name": "claims done without evidence", "expect": "hit", "input": {"last_assistant_message": "修复已完成,全部通过。"}, "fixture": {"verify_fresh": "false"}},
+        {"name": "english completion claim", "expect": "hit", "input": {"last_assistant_message": "I fixed the bug and the tests pass now."}, "fixture": {"verify_fresh": "false"}},
+        {"name": "hedged claim", "expect": "hit", "input": {"last_assistant_message": "代码改好了,应该没问题。"}, "fixture": {"verify_fresh": "false"}},
+        {"name": "claim with fresh evidence", "expect": "miss", "input": {"last_assistant_message": "All tests passed. The fix is done."}, "fixture": {"verify_fresh": "true"}},
+        {"name": "explicitly not done", "expect": "miss", "input": {"last_assistant_message": "The refactor is not done yet; tests still fail."}, "fixture": {"verify_fresh": "false"}},
+        {"name": "small talk without a code task", "expect": "miss", "input": {"last_assistant_message": "这个方向应该可以接受。"}, "fixture": {"verify_fresh": "false"}},
+        {"name": "claim only inside a code block", "expect": "miss", "input": {"last_assistant_message": "Run this:\n```\necho the fix is done\n```\nThen tell me the output."}, "fixture": {"verify_fresh": "false"}},
+        {"name": "outside a repo", "expect": "unknown", "input": {"last_assistant_message": "The fix is done."}, "fixture": {"not_a_repo": true, "verify_fresh": "unknown"}}
+      ]
+    }
+  ]
+}

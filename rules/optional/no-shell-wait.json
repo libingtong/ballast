@@ -1,0 +1,62 @@
+{
+  "$schema": "../../schema/rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "no-shell-wait",
+      "description": "pinrule non_blocking 的 wait 检测(non_blocking.py:43-70)的 DSL 版:shell 内置 `wait`(裸 wait、wait $pid)和 PowerShell 的 Wait-Job / Wait-Process 在前台阻塞。`kubectl wait`、`docker wait` 等自带 wait 子命令的工具,命令名不是 wait,天然不命中,不需要原实现的豁免表(non_blocking.py:40)。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "run_in_background": false,
+        "bash": {"cmd": "wait", "async": false},
+        "ps": {"cmd": ["wait-job", "wait-process"], "async": false}
+      },
+      "message": "不要用 wait 在前台阻塞等待后台任务。用 run_in_background 启动任务,完成时会收到通知;期间继续做别的事。",
+      "inject": "不要用 shell 的 wait 阻塞等后台任务;用 run_in_background,完成时会收到通知。",
+      "examples": [
+        {"name": "wait for a pid", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "wait $pid"}}},
+        {"name": "start then wait", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "npm run dev & wait"}}},
+        {"name": "bare wait", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "wait"}}},
+        {"name": "tool-level background", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "wait", "run_in_background": true}}},
+        {"name": "kubectl wait is a different tool", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "kubectl wait --for=condition=ready pod/web"}}},
+        {"name": "docker wait", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "docker wait web"}}},
+        {"name": "text inside a string", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "echo wait"}}},
+        {"name": "PowerShell Wait-Job", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Wait-Job -Id 3"}}},
+        {"name": "PowerShell Get-Job", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Get-Job"}}}
+      ]
+    },
+    {
+      "id": "no-lang-sleep",
+      "description": "pinrule non_blocking 对 python -c 内真阻塞调用的检测(non_blocking.py:28-34、116-131):time.sleep(N)、asyncio.sleep(N)、subprocess.run/call/Popen 与 os.system 里的 sleep N。对 python 命令行参数里的字面代码做正则匹配(不解析 Python),阈值与 no-long-sleep 一致(≥ 60 秒,原实现为 ≥ 1 秒)。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "run_in_background": false,
+        "bash": {
+          "cmd": "python*",
+          "args_regex": "(?i)(?:time\\.sleep|asyncio\\.sleep)\\s*\\(\\s*(?:[6-9]\\d|[1-9]\\d{2,})(?:\\.\\d+)?\\s*\\)|(?:subprocess\\.(?:run|call|Popen)|os\\.system)\\s*\\([^)]*[\"']sleep\\s+(?:[6-9]\\d|[1-9]\\d{2,})\\b",
+          "async": false
+        },
+        "ps": {
+          "cmd": "python*",
+          "args_regex": "(?i)(?:time\\.sleep|asyncio\\.sleep)\\s*\\(\\s*(?:[6-9]\\d|[1-9]\\d{2,})(?:\\.\\d+)?\\s*\\)|(?:subprocess\\.(?:run|call|Popen)|os\\.system)\\s*\\([^)]*[\"']sleep\\s+(?:[6-9]\\d|[1-9]\\d{2,})\\b",
+          "async": false
+        }
+      },
+      "message": "不要在前台用 python 代码 sleep 60 秒以上。需要等待时用 run_in_background,或用有界的短轮询。",
+      "inject": "不要在前台用 time.sleep 等待 60 秒以上;需要等待时用 run_in_background 或短轮询。",
+      "examples": [
+        {"name": "time.sleep in python -c", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "python3 -c \"import time; time.sleep(300)\""}}},
+        {"name": "asyncio.sleep", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "python -c \"import asyncio; asyncio.run(asyncio.sleep(120))\""}}},
+        {"name": "os.system sleep", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "python3 -c \"import os; os.system('sleep 120')\""}}},
+        {"name": "short sleep", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "python3 -c \"import time; time.sleep(5)\""}}},
+        {"name": "plain script", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "python3 job.py"}}},
+        {"name": "tool-level background", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "python3 -c \"import time; time.sleep(300)\"", "run_in_background": true}}},
+        {"name": "text inside echo", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "echo \"time.sleep(300)\""}}}
+      ]
+    }
+  ]
+}

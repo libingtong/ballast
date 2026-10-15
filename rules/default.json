@@ -1,0 +1,154 @@
+{
+  "$schema": "../schema/rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "read-before-edit",
+      "description": "pinrule read_first 的 DSL 版:修改已存在的文件前,必须在本 agent 的本次会话中读过它(Read 类工具,或 PostToolUse 时登记的只读 shell 命令读取目标,Codex 依赖后者)。多文件补丁中任一已存在的目标未读即命中;新建文件(path_exists=false)豁免。默认影子模式(log),目标档位 deny。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {"tool": ["Edit", "MultiEdit", "Write", "NotebookEdit"]},
+      "when": [{"path_exists": {}}, {"not": {"read_this_session": {}}}],
+      "message": "该文件已存在但本会话尚未读取。请先读取它(Read 工具,或 cat、sed -n、head 等只读 shell 命令),再修改。",
+      "inject": {
+        "text": "修改已存在的文件前,必须先在本会话中读过它(Read 工具,或 cat、sed -n、head 等只读 shell 命令);新建文件不受此限制。",
+        "anchor": "改已有文件前先读"
+      },
+      "examples": [
+        {"name": "edit an existing file that was not read", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "y"}}, "fixture": {"exists": ["src/a.go"]}},
+        {"name": "edit after reading", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "y"}}, "fixture": {"exists": ["src/a.go"], "read": ["src/a.go"]}},
+        {"name": "create a new file", "expect": "miss", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/new.go", "content": "package src\n"}}, "fixture": {"exists": []}},
+        {"name": "overwrite an existing file that was not read", "expect": "hit", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/a.go", "content": "package src\n"}}, "fixture": {"exists": ["src/a.go"]}},
+        {"name": "multiedit on an unread file", "expect": "hit", "input": {"tool_name": "MultiEdit", "tool_input": {"file_path": "/repo/src/a.go", "edits": [{"old_string": "x", "new_string": "y"}]}}, "fixture": {"exists": ["src/a.go"]}},
+        {"name": "notebook edit on an unread notebook", "expect": "hit", "input": {"tool_name": "NotebookEdit", "tool_input": {"notebook_path": "/repo/nb.ipynb", "new_source": "print(1)"}}, "fixture": {"exists": ["nb.ipynb"]}},
+        {"name": "reading is not gated", "expect": "miss", "input": {"tool_name": "Read", "tool_input": {"file_path": "/repo/src/a.go"}}, "fixture": {"exists": ["src/a.go"]}},
+        {"name": "cursor Write on an unread file", "expect": "hit", "client": "cursor", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/a.go", "content": "package src\n"}}, "fixture": {"exists": ["src/a.go"]}},
+        {"name": "codex apply_patch: one of two existing targets unread", "expect": "hit", "client": "codex", "input": {"tool_name": "apply_patch", "tool_input": {"input": "*** Begin Patch\n*** Update File: src/a.go\n@@\n-x\n+y\n*** Update File: src/b.go\n@@\n-x\n+y\n*** End Patch\n"}}, "fixture": {"exists": ["src/a.go", "src/b.go"], "read": ["src/a.go"]}},
+        {"name": "codex apply_patch: all targets read", "expect": "miss", "client": "codex", "input": {"tool_name": "apply_patch", "tool_input": {"input": "*** Begin Patch\n*** Update File: src/a.go\n@@\n-x\n+y\n*** Update File: src/b.go\n@@\n-x\n+y\n*** End Patch\n"}}, "fixture": {"exists": ["src/a.go", "src/b.go"], "read": ["src/a.go", "src/b.go"]}},
+        {"name": "codex apply_patch: new file only", "expect": "miss", "client": "codex", "input": {"tool_name": "apply_patch", "tool_input": {"input": "*** Begin Patch\n*** Add File: src/new.go\n+package src\n*** End Patch\n"}}, "fixture": {"exists": []}}
+      ]
+    },
+    {
+      "id": "no-long-sleep",
+      "description": "前台 sleep ≥ 60s 即命中(任一命令节点);shell 的 & 后台与工具级 run_in_background 都放行;循环内单次 < 60s 的 sleep 放行。bash 与 ps 两个变体按工具的 shell 种类分派。默认影子模式(log),目标档位 deny。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "run_in_background": false,
+        "bash": {"cmd": "sleep", "sleep_s": {"gte": 60}, "async": false},
+        "ps": {"cmd": "start-sleep", "sleep_s": {"gte": 60}, "async": false}
+      },
+      "message": "不要在前台 sleep 60 秒以上。需要等待时用 run_in_background,或用有界的短轮询。",
+      "inject": "不要在前台 sleep 60 秒以上;需要等待时用 run_in_background 或短间隔轮询。",
+      "examples": [
+        {"name": "plain sleep 300", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "sleep 300"}}},
+        {"name": "polling loop with long sleep", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "while true; do sleep 300; done"}}},
+        {"name": "env wrapper", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "env X=1 sleep 300"}}},
+        {"name": "wrapped by timeout, minutes syntax", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "timeout 400 sleep 5m"}}},
+        {"name": "bash -c", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "bash -c 'sleep 300'"}}},
+        {"name": "shell background &", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "sleep 300 &"}}},
+        {"name": "tool-level background", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "sleep 300", "run_in_background": true}}},
+        {"name": "bounded retry loop with short sleeps", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "for i in 1 2 3; do curl -f localhost:8080 && break; sleep 1; done"}}},
+        {"name": "short sleeps in a bounded loop", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "for i in 1 2 3; do sleep 30; done"}}},
+        {"name": "quoted text is not a command", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "echo \"sleep 300\""}}},
+        {"name": "comment is not a command", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "# sleep 300"}}},
+        {"name": "heredoc body is not a command", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "cat <<EOF\nsleep 300\nEOF"}}},
+        {"name": "dynamic duration is unknown", "expect": "unknown", "input": {"tool_name": "Bash", "tool_input": {"command": "sleep $WAIT"}}},
+        {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Start-Sleep -Seconds 300"}}},
+        {"name": "PowerShell alias", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "sleep 600"}}},
+        {"name": "PowerShell short sleep", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Start-Sleep -Seconds 5"}}},
+        {"name": "codex exec_command", "expect": "hit", "client": "codex", "input": {"tool_name": "exec_command", "tool_input": {"cmd": "sleep 300"}}},
+        {"name": "cursor beforeShellExecution", "expect": "hit", "client": "cursor", "native": "beforeShellExecution", "input": {"command": "sleep 300"}},
+        {"name": "hermes terminal", "expect": "hit", "client": "hermes", "input": {"tool_name": "terminal", "tool_input": {"command": "sleep 300"}}}
+      ]
+    },
+    {
+      "id": "evidence-before-commit",
+      "description": "git commit 前必须有与待提交内容(C)一致的 required verify 通过记录。verify 进行中、非 git 仓库、无法解析的提交参数 → unknown(放行并审计)。默认影子模式(log),目标档位 deny。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {"bash": {"cmd": "git", "git_sub": "commit"}, "ps": {"cmd": "git", "git_sub": "commit"}},
+      "when": [{"not": {"verify_fresh": {}}}],
+      "message": "提交前需要与待提交内容一致的 ballast verify 通过记录:运行 `ballast verify`,用 `ballast verify --status` 确认通过后再提交。有未暂存改动时先 `git add -u`。`git add` 与 `git commit` 请分两次执行(同一条命令里的 add 在判定时尚未执行)。",
+      "inject": {
+        "text": "git commit 前必须有与待提交内容一致的 `ballast verify` 通过记录(后台运行,用 --status 查询);`git add` 与 `git commit` 分两次执行。",
+        "anchor": "提交前先 ballast verify"
+      },
+      "examples": [
+        {"name": "stale evidence", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'fix'"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "fresh evidence", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'fix'"}}, "fixture": {"verify_fresh": "true"}},
+        {"name": "verify still running", "expect": "unknown", "input": {"tool_name": "Bash", "tool_input": {"command": "git -C ../x commit -am wip"}}, "fixture": {"verify_fresh": "unknown"}},
+        {"name": "add and commit in one command (add has not run yet)", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git add -A && git commit -m fix"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "amend with stale evidence", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit --amend --no-edit"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "not a commit", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git status && git diff"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "commit text inside a quoted string", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "echo 'git commit -m x'"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git.exe commit -m x"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "codex exec_command", "expect": "hit", "client": "codex", "input": {"tool_name": "exec_command", "tool_input": {"cmd": "git commit -m fix"}}, "fixture": {"verify_fresh": "false"}},
+        {"name": "cursor beforeShellExecution", "expect": "hit", "client": "cursor", "native": "beforeShellExecution", "input": {"command": "git commit -m fix"}, "fixture": {"verify_fresh": "false"}}
+      ]
+    },
+    {
+      "id": "no-skip-verify",
+      "description": "pinrule long_term 中 git --no-verify 一项的 DSL 版:禁止 git commit --no-verify / -n(含合并短选项如 -nm)。push/merge 等的跳过标志见 rules/optional/long-term.json 的 no-git-force-skip。默认影子模式(log),目标档位 deny。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "bash": {"cmd": "git", "git_sub": "commit", "flags": ["--no-verify", "-n"]},
+        "ps": {"cmd": "git", "git_sub": "commit", "flags": ["--no-verify", "-n"]}
+      },
+      "message": "不得跳过 git hooks(--no-verify / -n)。请修复 hook 报告的问题,而不是绕过它。",
+      "inject": "不得使用 git commit --no-verify 或 -n 跳过 hooks;hook 失败时修复根因。",
+      "examples": [
+        {"name": "long flag", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit --no-verify -m x"}}},
+        {"name": "short flag", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -n -m x"}}},
+        {"name": "combined short flags", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -anm x"}}},
+        {"name": "global option before the subcommand", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git -C ../x commit --no-verify -m x"}}},
+        {"name": "normal commit", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'no-verify mentioned in message'"}}},
+        {"name": "other git subcommand", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git push --no-verify origin main"}}},
+        {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git.exe commit --no-verify -m x"}}},
+        {"name": "PowerShell normal commit", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git commit -m x"}}}
+      ]
+    },
+    {
+      "id": "no-tamper",
+      "description": "pinrule bypass_pinrule 的 DSL 版:禁止改写 Ballast 状态/规则与客户端 hook 配置。文件工具用其目标路径,Bash/PowerShell 用解析出的写入目标(重定向、tee、cp/mv、sed -i、Set-Content、Out-File 等);路径同时按原始与 EvalSymlinks 解析后两种形式比较。T0 下只是检测,不是安全边界。默认影子模式(log),目标档位 deny。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "tool": ["Edit", "MultiEdit", "Write", "NotebookEdit", "Bash", "PowerShell"],
+        "path": [
+          "**/.ballast/**",
+          "~/.ballast/**",
+          "~/.claude/settings*.json",
+          "**/.claude/settings*.json",
+          "~/.codex/hooks.json",
+          "~/.codex/config.toml",
+          "~/.cursor/hooks.json",
+          "~/.cursor/rules/ballast.mdc",
+          "~/.hermes/config.yaml"
+        ]
+      },
+      "message": "不得改写 Ballast 的规则、状态、证据,或 AI 客户端的 hook 配置。如需调整规则,请让用户手动修改。",
+      "inject": "不得改写 ~/.ballast、<repo>/.ballast 或任何 AI 客户端的 hook 配置文件。",
+      "examples": [
+        {"name": "write user rules", "expect": "hit", "input": {"tool_name": "Write", "tool_input": {"file_path": "/home/user/.ballast/rules.json", "content": "{}"}}},
+        {"name": "edit repo project.json", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/.ballast/project.json", "old_string": "x", "new_string": "y"}}},
+        {"name": "redirect into state", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "echo '{}' > ~/.ballast/state/x/y/main.json"}}},
+        {"name": "sed -i on repo settings", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "sed -i 's/ballast//' .claude/settings.json"}}},
+        {"name": "tee into hooks.json", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "echo '{}' | tee ~/.codex/hooks.json"}}},
+        {"name": "cp over settings", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "cp /tmp/s.json ~/.claude/settings.json"}}},
+        {"name": "PowerShell Set-Content", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Set-Content -Path /home/user/.claude/settings.json -Value '{}'"}}},
+        {"name": "codex apply_patch on hooks.json", "expect": "hit", "client": "codex", "input": {"tool_name": "apply_patch", "tool_input": {"input": "*** Begin Patch\n*** Update File: /home/user/.codex/hooks.json\n@@\n-x\n+y\n*** End Patch\n"}}, "fixture": {"exists": ["/home/user/.codex/hooks.json"]}},
+        {"name": "reading is fine", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "cat ~/.ballast/rules.json"}}},
+        {"name": "ballast CLI is not a shell write", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "ballast rules promote read-before-edit --to warn"}}},
+        {"name": "ordinary source edit", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "a", "new_string": "b"}}},
+        {"name": "dynamic write target", "expect": "unknown", "input": {"tool_name": "Bash", "tool_input": {"command": "echo x > \"$TARGET\""}}}
+      ]
+    }
+  ]
+}

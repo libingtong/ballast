@@ -1,0 +1,53 @@
+{
+  "$schema": "../../schema/rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "keep-pushing",
+      "description": "pinrule keep_pushing 的可映射部分(keep_pushing.py:85-180,逐项映射见 docs/pinrule-mapping.md):回复末尾 80 字出现明确的停顿语(stop_hints)而没有疑问句、显式交还决定、饱和声明或推进计划时,让 agent 继续;用户上一条 prompt 含叫停语时整条豁免。原实现的「无停顿语的纯陈述也算停下」(keep_pushing.py:171-180)假阳率高,有意舍弃。影子模式:action=log,target=deny(Stop 的 block 让会话继续,Claude Code 最多连续 8 次)。",
+      "action": "log",
+      "target": "deny",
+      "event": "Stop",
+      "match": {
+        "text": {
+          "source": "last_assistant_message",
+          "window": {"tail_chars": 80},
+          "regex": [
+            "(?i:等下次|下次再来|下次再说|下次见|下次有空|先到这|先到此|告一段落|暂停一下|停一下|这阶段完|这阶段结束|当前状态是|当前进度是|当前节点|本轮 ?OK|累积到一定量再|看新出现什么|今天到此|到此为止|就这样了|就这样吧|就到这|今天就这|搞不定了|改不动了|算了吧|放着吧)",
+            "(?i)\\b(?:maybe next time|next time|will revisit later|revisit this later|park this for now|that['’]?s it for now|that is it for now|calling it(?: here)?|stopping here(?: for now)?|this stage (?:is )?done|current state is|where we are|this round (?:looks|is) ok|let['’]?s see what comes up|wait for more signal|accumulate more first|that['’]?s all(?: for today)?|that is all(?: for today)?|let['’]?s wrap up|giving up on this|can['’]?t fix this|leaving this as is)\\b"
+          ],
+          "not_regex": [
+            "[?？]",
+            "请决定|请授权|请确认|请定夺|请拍板|等你(?:决定|授权|确认|看|说|回复|反馈)|等用户(?:决定|授权|确认|介入)|你说(?:要不要|怎么|呢)",
+            "(?i)\\b(?:please (?:decide|confirm|advise|authorize)|need (?:your call|your decision|you to (?:decide|confirm))|let me know (?:how to proceed|which)|which (?:would you prefer|one would you)|how would you like|what do you want|waiting for your (?:call|decision|input)|your call here|up to you|your decision)\\b",
+            "任务(?:真)?饱和|我饱和|工作饱和|今天饱和|这一波(?:真)?饱和|session 饱和|本 session 饱和|真的?饱和|彻底饱和|已饱和|系列(?:已)?收官|收官在干净状态|干净状态收官|卡在(?:这|此|哪|这一步|这个)|卡住了|真卡住|卡点(?:在|是|:)|明天(?:再)?(?:接力|继续|推|做)|下次(?:再)?(?:接力|继续|推)",
+            "(?i)\\b(?:i['’]?m saturated|i am saturated|task (?:is )?saturated|(?:genuinely|truly|fully) saturated|hit saturation|out of meaningful steps|diminishing returns|(?:i['’]?m|i am) stuck (?:on|at)|stuck at|the blocker is|blocked on|need your (?:call|decision) on|(?:will )?(?:pick this up|continue this|resume|hand off) (?:tomorrow|next session)|(?:call|calling) it a wrap|series wrap[- ]?up|parking this here)",
+            "(?:(?:我现在|我立刻|我马上|我立即|我继续|我先|我来|我接着|我接下来|我顺手|我要去|我去|我)\\s*(?:做|改|加|修|跑|去|开始|实施|实现|动手|推|搞|写|发|提交|测试|验证|跑测|读|看|查|测|检查|确认|核对)|(?:立刻|马上|直接)(?:做|开始|实施|推|继续|动手|去做|改)|继续推进|开始做|接下来(?:去|做|改|加|修|跑|开始|实施|动手|推|测试|验证|看|查|检查|确认|打算|准备|计划|考虑|可以|可选|的方向|的推进点)|下次(?:接手|做|治理|推进|修|改)|下个 ?session ?(?:接手|做|治理|推进)|接手(?:做|改|修|治理|推进)|下一(?:推进点|步|个推进点|个里程碑|波)|后续(?:推进|步骤|计划|打算|准备|是)|候选(?:清单|列表|第))(?:[^吧行算]|$)",
+            "(?i)\\b(?:i['’]?ll|i will|i am going to|i['’]?m going to|i am about to|i['’]?m about to|let me|next i['’]?ll|next, i['’]?ll|next, let me|now i['’]?ll|now let me|going to|about to|continuing to|moving on to|proceeding to|will now)\\s+(?:proceed|start|begin|fix|add|change|modify|patch|apply|run|test|verify|check|inspect|look at|read|examine|commit|push|implement|build|deploy|investigate|debug|tackle|handle|work on|finish|continue|keep going|keep pushing|resolve|try|attempt)\\b|\\b(?:keep pushing|keep going|moving forward|moving on|on to the next|next step is|next steps are|the next step|up next|will resume|will continue|will pick up)\\b"
+          ]
+        }
+      },
+      "when": [
+        {
+          "not": {
+            "prev_prompt_regex": {
+              "regex": "不用啦|不用了|休息吧|明天再说|先到这|算了|停一下|停下|别推了|别继续|别推进|不再推|够了|到此为止|收尾吧|睡吧|晚安|好了好了|不错不错|挺不错|挺稳定|稳定了|挺好的|挺好了|就这样吧|这就行|可以了|没问题了|搞定了|看着不错|OK 了|ok 了|(?i:never ?mind|that['’]?s enough|let['’]?s stop|stop pushing|no more|we['’]?re done|done for today|call it a day|wrap it up|good ?night|take a break|looks good|lgtm|all good|sounds good|ship it|that['’]?ll do)"
+            }
+          }
+        }
+      ],
+      "message": "你在没有说明具体卡点的情况下表达了暂停。如果还有可做的下一步,现在就继续;如果确实需要用户决定,请明确说明要他决定什么;如果被阻塞,请说明卡在哪里。",
+      "inject": {"text": "不要在还有下一步可做时说「先到这」「下次再说」;继续推进。确实需要用户决定或被阻塞时,明说要他决定什么、卡在哪里。", "anchor": "有下一步就继续,别软停"},
+      "examples": [
+        {"name": "soft stop in chinese", "expect": "hit", "input": {"last_assistant_message": "第一阶段已经完成。先到这,下次再说。"}, "fixture": {"prev_prompt": "继续实现第二阶段"}},
+        {"name": "soft stop in english", "expect": "hit", "input": {"last_assistant_message": "Phase one is complete. That's all for today."}, "fixture": {"prev_prompt": "keep going on the migration"}},
+        {"name": "ends with a question", "expect": "miss", "input": {"last_assistant_message": "先到这里,要继续做第二阶段吗?"}, "fixture": {"prev_prompt": "继续实现第二阶段"}},
+        {"name": "explicit hand-off to the user", "expect": "miss", "input": {"last_assistant_message": "方案 A 和 B 各有利弊,先到这,请决定用哪个。"}, "fixture": {"prev_prompt": "继续实现第二阶段"}},
+        {"name": "declared saturation with a blocker", "expect": "miss", "input": {"last_assistant_message": "任务饱和,卡在第三方接口的鉴权上,先到这。"}, "fixture": {"prev_prompt": "继续实现第二阶段"}},
+        {"name": "has a concrete next step", "expect": "miss", "input": {"last_assistant_message": "今天到此为止之前,我现在开始跑测试验证。"}, "fixture": {"prev_prompt": "继续实现第二阶段"}},
+        {"name": "user asked to stop", "expect": "miss", "input": {"last_assistant_message": "好的,先到这,下次再说。"}, "fixture": {"prev_prompt": "算了,不用继续了"}},
+        {"name": "plain report without a pause phrase", "expect": "miss", "input": {"last_assistant_message": "已修复并提交。"}, "fixture": {"prev_prompt": "继续实现第二阶段"}}
+      ]
+    }
+  ]
+}
