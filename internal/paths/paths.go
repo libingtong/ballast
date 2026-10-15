@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/libingtong/ballast/internal/model"
@@ -67,6 +68,8 @@ func normalize(p, base, home, goos string) string {
 		return cleanDrive(s)
 	case win && isUNC(s):
 		return cleanUNC(s)
+	case win && isDevice(s):
+		return cleanDevice(s)
 	case s[0] == '/':
 		return cleanRooted(s, base, home, win)
 	}
@@ -84,6 +87,8 @@ func normalize(p, base, home, goos string) string {
 				return cleanDrive(s)
 			case win && isUNC(s):
 				return cleanUNC(s)
+			case win && isDevice(s):
+				return cleanDevice(s)
 			case s[0] == '/':
 				return cleanRooted(s, "", home, win)
 			}
@@ -123,6 +128,14 @@ func isAbs(s string, win bool) bool {
 	return s != "" && (s[0] == '/' || isDriveAbs(s, win))
 }
 
+// isDevice reports whether s is a Win32 device-namespace path that cannot be
+// mapped to a drive letter or UNC share ("//?/Volume{GUID}/x",
+// "//?/GLOBALROOT/Device/...", "//./pipe/x"). Such a path is already
+// absolute and must never be joined to a base.
+func isDevice(s string) bool {
+	return len(s) >= 4 && s[0] == '/' && s[1] == '/' && (s[2] == '?' || s[2] == '.') && s[3] == '/'
+}
+
 // isDriveAbs reports whether s starts with "X:/" (any GOOS) or is exactly "X:" (windows).
 func isDriveAbs(s string, win bool) bool {
 	if len(s) < 2 || !isLetter(s[0]) || s[1] != ':' {
@@ -141,7 +154,7 @@ func isDriveRel(s string) bool {
 }
 
 // isUNC reports whether s is "//server...". The device prefixes "//./" and
-// "//?/" are not servers (ToSlashForm strips them).
+// "//?/" are not servers (see isDevice).
 func isUNC(s string) bool {
 	if len(s) <= 2 || s[0] != '/' || s[1] != '/' || s[2] == '/' {
 		return false
@@ -180,6 +193,21 @@ func cleanUNC(s string) string {
 	return b.String()
 }
 
+// cleanDevice cleans "//?/dev/..." and "//./dev/...": the first component
+// after the prefix is the device and ".." never climbs above it. It returns
+// "" for a bare prefix.
+func cleanDevice(s string) string {
+	prefix, rest := s[:4], strings.TrimLeft(s[4:], "/")
+	if rest == "" {
+		return ""
+	}
+	dev, tail, _ := strings.Cut(rest, "/")
+	if tail = path.Clean("/" + tail); tail == "/" {
+		tail = ""
+	}
+	return prefix + dev + tail
+}
+
 // cleanRooted cleans a path starting with a single '/'. On windows it maps
 // Git-Bash/Cygwin drive spellings, strips the NT "/??/" prefix and
 // attaches the drive of base to a drive-less rooted path.
@@ -189,7 +217,7 @@ func cleanRooted(s, base, home string, win bool) string {
 		return c
 	}
 	if strings.HasPrefix(c, "/??/") {
-		return normalize(c[4:], base, home, "windows")
+		return normalize(c, base, home, "windows") // ToSlashForm rewrites the prefix
 	}
 	if d, ok := gitBashDrive(c); ok {
 		return cleanDrive(d)
@@ -257,16 +285,23 @@ func ToSlashForm(p, goos string) string {
 	return p
 }
 
+// stripVerbatim drops a "//?/", "//./" or NT "/??/" prefix when what follows
+// is a drive or a UNC share ("//?/UNC/srv/sh" becomes "//srv/sh"). Any other
+// device path (Volume{GUID}, GLOBALROOT, pipe, ...) has no drive-letter or
+// UNC spelling and stays absolute in "//?/dev/..." form; stripping it would
+// turn it into a relative path.
 func stripVerbatim(p string) string {
+	if !strings.HasPrefix(p, "//?/") && !strings.HasPrefix(p, "//./") && !strings.HasPrefix(p, "/??/") {
+		return p
+	}
+	rest := strings.TrimLeft(p[4:], "/")
 	switch {
-	case strings.HasPrefix(p, "//?/") || strings.HasPrefix(p, "//./"):
-		rest := p[4:]
-		if len(rest) >= 4 && strings.EqualFold(rest[:4], "unc/") {
-			return "//" + rest[4:]
-		}
+	case len(rest) >= 4 && strings.EqualFold(rest[:4], "unc/"):
+		return "//" + rest[4:]
+	case isDriveAbs(rest, true):
 		return rest
-	case strings.HasPrefix(p, "/??/"):
-		return p[4:]
+	case p[1] == '?':
+		return "//?/" + rest // NT namespace spelling of the same device path
 	}
 	return p
 }
@@ -301,10 +336,17 @@ func fold(s string, ci bool) string {
 	return s
 }
 
-// Equal compares two internal-form paths, folding case when goos is case-insensitive.
+// Equal compares two paths, folding case when goos is case-insensitive. On
+// windows both sides are first converted with ToSlashForm, so the native
+// spelling ("C:\\Users\\X") equals its internal form ("c:/users/x").
 func Equal(a, b, goos string) bool {
 	if a == b {
 		return true
+	}
+	if goos == "windows" {
+		if a, b = ToSlashForm(a, goos), ToSlashForm(b, goos); a == b {
+			return true
+		}
 	}
 	if !IsCaseInsensitive(goos) {
 		return false
@@ -360,6 +402,10 @@ func isNotExist(err error) bool {
 // the remaining components; a dangling symlink among those components is
 // followed to its (non-existent) target. Errors other than not-exist
 // (permission, symlink loops) are returned. A nil fsys returns norm.
+//
+// On windows (goos) every component is inspected with Lstat: Go's
+// EvalSymlinks does not follow directory junctions, which only carry
+// fs.ModeIrregular.
 func RealPath(fsys sys.FS, norm, goos string) (string, error) {
 	if fsys == nil || norm == "" {
 		return norm, nil
@@ -377,6 +423,113 @@ type resolver struct {
 func (r *resolver) fromOS(p string) string { return normalize(p, "", "", r.goos) }
 
 func (r *resolver) resolve(p string) (string, error) {
+	if r.goos == "windows" {
+		w, err := r.walk(p)
+		if err != nil {
+			return "", err
+		}
+		p = w
+	}
+	return r.eval(p)
+}
+
+// link reports where the symlink or junction at p (internal form) points.
+// ok is false when p is not a link. On windows an fs.ModeIrregular entry is a
+// candidate junction; a failing Readlink then just means "some other reparse
+// point".
+func (r *resolver) link(p string, fi fs.FileInfo) (target string, ok bool, err error) {
+	m := fi.Mode()
+	irregular := r.goos == "windows" && m&fs.ModeIrregular != 0 && m&fs.ModeSymlink == 0
+	if m&fs.ModeSymlink == 0 && !irregular {
+		return "", false, nil
+	}
+	t, err := r.fsys.Readlink(ToOS(p, r.goos))
+	if err != nil {
+		if irregular || isNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return t, true, nil
+}
+
+func (r *resolver) hop(p string) error {
+	if r.hops++; r.hops > maxSymlinkHops {
+		return fmt.Errorf("paths: too many symbolic links resolving %q", p)
+	}
+	return nil
+}
+
+// walk follows every symlink and junction component of p with Lstat and
+// Readlink (windows only). Components that do not exist, and everything
+// after them, are kept as is. A junction target that has no drive-letter
+// spelling ("//?/Volume{GUID}/...") stays in its device form.
+func (r *resolver) walk(p string) (string, error) {
+	n := rootLen(p)
+	if n == 0 || n >= len(p) {
+		return p, nil
+	}
+	cur, rest := p[:n], strings.TrimLeft(p[n:], "/")
+	for rest != "" {
+		name, tail, _ := strings.Cut(rest, "/")
+		next := joinSlash(cur, name)
+		fi, err := r.fsys.Lstat(ToOS(next, r.goos))
+		if err != nil {
+			if isNotExist(err) {
+				return joinSlash(cur, rest), nil
+			}
+			return "", err
+		}
+		target, ok, err := r.link(next, fi)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			if err := r.hop(p); err != nil {
+				return "", err
+			}
+			np := normalize(target, cur, "", r.goos)
+			if np == "" {
+				cur, rest = next, tail
+				continue
+			}
+			if tail != "" {
+				np = joinSlash(np, tail)
+			}
+			return r.walk(np)
+		}
+		cur, rest = next, tail
+	}
+	return cur, nil
+}
+
+// rootLen returns the length of the root prefix of an internal-form windows
+// path ("c:/", "//srv/share", "//?/Volume{GUID}", "/"), or 0 for a relative one.
+func rootLen(p string) int {
+	switch {
+	case isDriveAbs(p, true):
+		return min(3, len(p))
+	case isUNC(p):
+		_, rest, _ := strings.Cut(p[2:], "/")
+		share, _, _ := strings.Cut(rest, "/")
+		if rest == "" {
+			return len(p)
+		}
+		return len(p) - len(rest) + len(share)
+	case isDevice(p):
+		dev, _, _ := strings.Cut(p[4:], "/")
+		return 4 + len(dev)
+	case p != "" && p[0] == '/':
+		return 1
+	}
+	return 0
+}
+
+// eval resolves p with EvalSymlinks. For a path that does not exist it
+// Lstats upwards (a dangling symlink exists for Lstat) to the nearest
+// existing ancestor, resolves that one component chain once and re-appends the
+// missing remainder.
+func (r *resolver) eval(p string) (string, error) {
 	out, err := r.fsys.EvalSymlinks(ToOS(p, r.goos))
 	if err == nil {
 		if n := r.fromOS(out); n != "" {
@@ -387,29 +540,60 @@ func (r *resolver) resolve(p string) (string, error) {
 	if !isNotExist(err) {
 		return "", err
 	}
-	parent, name, ok := splitParent(p)
-	if !ok {
-		return p, nil
+	cur := p
+	var tail []string // missing components, deepest first
+	for {
+		fi, lerr := r.fsys.Lstat(ToOS(cur, r.goos))
+		if lerr == nil {
+			return r.settle(p, cur, fi, tail)
+		}
+		if !isNotExist(lerr) {
+			return "", lerr
+		}
+		parent, name, ok := splitParent(cur)
+		if !ok {
+			return p, nil
+		}
+		tail = append(tail, name)
+		cur = parent
 	}
-	parent, err = r.resolve(parent)
+}
+
+// settle resolves the existing ancestor cur of p and re-appends tail.
+func (r *resolver) settle(p, cur string, fi fs.FileInfo, tail []string) (string, error) {
+	base := cur
+	if cur != p { // EvalSymlinks(p) is already known to have failed
+		out, err := r.fsys.EvalSymlinks(ToOS(cur, r.goos))
+		switch {
+		case err == nil:
+			if n := r.fromOS(out); n != "" {
+				base = n
+			}
+			return appendTail(base, tail), nil
+		case !isNotExist(err):
+			return "", err
+		}
+	}
+	// cur exists but does not evaluate: a dangling link, or a plain race.
+	target, ok, err := r.link(cur, fi)
 	if err != nil {
 		return "", err
 	}
-	cand := joinSlash(parent, name)
-	if fi, lerr := r.fsys.Lstat(ToOS(cand, r.goos)); lerr == nil && fi.Mode()&fs.ModeSymlink != 0 {
-		target, rerr := r.fsys.Readlink(ToOS(cand, r.goos))
-		if rerr == nil {
-			r.hops++
-			if r.hops > maxSymlinkHops {
-				return "", fmt.Errorf("paths: too many symbolic links resolving %q", p)
-			}
-			return r.resolve(normalize(target, parent, "", r.goos))
+	if ok {
+		if err := r.hop(p); err != nil {
+			return "", err
 		}
-		if !isNotExist(rerr) {
-			return "", rerr
-		}
+		parent, _, _ := splitParent(cur)
+		return r.resolve(appendTail(normalize(target, parent, "", r.goos), tail))
 	}
-	return cand, nil
+	return appendTail(base, tail), nil
+}
+
+func appendTail(base string, tail []string) string {
+	for i := len(tail) - 1; i >= 0; i-- {
+		base = joinSlash(base, tail[i])
+	}
+	return base
 }
 
 // splitParent splits an internal-form path into its parent and last
@@ -421,6 +605,9 @@ func splitParent(p string) (parent, name string, ok bool) {
 		return "", "", false
 	}
 	if isUNC(p) && strings.Count(p[2:], "/") < 2 {
+		return "", "", false
+	}
+	if isDevice(p) && !strings.Contains(p[4:], "/") {
 		return "", "", false
 	}
 	parent, name = p[:i], p[i+1:]
@@ -435,6 +622,14 @@ func splitParent(p string) (parent, name string, ok bool) {
 // path and its relative form(s). A nil fsys (or a resolution error other than
 // not-exist) yields only the unresolved forms.
 func Candidates(fsys sys.FS, raw string, ctx model.PathContext) []string {
+	return candidates(fsys, raw, ctx, func(root string) (string, bool) {
+		rr, err := RealPath(fsys, root, ctx.GOOS)
+		return rr, err == nil
+	})
+}
+
+// candidates is Candidates with a pluggable (cacheable) project-root resolver.
+func candidates(fsys sys.FS, raw string, ctx model.PathContext, realRoot func(root string) (string, bool)) []string {
 	norm := normalize(raw, ctx.Cwd, ctx.Home, ctx.GOOS)
 	if norm == "" {
 		return nil
@@ -447,14 +642,14 @@ func Candidates(fsys sys.FS, raw string, ctx model.PathContext) []string {
 	root = normalize(root, "", ctx.Home, goos)
 
 	forms := []string{norm}
-	realRoot := ""
+	rootReal := ""
 	if fsys != nil {
 		if real, err := RealPath(fsys, norm, goos); err == nil && real != norm {
 			forms = append(forms, real)
 		}
 		if root != "" {
-			if rr, err := RealPath(fsys, root, goos); err == nil && rr != root {
-				realRoot = rr
+			if rr, ok := realRoot(root); ok && rr != root {
+				rootReal = rr
 			}
 		}
 	}
@@ -477,9 +672,9 @@ func Candidates(fsys sys.FS, raw string, ctx model.PathContext) []string {
 			add(rel)
 		}
 	}
-	if realRoot != "" {
+	if rootReal != "" {
 		for _, f := range forms {
-			if rel, ok := Rel(realRoot, f, goos); ok && rel != "." {
+			if rel, ok := Rel(rootReal, f, goos); ok && rel != "." {
 				add(rel)
 			}
 		}
@@ -487,9 +682,15 @@ func Candidates(fsys sys.FS, raw string, ctx model.PathContext) []string {
 	return out
 }
 
-// Service is the ports.PathService implementation.
+type rootKey struct{ root, goos string }
+
+// Service is the ports.PathService implementation. It caches the resolved
+// ProjectRoot per (root, GOOS) for its lifetime, so the symlink layout of the
+// project root is assumed stable while a Service lives (one hook process).
 type Service struct {
 	FS sys.FS
+
+	roots sync.Map // rootKey → string (resolved root)
 }
 
 var _ ports.PathService = (*Service)(nil)
@@ -504,7 +705,18 @@ func (s *Service) Normalize(p, base string, ctx model.PathContext) string {
 
 // Candidates implements ports.PathService.
 func (s *Service) Candidates(raw string, ctx model.PathContext) []string {
-	return Candidates(s.FS, raw, ctx)
+	return candidates(s.FS, raw, ctx, func(root string) (string, bool) {
+		k := rootKey{root, ctx.GOOS}
+		if v, ok := s.roots.Load(k); ok {
+			return v.(string), true
+		}
+		rr, err := RealPath(s.FS, root, ctx.GOOS)
+		if err != nil {
+			return "", false
+		}
+		s.roots.Store(k, rr)
+		return rr, true
+	})
 }
 
 // CompileGlobs implements ports.PathService.

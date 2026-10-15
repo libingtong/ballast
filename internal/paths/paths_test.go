@@ -116,6 +116,10 @@ func TestEqualWindowsSpec(t *testing.T) {
 	if !Equal(a, b, "windows") {
 		t.Errorf("Equal(%q, %q, windows) = false", a, b)
 	}
+	// The Acceptance sentence verbatim: native and internal spellings compare equal.
+	if !Equal("C:\\Users\\X\\a.go", "c:/users/x/A.GO", "windows") {
+		t.Error(`Equal("C:\\Users\\X\\a.go", "c:/users/x/A.GO", windows) = false`)
+	}
 	if Equal("/Users/x/a.go", "/users/x/A.GO", "linux") {
 		t.Error("Equal must be case-sensitive on linux")
 	}

@@ -41,6 +41,14 @@ func FuzzNormalize(f *testing.F) {
 		{"0", "/:", "0"},
 		{"../A:", "0", "0"},
 		{"a/../~/x", "", "/h"},
+		{`\\?\Volume{1234}\Users\x\.ballast`, "c:/repo", "c:/Users/x"},
+		{`\\?\GLOBALROOT\Device\HarddiskVolume3\..\..\..\x`, "c:/repo", ""},
+		{`\\.\pipe\x`, "c:/repo", ""},
+		{`\??\Volume{1}\x`, "c:/repo", ""},
+		{`//?//c:/x`, "", ""},
+		{`//?/UNC`, "", ""},
+		{`//?/c:foo/x`, "", ""},
+		{"rel", "//?/Volume{1}/b", ""},
 	}
 	for _, s := range seeds {
 		for i := range fuzzGOOS {
