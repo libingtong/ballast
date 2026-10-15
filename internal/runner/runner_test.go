@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libingtong/ballast/internal/evidence"
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/project"
 	"github.com/libingtong/ballast/internal/version"
@@ -505,8 +506,8 @@ func TestStartProtocol(t *testing.T) {
 			t.Errorf("job status = %+v, %v", js, err)
 			continue
 		}
-		if !js.Deadline.Equal(js.StartedAt.Add(1800 * time.Second)) {
-			t.Errorf("deadline = %v for started %v (default timeout 1800s)", js.Deadline, js.StartedAt)
+		if want := js.StartedAt.Add(1800*time.Second + evidence.JobDeadlineSlack); !js.Deadline.Equal(want) {
+			t.Errorf("deadline = %v for started %v (default timeout 1800s + slack)", js.Deadline, js.StartedAt)
 		}
 		if _, err := os.Stat(f.store.SpecPath(js.RepoInst, js.Name, js.JobID)); err != nil {
 			t.Errorf("sidecar missing: %v", err)
@@ -523,7 +524,7 @@ func TestStartProtocol(t *testing.T) {
 		t.Fatalf("Start(lint) = %+v, %v", st, err)
 	}
 	js, _ := f.store.ReadJob(f.inst(), "lint", st[0].JobID)
-	if js == nil || !js.Deadline.Equal(js.StartedAt.Add(1800*time.Second)) {
+	if js == nil || !js.Deadline.Equal(js.StartedAt.Add(1800*time.Second+evidence.JobDeadlineSlack)) {
 		t.Errorf("lint job: %+v", js)
 	}
 }

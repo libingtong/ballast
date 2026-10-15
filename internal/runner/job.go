@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/libingtong/ballast/internal/evidence"
 	"github.com/libingtong/ballast/internal/layout"
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/project"
@@ -155,7 +156,7 @@ func (o Options) createJob(t *target, spec model.VerifySpec) (*model.JobStatus, 
 	now := o.Clock.Now()
 	js := &model.JobStatus{
 		V: 1, JobID: o.newJobID(), Name: spec.Name, RepoInst: t.repo.Inst,
-		State: model.JobRunning, StartedAt: now, Deadline: now.Add(timeoutOf(spec)),
+		State: model.JobRunning, StartedAt: now, Deadline: now.Add(timeoutOf(spec) + evidence.JobDeadlineSlack),
 	}
 	side := jobSpec{V: 1, Toplevel: t.toplevel, Spec: spec, Exempt: t.cfg.Exempt, ProjectJSONHash: t.hash, SessionID: t.session, AgentID: t.agent}
 	data, err := json.Marshal(&side)
@@ -209,11 +210,63 @@ func (o Options) supersedeRunning(repoInst, name string) error {
 			errs = append(errs, err)
 		}
 		o.audit(rec)
-		if pid > 0 && pid != os.Getpid() {
+		// A pid alone proves nothing: it may have been recycled by an
+		// unrelated process since a runner died. Only a runner that still
+		// holds its job lock is signalled.
+		if pid > 0 && pid != os.Getpid() && o.runnerHoldsLock(&js) {
 			_ = terminateProcess(pid)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// runnerHoldsLock reports whether the runner of js is alive, judged by its
+// job lock (held for the runner's whole life, released by the kernel when it
+// dies). Any doubt answers false: not signalling is the safe side.
+func (o Options) runnerHoldsLock(js *model.JobStatus) bool {
+	f, err := o.FS.OpenFile(o.Evidence.LockPath(js.RepoInst, js.Name, js.JobID), os.O_RDWR, 0)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	ok, err := tryLock(f)
+	if err != nil {
+		return false
+	}
+	if ok {
+		unlock(f)
+		return false
+	}
+	return true
+}
+
+// lockAttempts x lockRetry bounds how long a runner waits for its own lock
+// (a superseder probing it holds it for an instant).
+const (
+	lockAttempts = 100
+	lockRetry    = 10 * time.Millisecond
+)
+
+// holdJobLock takes the job's lock for the life of the runner; the returned
+// function releases it. When the lock cannot be taken the runner goes on
+// without it (a superseder then relies on the supersede marker alone).
+func (o Options) holdJobLock(js *model.JobStatus) (release func()) {
+	f, err := o.FS.OpenFile(o.Evidence.LockPath(js.RepoInst, js.Name, js.JobID), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return func() {}
+	}
+	for i := 0; i < lockAttempts; i++ {
+		ok, err := tryLock(f)
+		if err != nil {
+			break
+		}
+		if ok {
+			return func() { unlock(f); _ = f.Close() }
+		}
+		time.Sleep(lockRetry)
+	}
+	_ = f.Close()
+	return func() {}
 }
 
 // markSuperseded creates the supersede marker of js (idempotent).

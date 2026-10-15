@@ -78,6 +78,16 @@ func (e *engine) project(toplevel string) *projEntry {
 	return pe
 }
 
+// timeoutOf is the timeout_s of entry name (0 when unknown or unset).
+func timeoutOf(cfg *model.ProjectConfig, name string) int {
+	for i := range cfg.Verify {
+		if cfg.Verify[i].Name == name {
+			return cfg.Verify[i].TimeoutS
+		}
+	}
+	return 0
+}
+
 // fresh runs steps 3-6 of the package doc for target. namesIn nil means
 // every required entry. computeC receives the target's exempt filter.
 func (e *engine) fresh(target *model.RepoInfo, namesIn []string, deadline time.Time, computeC func(f *snapshot.Filter) (model.TreeID, error)) model.FreshResult {
@@ -95,7 +105,7 @@ func (e *engine) fresh(target *model.RepoInfo, namesIn []string, deadline time.T
 	res := model.FreshResult{Names: append([]string(nil), names...)}
 
 	for _, n := range names {
-		jobs, err := e.store.RunningJobs(target.Inst, n)
+		jobs, err := e.store.RunningJobsWithin(target.Inst, n, timeoutOf(pe.cfg, n))
 		if err == nil && len(jobs) > 0 {
 			res.Running = append(res.Running, n)
 		}
@@ -170,6 +180,17 @@ func (v *view) VerifyFresh(q model.FreshQuery) model.FreshResult {
 		form = ParseCommitForm(q.Git, q.Cwd)
 		if form.Kind == model.CommitUnparseable {
 			return unknown("unparseable_commit")
+		}
+		if form.Kind == model.CommitPaths && form.Dir == "" {
+			// Without -C git resolves the pathspecs against its own cwd,
+			// the event cwd (an agent shell may sit in a subdirectory).
+			// ParseCommitForm leaves Dir empty so that its output stays the
+			// frozen form; the resolution happens here.
+			dir, ok := resolveDir(q.Cwd, ".")
+			if !ok {
+				return unknown("unparseable_commit")
+			}
+			form.Dir = dir
 		}
 		if form.Dir != "" {
 			t, err := v.eng.locator().Locate(filepath.FromSlash(form.Dir))

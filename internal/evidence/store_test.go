@@ -376,6 +376,51 @@ func TestProcessAlive(t *testing.T) {
 	}
 }
 
+// RunningJobsWithin reads only job files younger than the entry's timeout
+// plus slack, judged by the id's time prefix.
+func TestRunningJobsWithin(t *testing.T) {
+	st, clock, _ := newStore(t)
+	now := clock.Now()
+	write := func(age time.Duration, suffix string) {
+		t.Helper()
+		js := model.JobStatus{
+			JobID: now.Add(-age).UTC().Format("20060102T150405") + "-" + suffix, Name: "test", RepoInst: "inst",
+			State: model.JobRunning, PID: os.Getpid(), StartedAt: now.Add(-age), Deadline: now.Add(time.Hour),
+		}
+		if err := st.WriteJob(&js); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(time.Minute, "young0")
+	write(25*time.Minute, "mid000")
+	write(2*time.Hour, "old000")
+	ids := func(timeoutS int) string {
+		jobs, err := st.RunningJobsWithin("inst", "test", timeoutS)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, j := range jobs {
+			out = append(out, j.JobID[16:])
+		}
+		sort.Strings(out)
+		return strings.Join(out, ",")
+	}
+	for _, tc := range []struct {
+		timeoutS int
+		want     string
+	}{
+		{0, "mid000,young0"}, // default 1800s + slack: about 41 minutes
+		{60, "young0"},       // 1 minute + slack + grace: about 11 minutes
+		{3 * 3600, "mid000,old000,young0"},
+		{90 * 3600, "mid000,old000,young0"}, // capped at the 25h bound
+	} {
+		if got := ids(tc.timeoutS); got != tc.want {
+			t.Errorf("timeout_s=%d: running = %q, want %q", tc.timeoutS, got, tc.want)
+		}
+	}
+}
+
 func TestGC(t *testing.T) {
 	st, clock, _ := newStore(t)
 	now := clock.Now()
@@ -409,6 +454,8 @@ func TestGC(t *testing.T) {
 		paths[label+"/spec"] = st.SpecPath("inst", "test", js.JobID)
 		writeFile(t, st.SupersededPath("inst", "test", js.JobID), "")
 		paths[label+"/superseded"] = st.SupersededPath("inst", "test", js.JobID)
+		writeFile(t, st.LockPath("inst", "test", js.JobID), "")
+		paths[label+"/lock"] = st.LockPath("inst", "test", js.JobID)
 		if withLog {
 			writeFile(t, st.LogPath("inst", "test", js.JobID), "log")
 			paths[label+"/log"] = st.LogPath("inst", "test", js.JobID)
@@ -421,6 +468,8 @@ func TestGC(t *testing.T) {
 	job("running-ancient", model.JobStatus{JobID: jid(10*day, "r00003"), State: model.JobRunning, PID: os.Getpid(), StartedAt: now.Add(-10 * day), Deadline: now.Add(-10*day + time.Hour)}, false)
 	orphanLog := st.LogPath("inst", "test", jid(9*day, "o00001")) // job file long gone
 	writeFile(t, orphanLog, "orphan")
+	orphanLock := st.LockPath("inst", "test", jid(9*day, "o00002"))
+	writeFile(t, orphanLock, "")
 
 	if err := st.GC(); err != nil {
 		t.Fatal(err)
@@ -429,18 +478,18 @@ func TestGC(t *testing.T) {
 	for label, want := range map[string]bool{
 		"test-old": false, "test-older": false, "test-mid": true, "test-new": true,
 		"lint-only": true, "fmt-old": true, "fmt-older": false,
-		"done-old": false, "done-old/spec": false, "done-old/log": false, "done-old/superseded": false,
-		"done-new": true, "done-new/spec": true, "done-new/log": true, "done-new/superseded": true,
+		"done-old": false, "done-old/spec": false, "done-old/log": false, "done-old/superseded": false, "done-old/lock": false,
+		"done-new": true, "done-new/spec": true, "done-new/log": true, "done-new/superseded": true, "done-new/lock": true,
 		"running-live": true, "running-live/log": true,
 		"running-dead": true, "running-dead/log": true,
-		"running-ancient": false, "running-ancient/spec": false, "running-ancient/superseded": false,
+		"running-ancient": false, "running-ancient/spec": false, "running-ancient/superseded": false, "running-ancient/lock": false,
 	} {
 		if exists(paths[label]) != want {
 			t.Errorf("%s exists = %v, want %v", label, !want, want)
 		}
 	}
-	if exists(orphanLog) {
-		t.Error("orphan log kept")
+	if exists(orphanLog) || exists(orphanLock) {
+		t.Error("orphan log or lock kept")
 	}
 	js, err := st.ReadJob("inst", "test", jid(time.Hour, "r00002"))
 	if err != nil || js == nil || js.State != model.JobDone || js.Outcome != model.OutcomeInfra {

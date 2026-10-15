@@ -44,6 +44,20 @@
 //     file once a second and stops itself when it sees the supersede mark; it
 //     then writes nothing. A job superseded before its child started never
 //     runs its command.
+//   - Runner identity: before recording its pid the runner opens
+//     evidence.Store.LockPath(job) and holds an exclusive lock on it (flock;
+//     LockFileEx on Windows) until it exits; the kernel drops the lock when the
+//     runner dies. A pid in a job file may have been recycled by an unrelated
+//     process after a runner crash, so a superseding Start signals the pid
+//     only when it finds that lock held. Missing lock file, a lock it can take
+//     or any doubt means the runner is gone: the job is only marked
+//     superseded. A runner that cannot get its lock (lock file unwritable)
+//     runs unlocked and is stopped through the supersede marker alone.
+//   - JobStatus.Deadline is started_at + timeout_s + evidence.JobDeadlineSlack
+//     (10 minutes), not started_at + timeout_s: the command's timer starts only
+//     after the start snapshot and the kill grace and the end snapshot follow
+//     it, and until the Deadline passes the job counts as running (verify_fresh
+//     job_running, supersede, GC).
 //   - Timeout / stop: SIGTERM to the command's process group, SIGKILL after 3s
 //     (a Job Object on Windows). The command runs with the child
 //     environment (Options.Env plus the entry's env) and argv[0] is resolved

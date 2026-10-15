@@ -38,6 +38,9 @@ func (o Options) runExisting(js *model.JobStatus, tee io.Writer) (*model.VerifyR
 		o.failJob(js, t, side.Spec, cause)
 		return o.recordOf(js), fmt.Errorf("%w: %w", ErrInfra, cause)
 	}
+	// The lock comes before the pid: whoever sees the pid in the job file
+	// can ask the lock whether it still belongs to this runner.
+	defer o.holdJobLock(js)()
 	if err := o.markPID(js); err != nil {
 		if errors.Is(err, errNotRunning) {
 			return o.recordOf(js), nil // superseded before it started

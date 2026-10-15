@@ -73,7 +73,21 @@ func (s *Store) WriteJob(js *model.JobStatus) error {
 // RunningJobs returns running jobs for (repoInst, name); dead PIDs or
 // passed deadlines are reported as not running (and marked done/infra by GC).
 func (s *Store) RunningJobs(repoInst, name string) ([]model.JobStatus, error) {
-	return s.runningJobs(repoInst, name)
+	return s.runningJobs(repoInst, name, maxRunSpan)
+}
+
+// RunningJobsWithin is RunningJobs for callers that know the entry's
+// timeout_s: job files of jobs started longer ago than timeout + deadline
+// slack + start grace are not read. timeoutS <= 0 means the default.
+func (s *Store) RunningJobsWithin(repoInst, name string, timeoutS int) ([]model.JobStatus, error) {
+	if timeoutS <= 0 {
+		timeoutS = defaultTimeoutS
+	}
+	age := time.Duration(timeoutS)*time.Second + JobDeadlineSlack + JobStartGrace
+	if age > maxRunSpan {
+		age = maxRunSpan
+	}
+	return s.runningJobs(repoInst, name, age)
 }
 
 // GC applies retention (package doc).

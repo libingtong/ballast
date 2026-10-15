@@ -540,3 +540,80 @@ func TestFreshnessExtraForms(t *testing.T) {
 		})
 	}
 }
+
+// Without -C git resolves pathspecs against the event cwd; the agent's shell
+// may sit in a subdirectory.
+func TestFreshnessPathsFromSubdirectory(t *testing.T) {
+	requireGit(t)
+	tests := []struct {
+		name  string
+		steps []string
+		fresh string
+		cause string
+		check int
+	}{
+		{"path edited after verify", []string{"edit src/a.go", "add-u", "verify test pass", "edit src/a.go"}, "false", "stale", 10},
+		{"only the path changed", []string{"edit src/a.go", "verify test pass"}, "true", "fresh", 0},
+		{"other file changed too", []string{"edit src/a.go", "edit src/b.go", "verify test pass"}, "false", "stale", 10},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			for _, s := range tc.steps {
+				h.step(s)
+			}
+			h.cwd = filepath.Join(h.root, "src")
+			const argv = "git commit -m x a.go"
+			repo := h.sb.locate(t, h.cwd)
+			view, _ := h.prov.Open(repo, time.Time{})
+			res := view.VerifyFresh(model.FreshQuery{Kind: model.FreshCommit, Git: gitNode(t, argv), Cwd: h.cwd})
+			if res.Value != triOf(tc.fresh) || res.Cause != tc.cause {
+				t.Errorf("verify_fresh = %v/%s, want %s/%s", res.Value, res.Cause, tc.fresh, tc.cause)
+			}
+			if _, code := h.runCheck(argv); code != tc.check {
+				t.Errorf("check = %d, want %d", code, tc.check)
+			}
+		})
+	}
+}
+
+func TestFreshnessPathsNeedAbsoluteCwd(t *testing.T) {
+	requireGit(t)
+	h := newHarness(t)
+	h.step("edit src/a.go")
+	h.step("verify test pass")
+	repo := h.sb.locate(t, h.cwd)
+	view, _ := h.prov.Open(repo, time.Time{})
+	for _, cwd := range []string{"", "src"} {
+		res := view.VerifyFresh(model.FreshQuery{Kind: model.FreshCommit, Git: gitNode(t, "git commit -m x a.go"), Cwd: cwd})
+		if res.Value != model.TriUnknown || res.Cause != "unparseable_commit" {
+			t.Errorf("cwd %q: verify_fresh = %v/%s, want unknown/unparseable_commit", cwd, res.Value, res.Cause)
+		}
+	}
+}
+
+// verify_fresh does not read job files older than the entry's timeout plus
+// slack, even if their (stale) job file still claims to be running.
+func TestVerifyFreshSkipsAncientJobs(t *testing.T) {
+	requireGit(t)
+	for _, tc := range []struct {
+		age  time.Duration
+		want string
+	}{{5 * time.Minute, "job_running"}, {3 * time.Hour, "no_record"}} {
+		h := newHarness(t)
+		repo := h.sb.locate(t, h.cwd)
+		start := h.clock.Now().Add(-tc.age)
+		js := &model.JobStatus{
+			V: 1, JobID: start.UTC().Format("20060102T150405") + "-aaaaaa", Name: "test", RepoInst: repo.Inst,
+			State: model.JobRunning, PID: os.Getpid(), StartedAt: start, Deadline: h.clock.Now().Add(24 * time.Hour),
+		}
+		if err := h.store.WriteJob(js); err != nil {
+			t.Fatal(err)
+		}
+		view, _ := h.prov.Open(repo, time.Time{})
+		res := view.VerifyFresh(model.FreshQuery{Kind: model.FreshWorktree})
+		if res.Cause != tc.want {
+			t.Errorf("job age %v: cause = %q, want %q", tc.age, res.Cause, tc.want)
+		}
+	}
+}

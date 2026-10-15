@@ -20,6 +20,15 @@ const (
 	// detached child records it when it starts) counts as running.
 	JobStartGrace = 30 * time.Second
 
+	// JobDeadlineSlack is added to a job's timeout to get JobStatus.Deadline:
+	// the command's timer starts only after the runner has taken its start
+	// snapshot, and the end snapshot and the kill grace follow it, so a job
+	// legitimately outlives timeout_s by that much.
+	JobDeadlineSlack = 10 * time.Minute
+
+	// defaultTimeoutS is the timeout_s of an entry that sets none.
+	defaultTimeoutS = 1800
+
 	// maxRunSpan bounds t_end - t_start of a record: project.json caps
 	// timeout_s at 86400, plus snapshot time.
 	maxRunSpan = 25 * time.Hour
@@ -30,6 +39,10 @@ const (
 	// rewritten, so it cannot be lost to a read-modify-write of the job file.
 	supersededSuffix = ".superseded"
 	logSuffix        = ".log"
+	// lockSuffix names the file a job's runner holds an exclusive lock on
+	// while it lives: a held lock proves the pid in the job file is still
+	// the runner (a recycled pid proves nothing).
+	lockSuffix = ".lock"
 
 	// tsDigits is the width of the zero-padded t_start in record file names.
 	tsDigits = 20
@@ -111,6 +124,11 @@ func (s *Store) JobPath(repoInst, name, jobID string) string {
 // LogPath returns the runner log path of a job.
 func (s *Store) LogPath(repoInst, name, jobID string) string {
 	return filepath.Join(s.opt.Layout.JobsDir, repoInst, name, jobID+logSuffix)
+}
+
+// LockPath returns the path of a job's runner lock file.
+func (s *Store) LockPath(repoInst, name, jobID string) string {
+	return filepath.Join(s.opt.Layout.JobsDir, repoInst, name, jobID+lockSuffix)
 }
 
 // SpecPath returns the path of the runner's sidecar for a job (the resolved
@@ -383,7 +401,7 @@ func (s *Store) JobActive(js *model.JobStatus) bool {
 	return now.Sub(js.StartedAt) < JobStartGrace
 }
 
-func (s *Store) runningJobs(repoInst, name string) ([]model.JobStatus, error) {
+func (s *Store) runningJobs(repoInst, name string, maxAge time.Duration) ([]model.JobStatus, error) {
 	if err := checkComponents(repoInst, name); err != nil {
 		return nil, err
 	}
@@ -395,9 +413,9 @@ func (s *Store) runningJobs(repoInst, name string) ([]model.JobStatus, error) {
 		}
 		return nil, err
 	}
-	// A running job started less than the longest timeout ago. Job ids start
-	// with their UTC start time, so older files are skipped unread.
-	floor := s.opt.Clock.Now().Add(-maxRunSpan)
+	// A running job started less than maxAge ago. Job ids start with their
+	// UTC start time, so older files are skipped unread.
+	floor := s.opt.Clock.Now().Add(-maxAge)
 	var out []model.JobStatus
 	for _, e := range ents {
 		n := e.Name()
@@ -528,6 +546,8 @@ func (s *Store) gc() error {
 					id = strings.TrimSuffix(n, supersededSuffix)
 				case strings.HasSuffix(n, logSuffix):
 					id = strings.TrimSuffix(n, logSuffix)
+				case strings.HasSuffix(n, lockSuffix):
+					id = strings.TrimSuffix(n, lockSuffix)
 				default:
 					continue
 				}
@@ -543,7 +563,7 @@ func (s *Store) gc() error {
 }
 
 func (s *Store) removeJobFiles(dir, id string, note func(error)) {
-	for _, suf := range []string{recordSuffix, specSuffix, logSuffix, supersededSuffix} {
+	for _, suf := range []string{recordSuffix, specSuffix, logSuffix, supersededSuffix, lockSuffix} {
 		note(s.opt.FS.Remove(filepath.Join(dir, id+suf)))
 	}
 }
