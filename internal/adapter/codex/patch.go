@@ -58,12 +58,25 @@ func ParseApplyPatch(envelope string) (PatchSummary, error) {
 
 	for _, line := range strings.Split(envelope, "\n") {
 		line = strings.TrimSuffix(line, "\r")
-		if strings.HasPrefix(line, patchEnd) {
+		// Inside an Update section a line starting with a space is a context
+		// line, never a marker (even if its text reads "*** End Patch"):
+		// accepting it would let file content end the envelope early or
+		// forge extra targets. Lenient markers are only honoured at section
+		// boundaries (no open section, Add/Delete section, or a first
+		// character other than a space such as a tab).
+		if cur != nil && cur.op == hdrUpdate && strings.HasPrefix(line, " ") {
+			continue
+		}
+		// Markers are recognized after trimming surrounding blanks and
+		// collapsing blanks inside the marker keyword (Codex trims hunk
+		// header lines); +/- content lines keep the raw line.
+		mk := normMarker(line)
+		if strings.HasPrefix(mk, patchEnd) {
 			flush()
 			ended = true
 			break
 		}
-		if hdr, rest, ok := fileHeader(line); ok {
+		if hdr, rest, ok := fileHeader(mk); ok {
 			flush()
 			if rest == "" {
 				errs = append(errs, "empty path after "+hdr)
@@ -75,8 +88,8 @@ func ParseApplyPatch(envelope string) (PatchSummary, error) {
 		if cur == nil {
 			continue
 		}
-		if strings.HasPrefix(line, hdrMove) {
-			if dest := strings.TrimSpace(line[len(hdrMove):]); dest != "" && cur.op == hdrUpdate {
+		if strings.HasPrefix(mk, hdrMove) {
+			if dest := strings.TrimSpace(mk[len(hdrMove):]); dest != "" && cur.op == hdrUpdate {
 				cur.dest = dest
 			}
 			continue
@@ -127,6 +140,25 @@ func ParseApplyPatch(envelope string) (PatchSummary, error) {
 		return sum, errors.New("codex: malformed apply_patch envelope: " + strings.Join(errs, "; "))
 	}
 	return sum, nil
+}
+
+// normMarker returns line unchanged unless, after trimming surrounding
+// blanks, it starts with "***": then the keyword part (up to the first ':'
+// or the whole line) has its inner blanks collapsed to single spaces, so
+// "  ***  Update  File: a" reads as "*** Update File: a". Lines starting
+// with '+' or '-' are content and are never markers.
+func normMarker(line string) string {
+	t := strings.TrimSpace(line)
+	if !strings.HasPrefix(t, "***") || strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+		return line
+	}
+	rest := t[3:]
+	kw, tail, colon := strings.Cut(rest, ":")
+	n := "*** " + strings.Join(strings.Fields(kw), " ")
+	if colon {
+		n += ":" + tail
+	}
+	return n
 }
 
 // fileHeader recognizes "*** Update|Add|Delete File: path".

@@ -3,6 +3,7 @@ package install
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -466,7 +467,8 @@ func TestCursorVersionHandling(t *testing.T) {
 	tg := gCursorT()
 	spec := gspec(model.ClientCursor)
 
-	// existing file without version: version is added in front and stays after uninstall
+	// existing file without version: version is added in front and, being
+	// recorded as set by Ballast, removed again on uninstall (contract v1.3)
 	p := planAfter(t, tg, `{"other": true}`, spec, nil)
 	if !strings.HasPrefix(string(p.After), `{"version": 1, "other": true, "hooks"`) {
 		t.Errorf("version not inserted first: %.60s", p.After)
@@ -475,8 +477,17 @@ func TestCursorVersionHandling(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(r.After) != `{"version": 1, "other": true}` {
+	if string(r.After) != `{"other": true}` {
 		t.Errorf("after uninstall = %s", r.After)
+	}
+	// ... unless the user still has hooks of their own
+	p = planAfter(t, tg, `{"hooks": {"stop": [{"command": "mine"}]}}`, spec, nil)
+	r, err = tg.Remove(p.After, manifestFrom(gBinary, p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(r.After), `"version": 1`) || !strings.Contains(string(r.After), `"mine"`) {
+		t.Errorf("version must stay while user hooks remain: %s", r.After)
 	}
 
 	// an existing version (even another value) is never rewritten
@@ -593,5 +604,41 @@ func TestWindowsCommandStrings(t *testing.T) {
 	r, err := tg.Remove(p.After, manifestFrom(spec.Binary, p))
 	if err != nil || r.After != nil {
 		t.Errorf("windows round trip: %v %s", err, r.After)
+	}
+}
+
+// TestJSONUserContainersRoundTrip: an empty "hooks" object the user already
+// had survives the uninstall, and the Cursor "version" Ballast added is
+// taken back (contract v1.3 structural flags, review u10 minor).
+func TestJSONUserContainersRoundTrip(t *testing.T) {
+	type tgt struct {
+		name string
+		tg   func() *jsonHooksTarget
+		c    model.ClientID
+	}
+	for _, x := range []tgt{{"claude", gClaudeT, model.ClientClaude}, {"codex", gCodexHT, model.ClientCodex}, {"cursor", gCursorT, model.ClientCursor}} {
+		for _, orig := range []string{`{"hooks": {}}` + "\n", "{}\n", `{"a": 1, "hooks": {}}` + "\n"} {
+			p := planAfter(t, x.tg(), orig, gspec(x.c), nil)
+			m := manifestFrom(gBinary, p)
+			// Re-install keeps the original state on record.
+			p2, err := x.tg().Plan(p.After, gspec(x.c), m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, err := x.tg().Remove(p2.After, manifestFrom(gBinary, p2))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var want, got any
+			if err := json.Unmarshal([]byte(orig), &want); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(r.After, &got); err != nil {
+				t.Fatalf("%s %q: uninstall output %q: %v", x.name, orig, r.After, err)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s %q: round trip = %s", x.name, orig, r.After)
+			}
+		}
 	}
 }

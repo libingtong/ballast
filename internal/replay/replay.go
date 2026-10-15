@@ -87,6 +87,11 @@ type Deps struct {
 	// Home is the home directory used to render transcript paths "~/"-relative
 	// ("" ⇒ the process home, via sys.OSEnv).
 	Home string
+	// Project (optional; contract v1.3) is U8's strict project.json loader,
+	// injected by the CLI so replay classifies project.json exactly like the
+	// hook's evidence provider: (nil, nil) ⇒ no_project, error ⇒
+	// project_invalid. nil ⇒ a lenient json.Unmarshal fallback.
+	Project ports.ProjectLoader
 }
 
 // ErrUsage marks invalid options (CLI exit 2): unknown format or evidence

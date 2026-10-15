@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/libingtong/ballast/internal/layout"
@@ -171,20 +172,76 @@ func (s *Store) writeAtomic(path string, data []byte) error {
 	return err
 }
 
-// DropAgent implements ports.StateStore.
+// DropAgent implements ports.StateStore. The state file is removed while
+// holding its lock, and "<file>.lock" itself is never unlinked: deleting a
+// lock file that another process holds (or is about to open) would let two
+// committers each own "the" lock and lose updates. Orphan lock files go away
+// with their session directory in GC. Drop is best-effort cleanup: a lock
+// timeout leaves the file for GC and returns nil (contract v1.3).
 func (s *Store) DropAgent(key model.ScopeKey) error {
-	path := s.Path(key)
-	for _, p := range []string{path, path + ".lock"} {
-		if err := s.opt.FS.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
+	return s.dropLocked(s.Path(key))
 }
 
-// DropSession implements ports.StateStore.
+// DropSession implements ports.StateStore: every agent state file of the
+// session is dropped as in DropAgent. The directory and its lock files stay
+// until GC (same lock-file reasoning). Missing ⇒ nil.
 func (s *Store) DropSession(key model.ScopeKey) error {
-	return s.opt.FS.RemoveAll(filepath.Dir(s.Path(key)))
+	dir := filepath.Dir(s.Path(key))
+	ents, err := s.opt.FS.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	var first error
+	for _, de := range ents {
+		name := de.Name()
+		if de.IsDir() || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		if err := s.dropLocked(filepath.Join(dir, name)); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// dropLocked removes one state file under its lock (see DropAgent).
+func (s *Store) dropLocked(path string) error {
+	if _, err := s.opt.FS.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	lf, err := s.opt.FS.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil // the session directory vanished (GC)
+		}
+		return err
+	}
+	defer lf.Close()
+	unlock, _, err := TryLock(lf, LockBudget, s.opt.Clock)
+	if err != nil {
+		if errors.Is(err, model.ErrLockTimeout) {
+			return nil
+		}
+		return err
+	}
+	defer unlock()
+	tries := 1
+	if runtime.GOOS == "windows" {
+		tries = 8 // a lock-free reader may hold the file open (no FILE_SHARE_DELETE)
+	}
+	for i := 0; ; i++ {
+		err = s.opt.FS.Remove(path)
+		if err == nil || errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if i+1 >= tries {
+			return err
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // GCStats reports a GC run.

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libingtong/ballast/internal/model"
+	"github.com/libingtong/ballast/internal/sys"
 )
 
 // TestEvalSummaryRule: the eval_summary record is appended ONLY when the
@@ -255,10 +256,45 @@ func TestGCSpawn(t *testing.T) {
 			t.Errorf("spawned = %v", h.spawner.spawned())
 		}
 	})
-	t.Run("spawn failure is ignored", func(t *testing.T) {
+	gcDiag := func(h *harness) (stage string, n int) {
+		for _, r := range h.audit.all() {
+			if r.Type != model.AuditDiag {
+				continue
+			}
+			var d struct {
+				Diag  string `json:"diag"`
+				Stage string `json:"stage"`
+			}
+			if jsonUnmarshal(r.Detail, &d) == nil && d.Diag == "gc_spawn_failed" {
+				stage, n = d.Stage, n+1
+			}
+		}
+		return stage, n
+	}
+	t.Run("spawn failure is audited, not fatal", func(t *testing.T) {
 		h := newHarness(t)
+		ref := newHarness(t)
 		h.spawner.err = errTest
 		mustExit0(t, h, h.claude("SessionStart", start))
+		mustExit0(t, ref, ref.claude("SessionStart", start))
+		if h.stdout.String() != ref.stdout.String() {
+			t.Errorf("stdout changed by the spawn failure: %q vs %q", h.stdout.String(), ref.stdout.String())
+		}
+		if stage, n := gcDiag(h); n != 1 || stage != "spawn" {
+			t.Errorf("gc_spawn_failed diag: stage %q, count %d", stage, n)
+		}
+		// The stamp is rolled back so the next SessionStart retries.
+		if _, err := os.Stat(stamp(h)); !os.IsNotExist(err) {
+			t.Errorf("stamp kept after a failed spawn: %v", err)
+		}
+		h.spawner.err = nil
+		mustExit0(t, h, h.claude("SessionStart", start))
+		if len(h.spawner.spawned()) != 2 {
+			t.Errorf("no retry after a failed spawn: %v", h.spawner.spawned())
+		}
+		if _, n := gcDiag(h); n != 1 {
+			t.Errorf("successful retry must not add a diag (%d)", n)
+		}
 	})
 	t.Run("no spawner or no self path disables GC", func(t *testing.T) {
 		h := newHarness(t)
@@ -282,6 +318,9 @@ func TestGCSpawn(t *testing.T) {
 		if len(h.spawner.spawned()) != 0 {
 			t.Errorf("spawned = %v", h.spawner.spawned())
 		}
+		if stage, n := gcDiag(h); n != 1 || stage != "stamp" {
+			t.Errorf("gc_spawn_failed diag: stage %q, count %d", stage, n)
+		}
 	})
 	t.Run("not after a failed pipeline", func(t *testing.T) {
 		h := newHarness(t)
@@ -291,4 +330,32 @@ func TestGCSpawn(t *testing.T) {
 			t.Errorf("spawned = %v", h.spawner.spawned())
 		}
 	})
+}
+
+// TestTranscriptRefCaseFolding: on case-insensitive platforms a transcript
+// path whose home prefix differs only in case is still made "~/"-relative
+// (contract v1.3); Linux stays case-sensitive.
+func TestTranscriptRefCaseFolding(t *testing.T) {
+	for _, c := range []struct {
+		goos, home, path, want string
+	}{
+		{"windows", `C:\Users\Alice`, `c:\users\alice\.claude\p\t.jsonl`, "~/.claude/p/t.jsonl"},
+		{"windows", `C:\Users\Alice`, `C:\Users\Alice\.claude\t.jsonl`, "~/.claude/t.jsonl"},
+		{"windows", `C:\Users\Alice`, `D:\Users\Alice\t.jsonl`, `D:\Users\Alice\t.jsonl`},
+		{"darwin", "/Users/Alice", "/users/alice/.claude/t.jsonl", "~/.claude/t.jsonl"},
+		{"linux", "/home/Alice", "/home/alice/.claude/t.jsonl", "/home/alice/.claude/t.jsonl"},
+		{"linux", "/home/alice", "/home/alice", "/home/alice"},
+	} {
+		key := "HOME"
+		if c.goos == "windows" {
+			key = "USERPROFILE"
+		}
+		b := &auditBuilder{
+			deps: &Deps{Env: sys.MapEnv{Vars: map[string]string{key: c.home}, OS: c.goos}},
+			ev:   &model.Event{TranscriptPath: c.path},
+		}
+		if got := b.transcriptRef(); got != c.want {
+			t.Errorf("%s %q under %q: got %q, want %q", c.goos, c.path, c.home, got, c.want)
+		}
+	}
 }

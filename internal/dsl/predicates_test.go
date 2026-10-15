@@ -1,6 +1,7 @@
 package dsl
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -163,6 +164,22 @@ func TestVerifyFreshQueryKind(t *testing.T) {
 		t.Errorf("worktree query = %+v", spy.got)
 	}
 
+	// Without a bash/ps matcher the shell write-target binding is not a
+	// "bash/ps binding node": a redirected git commit still asks about the
+	// worktree, exactly like the same command without a redirect.
+	for _, cmd := range []string{"git commit -m x", "git commit -m x > /repo/out.log"} {
+		spy = &spyEvidence{}
+		n := withGit(nd("git", "commit", "-m", "x"), "commit")
+		if strings.Contains(cmd, ">") {
+			n.Writes = []model.WriteTarget{{Path: "/repo/out.log", Via: ">"}}
+		}
+		plain := ruleJSON("PreToolUse", `{"tool":["Bash"]}`, `[{"not":{"verify_fresh":{}}},{"path_exists":{}}]`)
+		evalWith(t, e, plain, bashScn(cmd, bashList(n)), func(in *model.EvalInput) { in.Evidence = spy })
+		if len(spy.got) == 0 || spy.got[0].Kind != model.FreshWorktree || spy.got[0].Git != nil {
+			t.Errorf("%q without shell matcher: query = %+v", cmd, spy.got)
+		}
+	}
+
 	// A bash rule whose binding node is not a commit asks about the worktree.
 	spy = &spyEvidence{}
 	other := ruleJSON("PreToolUse", `{"bash":{"cmd":"make"}}`, `[{"verify_fresh":{}}]`)
@@ -187,9 +204,19 @@ func TestCursorStopTextFallback(t *testing.T) {
 	if rr.Outcome != T {
 		t.Errorf("fallback text: outcome %v (%s)", rr.Outcome, rr.UnknownCause)
 	}
+	// No message and no stored fallback: the source is missing ⇒ false
+	// (dsl-semantics §5.5, contract v1.3).
 	rr, _ = evalWith(t, e, rule, s, func(in *model.EvalInput) { in.Session = fallbackSession{&fixSession{}, ""} })
-	if rr.Outcome != U {
-		t.Errorf("no text at all: outcome %v", rr.Outcome)
+	if rr.Outcome != F {
+		t.Errorf("no text at all: outcome %v (%s)", rr.Outcome, rr.UnknownCause)
+	}
+	// Unreadable state: the fallback cannot be consulted ⇒ unknown.
+	rr, _ = evalWith(t, e, rule, s, func(in *model.EvalInput) {
+		in.Session = fallbackSession{&fixSession{}, "all done"}
+		in.SessionReadable = false
+	})
+	if rr.Outcome != U || rr.UnknownCause != "text:state_unreadable" {
+		t.Errorf("unreadable state: outcome %v (%s)", rr.Outcome, rr.UnknownCause)
 	}
 	// A present-but-empty message is just empty text, not a missing source.
 	rr, _ = evalWith(t, e, rule, scenario{native: "Stop", payload: `{"last_assistant_message":""}`}, nil)

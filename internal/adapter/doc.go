@@ -18,7 +18,10 @@
 //     TargetDeletes, "*** Move to:" adds the destination), Edits from hunks
 //     (+ lines → NewString, - lines → OldString); exec_command / shell ⇒
 //     Bash (command from "cmd" string or argv array joined with
-//     shell-quoting, "command" fallback; Shell=bash); Cursor Shell ⇒ Bash;
+//     shell-quoting, "command" fallback; Shell=bash), except an argv whose
+//     argv[0] basename is apply_patch/applypatch and that carries an
+//     envelope, which is normalized like apply_patch (Edit; v1.3);
+//     Cursor Shell ⇒ Bash;
 //     Hermes terminal/shell/execute_shell ⇒ Bash, read_file ⇒ Read,
 //     write_file/create_file ⇒ Write, patch_file/edit_file ⇒ Edit;
 //     Task ⇒ Agent; Claude PowerShell stays PowerShell (Shell=powershell);
@@ -32,6 +35,8 @@
 //     Write ⇒ {file_path, "", content}; NotebookEdit ⇒ {notebook_path, "",
 //     new_source}; apply_patch ⇒ per file from hunks. Targets: file_path /
 //     notebook_path / every patch target (raw strings, not normalized).
+//     ToolCall.Input holds tool_input only when it is valid JSON, so a
+//     ToolCall returned with an error is still marshalable (v1.3).
 //   - Render: d.Empty() ⇒ nil. Never output allow/approve/permission:"allow".
 //     The exact shapes are model.Capabilities(c).Cells[i].Render plus the
 //     inject-only shapes in testdata/render.json. Context and Reason are

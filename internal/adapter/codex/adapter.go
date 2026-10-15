@@ -3,6 +3,8 @@ package codex
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/libingtong/ballast/internal/adapter/common"
 	"github.com/libingtong/ballast/internal/model"
@@ -43,7 +45,38 @@ func (a *Adapter) ParseEvent(native string, stdin []byte) (*model.Event, error) 
 }
 
 // patchKeys are the tool_input keys that may carry an apply_patch envelope.
-var patchKeys = []string{"input", "command", "patch", "diff"}
+var patchKeys = []string{"input", "command", "cmd", "patch", "diff"}
+
+// argvApplyPatch reports whether a shell tool_input carries the argv form
+// {"cmd"|"command": ["apply_patch"|"applypatch", …, "<envelope>"]}: argv[0]'s
+// basename is apply_patch/applypatch and a later element contains
+// "*** Begin Patch". The string form (`apply_patch <<EOF`) stays Bash.
+func argvApplyPatch(input json.RawMessage) bool {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(input, &m) != nil {
+		return false
+	}
+	for _, k := range [...]string{"cmd", "command"} {
+		var argv []string
+		if len(m[k]) == 0 || m[k][0] != '[' || json.Unmarshal(m[k], &argv) != nil || len(argv) < 2 {
+			continue
+		}
+		base := argv[0]
+		if i := strings.LastIndexAny(base, `/\`); i >= 0 {
+			base = base[i+1:]
+		}
+		base = strings.TrimSuffix(strings.ToLower(base), ".exe")
+		if base != "apply_patch" && base != "applypatch" {
+			continue
+		}
+		for _, a := range argv[1:] {
+			if strings.Contains(a, patchBegin) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // NormalizeTool implements ports.Adapter.
 func (a *Adapter) NormalizeTool(rawName string, input json.RawMessage) (model.ToolCall, error) {
@@ -51,6 +84,11 @@ func (a *Adapter) NormalizeTool(rawName string, input json.RawMessage) (model.To
 	case "apply_patch":
 		return normalizePatch(rawName, input)
 	case "exec_command", "shell", "shell_command", "local_shell", "Bash":
+		if argvApplyPatch(input) {
+			// ["apply_patch", "<envelope>"] is a file edit, not a shell
+			// command (contract v1.3, architecture §4.4).
+			return normalizePatch(rawName, input)
+		}
 		tc, f, err := common.NewToolCall(rawName, model.ToolBash, input)
 		common.ApplyShell(&tc, f, model.ShellBash, "cmd", "command")
 		return tc, err
@@ -71,8 +109,12 @@ func normalizePatch(rawName string, input json.RawMessage) (model.ToolCall, erro
 	var err error
 	if len(input) > 0 && input[0] == '"' {
 		// Bare string argument (captured on Codex 0.130).
-		tc = model.ToolCall{Name: model.ToolEdit, RawName: rawName, Input: append(json.RawMessage(nil), input...)}
-		_ = json.Unmarshal(input, &envelope)
+		tc = model.ToolCall{Name: model.ToolEdit, RawName: rawName}
+		if json.Unmarshal(input, &envelope) == nil {
+			tc.Input = append(json.RawMessage(nil), input...)
+		} else {
+			err = fmt.Errorf("%w: tool_input of %q is not valid JSON", model.ErrBadInput, rawName)
+		}
 		tc.Fields = map[string][]string{"input": {envelope}}
 	} else {
 		var f common.Fields

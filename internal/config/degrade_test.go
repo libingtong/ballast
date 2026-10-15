@@ -74,8 +74,9 @@ func TestLoadUnusableLayerKeepsOrgRules(t *testing.T) {
 			e := newEnv(t)
 			e.write(model.LayerOrg, rulesJSON("", on("org-rule")))
 			tc.break_(e, tc.layer)
-			// Unusable layers are never cached (a fixed permission changes no
-			// stat key), except that a directory is still a stable state.
+			// Unusable layers (directory, no permission, stat denied) are
+			// never cached (a fixed permission changes no stat key); both
+			// passes re-read and must agree.
 			for i := 0; i < 2; i++ {
 				rs := e.load()
 				if !reflect.DeepEqual(ids(rs), []string{"org-rule"}) {
@@ -202,8 +203,8 @@ func TestLoadStatIOErrorIsStillAnError(t *testing.T) {
 	}
 }
 
-// Two load contexts that differ only in layers that do not exist share one
-// rules-<generation>.json; after warm-up neither may miss.
+// Two load contexts that differ only in layers that do not exist; after
+// warm-up neither may miss.
 func TestLoadCacheHitsWhenOnlyMissingLayersDiffer(t *testing.T) {
 	e := newEnv(t)
 	e.write(model.LayerUser, rulesJSON("", on("user-rule")))
@@ -241,6 +242,51 @@ func TestLoadCacheHitsWhenOnlyMissingLayersDiffer(t *testing.T) {
 	}
 	if n := e.comp.compiles.Load() - compiles; n != 6 {
 		t.Errorf("compiles = %d, want 6 (one per hit)", n)
+	}
+}
+
+// Two repos whose repo layers have identical content (same generation,
+// different paths) must not evict each other's cache entry (contract v1.3:
+// cache/rules-<generation>-<key8>.json).
+func TestLoadCacheSameGenerationDifferentRepos(t *testing.T) {
+	e := newEnv(t)
+	body := []byte(rulesJSON("", on("repo-rule")))
+	var reqs []model.LoadRequest
+	for _, name := range []string{"one", "two"} {
+		repo := filepath.Join(e.sb.Root, "work", name)
+		if err := os.MkdirAll(filepath.Join(repo, ".ballast"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, ".ballast", "rules.json"), body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		reqs = append(reqs, model.LoadRequest{Client: model.ClientClaude, Cwd: repo, Repo: &model.RepoInfo{Toplevel: repo}})
+	}
+	var gen string
+	for _, r := range reqs {
+		rs, err := e.loader().Load(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gen != "" && rs.Generation != gen {
+			t.Fatalf("generations differ: %s vs %s", gen, rs.Generation)
+		}
+		gen = rs.Generation
+	}
+	parses := e.comp.parses.Load()
+	for i := 0; i < 6; i++ {
+		r := reqs[i%2]
+		rs, err := e.loader().Load(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := filepath.Join(r.Repo.Toplevel, ".ballast", "rules.json")
+		if s := source(rs, model.LayerRepo); s.Path != want || s.Status != model.LayerOK {
+			t.Errorf("repo source = %+v, want %s", s, want)
+		}
+	}
+	if n := e.comp.parses.Load(); n != parses {
+		t.Errorf("alternating loads parsed %d more times", n-parses)
 	}
 }
 

@@ -371,6 +371,15 @@ func (r *refresher) submoduleHead(dir string) ([20]byte, bool) {
 	if _, err := r.fs.Lstat(filepath.Join(gitDir, "commondir")); !isMissing(err) {
 		return zero, false
 	}
+	// Like git's is_git_directory: a HEAD alone is not a repository. git
+	// add fails on such a submodule, so the native path must not invent a
+	// gitlink id for it (contract v1.3: fall back, git reports the error).
+	for _, sub := range [...]string{"objects", "refs"} {
+		fi, err := r.fs.Lstat(filepath.Join(gitDir, sub))
+		if err != nil || !fi.IsDir() {
+			return zero, false
+		}
+	}
 	data, err := r.fs.ReadFile(filepath.Join(gitDir, "HEAD"))
 	if err != nil {
 		return zero, false

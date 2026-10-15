@@ -109,7 +109,7 @@ type StateDelta struct {
 	Generation string
 	RuleDigest map[string]Action
 
-	LastAssistantText string // Cursor afterAgentResponse (≤4000 runes)
+	LastAssistantText string // Cursor afterAgentResponse: the LAST ≤4000 runes, no ellipsis (contract v1.3)
 	ToolFailure       bool   // PostToolUseFailure observed (weak evidence)
 }
 
@@ -117,7 +117,7 @@ type StateDelta struct {
 type StateLoadInfo struct {
 	Exists   bool
 	Corrupt  bool // unparsable or wrong version → treated as empty, audit "diag:state_corrupt"
-	Readable bool // false on I/O errors other than not-exist
+	Readable bool // false on I/O errors other than not-exist (a missing file is Readable with Exists=false)
 	Bytes    int
 }
 

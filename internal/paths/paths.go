@@ -703,7 +703,8 @@ func candidates(fsys sys.FS, raw string, ctx model.PathContext, realRoot func(ro
 // folds ".." lexically, which is right for Win32 but would let a symlinked
 // directory hide a write from the double check on POSIX. ok is false when
 // goos is windows, raw has no ".." component, raw is not a POSIX absolute
-// path after home/cwd expansion, or resolution failed; otherwise real is the
+// path after home/cwd expansion (drive paths such as "c:/x" are never
+// joined to cwd), or resolution failed; otherwise real is the
 // fully resolved path.
 func physicalDotDot(fsys sys.FS, raw string, ctx model.PathContext) (real string, ok bool) {
 	goos := ctx.GOOS
@@ -717,7 +718,9 @@ func physicalDotDot(fsys sys.FS, raw string, ctx model.PathContext) (real string
 		}
 		s = ExpandHome(s, normalize(ctx.Home, "", "", goos))
 	}
-	if s == "" {
+	if s == "" || isDriveAbs(s, false) {
+		// A Windows-client drive path ("c:/x/../y") is absolute for normalize
+		// on every GOOS; it must not be joined to a POSIX cwd.
 		return "", false
 	}
 	if s[0] != '/' {

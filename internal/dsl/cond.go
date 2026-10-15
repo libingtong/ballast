@@ -85,7 +85,7 @@ func (c *evalCtx) evalPred(cp *condProg, b binding) res {
 			return unk("verify_fresh:not_a_repo")
 		}
 		q := model.FreshQuery{Names: cp.names, Kind: model.FreshWorktree, Cwd: c.ev.Cwd}
-		if b.node >= 0 && c.cmds != nil && b.node < len(c.cmds.Nodes) {
+		if b.matcher && b.node >= 0 && c.cmds != nil && b.node < len(c.cmds.Nodes) {
 			n := &c.cmds.Nodes[b.node]
 			if n.Name == "git" && n.Git != nil && n.Git.Sub == "commit" {
 				q.Kind, q.Git = model.FreshCommit, n.Git
