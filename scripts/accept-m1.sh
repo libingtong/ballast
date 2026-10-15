@@ -6,6 +6,7 @@
 #   static checks   gofmt, build, vet (host, windows, linux, darwin)
 #   go test -race ./...   (includes internal/archtest)
 #   lint / test-rules over rules/, rules/optional/, examples/ and the regress rules
+#   pinrule parity  testdata/pinrule-parity.json run through the DSL engine
 #   the default pack injects at most 8000 characters
 #   Codex: a shell read (`sed -n 1,80p a.go`) lets a later apply_patch of a.go
 #          pass read-before-edit (and the control without the read does not)
@@ -53,6 +54,16 @@ expect_rc "ballast test-rules over the same files" 0
 note "$(printf '%s' "$BL_OUT" | tail -n 1)"
 bl lint --client all --examples "$ROOT_N/schema/examples"
 expect_rc "ballast lint over schema/examples" 0
+
+section "pinrule parity: testdata/pinrule-parity.json through the DSL engine"
+# Plan completion condition 1: the comparison cases mapped from pinrule's
+# tests. A result that differs from pinrule must cite a row of
+# docs/pinrule-mapping.md. Set PINRULE_SRC to a pinrule checkout to also
+# cross-check the list of test names against its tests/ directory.
+rc=0
+(cd "$REPO_ROOT" && gocmd test -count=1 -run '^TestPinruleParity$' -v ./internal/cli >"$TMP_ROOT/parity.out" 2>&1) || rc=$?
+if [ "$rc" = 0 ]; then ok "TestPinruleParity"; else bad "TestPinruleParity" "exit $rc"; tail -n 20 "$TMP_ROOT/parity.out"; fi
+note "$(grep 'pinrule parity:' "$TMP_ROOT/parity.out" | sed 's/^ *[^ ]*  *//' | head -n 1)"
 
 section "the default pack is at most 8000 characters when injected"
 cp "$REPO_ROOT/rules/default.json" "$BALLAST_HOME/rules.json"

@@ -24,7 +24,7 @@ hook、规则文件、状态与证据文件都和 agent 以**同一个用户**�
 - 默认规则 `no-tamper` 检查文件工具和 shell 对 Ballast 规则、状态、证据以及客户端 hook 配置的写入,命中会写入审计。
 - 证据只认 `ballast verify` 写下的退出码与内容快照,不采信输出文本;快照与待提交内容不一致就判为过期。
 - 审计日志记录每次命中与诊断(见 `ballast audit lint`、`ballast stats`)。
-- 这些检测本身也运行在 agent 可触及的环境里:`python -c "open(...).write()"` 之类的语言内写入不会被 shell 解析识别(已知局限)。**不要把 T0 当成安全边界。**
+- 这些检测本身也运行在 agent 可触及的环境里:`python -c "open(...).write()"` 之类的语言内写入不会被 shell 解析识别,`mv ~/.ballast/rules.json /tmp/x` 这样把被保护文件"搬走"也不会(`mv` 只有目标算写入目标,见 `docs/pinrule-mapping.md` §2.4),都是已知局限。**不要把 T0 当成安全边界。**
 
 原生 Windows 上 Claude Code 没有沙箱,因此永远是 T0(**文档依据,未核验,待 M0b**)。
 

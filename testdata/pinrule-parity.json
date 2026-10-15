@@ -1,0 +1,5182 @@
+{
+ "version": 1,
+ "description": "pinrule 对照用例:逐条对应 pinrule 0.19.0 的 tests/test_checks.py 与 tests/test_bypass_pinrule.py。每个用例给出 pinrule 的期望(pinrule)、对应的 Ballast 规则及其求值结果(checks)和汇总结果(ballast,任一规则命中即 hit);两者不一致时必须在 divergence 引用 docs/pinrule-mapping.md 中登记的\"有意改变\"或\"舍弃\"行。由 internal/cli 的 TestPinruleParity 用 dsl 引擎逐条核对,scripts/accept-m1.sh 会运行它。",
+ "source": "pinrule 0.19.0: tests/test_checks.py, tests/test_bypass_pinrule.py",
+ "adaptations": "路径 `.pinrule`/`PINRULE_HOME` 改写为 `.ballast`/`BALLAST_HOME`,`session-state` 改写为 `state`;本机绝对路径改写为 /home/u 或 /repo;SessionState 的\"测试通过\"记录改写为 fixture `verify_fresh`;文件系统状态改写为 fixture `exists`/`read`。",
+ "pinrule_tests": [
+  "test_checks.py::test_long_term_detects_hash_if_branch",
+  "test_checks.py::test_long_term_detects_quick_fix_commit",
+  "test_checks.py::test_long_term_commit_message_describe_pattern_passes",
+  "test_checks.py::test_long_term_commit_message_subject_quick_fix_blocked",
+  "test_checks.py::test_long_term_detects_no_verify",
+  "test_checks.py::test_long_term_detects_temp_comment",
+  "test_checks.py::test_long_term_clean_code_passes",
+  "test_checks.py::test_long_term_write_with_no_verify_string_passes",
+  "test_checks.py::test_long_term_bash_with_no_verify_blocked",
+  "test_checks.py::test_long_term_cli_dispatch_kebab_passes",
+  "test_checks.py::test_long_term_uuid_hash_in_if_still_blocked",
+  "test_checks.py::test_long_term_pytest_skip_flag_passes",
+  "test_checks.py::test_long_term_git_push_no_verify_blocked",
+  "test_checks.py::test_long_term_bash_with_todo_passes",
+  "test_checks.py::test_long_term_blacklist_literal_blocked",
+  "test_checks.py::test_long_term_samples_literal_passes",
+  "test_checks.py::test_long_term_description_context_exempts",
+  "test_checks.py::test_non_blocking_detects_sleep",
+  "test_checks.py::test_non_blocking_wait_blocking_blocked",
+  "test_checks.py::test_non_blocking_python_real_time_sleep_caught",
+  "test_checks.py::test_evidence_pytest_collect_only_not_exempted",
+  "test_checks.py::test_non_blocking_python_c_sleep_literal_exempted",
+  "test_checks.py::test_non_blocking_python_c_wait_identifier_exempted",
+  "test_checks.py::test_non_blocking_real_bash_sleep_still_caught",
+  "test_checks.py::test_non_blocking_kubectl_wait_passes",
+  "test_checks.py::test_non_blocking_sleep_zero_not_blocking",
+  "test_checks.py::test_non_blocking_sleep_fractional_caught",
+  "test_checks.py::test_non_blocking_cursor_shell_block_until_ms_default_not_blocking",
+  "test_checks.py::test_non_blocking_real_sleep_still_caught_under_cursor_payload",
+  "test_checks.py::test_non_blocking_detects_long_task_no_background",
+  "test_checks.py::test_non_blocking_long_task_with_background_passes",
+  "test_checks.py::test_non_blocking_pip_install_detected_v0914",
+  "test_checks.py::test_non_blocking_test_commands_not_long_task",
+  "test_checks.py::test_non_blocking_ignores_non_bash",
+  "test_checks.py::test_non_blocking_ignores_quoted_literals",
+  "test_checks.py::test_non_blocking_ignores_heredoc_content",
+  "test_checks.py::test_chinese_plain_all_chinese_passes",
+  "test_checks.py::test_chinese_plain_detects_low_chinese_ratio",
+  "test_checks.py::test_chinese_plain_url_not_counted_in_ratio",
+  "test_checks.py::test_chinese_plain_markdown_table_not_counted_in_ratio",
+  "test_checks.py::test_chinese_plain_table_with_3plus_jargons_blocked",
+  "test_checks.py::test_chinese_plain_jargon_in_table_cell_exempted",
+  "test_checks.py::test_chinese_plain_jargon_outside_table_still_caught",
+  "test_checks.py::test_chinese_plain_kebab_snake_idents_not_counted",
+  "test_checks.py::test_chinese_plain_markdown_emphasis_not_counted",
+  "test_checks.py::test_chinese_plain_real_jargon_still_blocked",
+  "test_checks.py::test_v0440_dotted_identifier_not_counted",
+  "test_checks.py::test_v0440_path_literal_not_counted",
+  "test_checks.py::test_chinese_plain_jargon_in_parenthesis_list_exempted",
+  "test_checks.py::test_chinese_plain_jargon_with_explanation_passes",
+  "test_checks.py::test_chinese_plain_jargon_no_explanation_fails",
+  "test_checks.py::test_chinese_plain_ignores_code_block",
+  "test_checks.py::test_evidence_completion_without_test_fails",
+  "test_checks.py::test_evidence_completion_with_test_passes",
+  "test_checks.py::test_evidence_weak_claim_in_code_context_fails",
+  "test_checks.py::test_evidence_weak_claim_in_chitchat_passes",
+  "test_checks.py::test_v080_english_weak_claim_in_code_context_fails",
+  "test_checks.py::test_v080_english_weak_claim_in_chitchat_passes",
+  "test_checks.py::test_evidence_completion_in_chitchat_passes",
+  "test_checks.py::test_evidence_git_commit_without_test_fails",
+  "test_checks.py::test_evidence_docs_commit_exempted",
+  "test_checks.py::test_evidence_git_commit_with_test_passes",
+  "test_checks.py::test_evidence_chained_pytest_commit_exempted",
+  "test_checks.py::test_evidence_heredoc_chore_commit_exempted",
+  "test_checks.py::test_evidence_pytest_in_commit_msg_not_exempted",
+  "test_checks.py::test_testset_detects_gold_cases_append",
+  "test_checks.py::test_testset_detects_cross_split_cp",
+  "test_checks.py::test_testset_detects_split_boundary_hardcode",
+  "test_checks.py::test_testset_clean_code_passes",
+  "test_checks.py::test_testset_long_hash_in_if_blocked",
+  "test_checks.py::test_testset_long_hash_in_log_passes",
+  "test_checks.py::test_testset_case_id_assignment_blocked",
+  "test_checks.py::test_testset_python_c_string_literal_exempted",
+  "test_checks.py::test_testset_real_bash_reverse_feed_still_blocked",
+  "test_checks.py::test_testset_v058_heredoc_to_tests_path_exempted",
+  "test_checks.py::test_testset_v058_heredoc_to_md_doc_exempted",
+  "test_checks.py::test_testset_v058_heredoc_to_src_still_blocked",
+  "test_checks.py::test_read_first_denies_unread_edit",
+  "test_checks.py::test_read_first_allows_after_read",
+  "test_checks.py::test_read_first_allows_write_new_file",
+  "test_checks.py::test_read_first_denies_write_existing_unread",
+  "test_checks.py::test_read_first_ignores_non_edit_tool",
+  "test_checks.py::test_run_checks_unknown_function_silently_skipped",
+  "test_checks.py::test_run_checks_multiple_hits",
+  "test_checks.py::test_run_checks_check_exception_silently_swallowed_by_default",
+  "test_checks.py::test_run_checks_check_exception_prints_traceback_under_debug",
+  "test_checks.py::test_run_checks_unknown_name_prints_under_debug",
+  "test_checks.py::test_v057_check_hits_carry_trigger_key",
+  "test_checks.py::test_v057_violation_roundtrip_trigger_key",
+  "test_checks.py::test_v057_violation_backward_compat_no_trigger_key",
+  "test_checks.py::test_v057_audit_groups_by_trigger_key_across_locales",
+  "test_checks.py::test_v057_audit_legacy_no_key_fallback_to_trigger",
+  "test_bypass_pinrule.py::test_manual_update_last_test_pass_ts_blocked",
+  "test_bypass_pinrule.py::test_clear_pending_bg_tasks_blocked",
+  "test_bypass_pinrule.py::test_write_session_state_path_blocked",
+  "test_bypass_pinrule.py::test_pinrule_cli_command_exempted",
+  "test_bypass_pinrule.py::test_normal_command_passes",
+  "test_bypass_pinrule.py::test_discussion_of_internal_without_write_passes",
+  "test_bypass_pinrule.py::test_read_only_inspection_passes",
+  "test_bypass_pinrule.py::test_readonly_inspection_with_dev_null_redirect_passes",
+  "test_bypass_pinrule.py::test_real_write_to_dev_null_alternatives_still_blocked",
+  "test_bypass_pinrule.py::test_user_backup_pinrule_files_passes",
+  "test_bypass_pinrule.py::test_keep_pushing_workflow_not_blocked",
+  "test_bypass_pinrule.py::test_commit_message_describing_bypass_not_blocked",
+  "test_bypass_pinrule.py::test_self_referential_commit_message_about_bypass_exempted",
+  "test_bypass_pinrule.py::test_python_heredoc_real_bypass_still_caught",
+  "test_bypass_pinrule.py::test_python_c_compare_operator_not_shell_redir",
+  "test_bypass_pinrule.py::test_python_c_real_write_still_caught",
+  "test_bypass_pinrule.py::test_python_os_system_real_bypass_caught",
+  "test_bypass_pinrule.py::test_python_subprocess_real_bypass_caught",
+  "test_bypass_pinrule.py::test_cat_read_session_state_not_blocked",
+  "test_bypass_pinrule.py::test_pipe_to_python_json_dumps_not_blocked",
+  "test_bypass_pinrule.py::test_release_notes_markdown_backtick_path_not_leaked",
+  "test_bypass_pinrule.py::test_heredoc_in_subshell_recognizes_inner_command",
+  "test_bypass_pinrule.py::test_python_json_dump_real_write_still_caught",
+  "test_bypass_pinrule.py::test_python_pathlib_unlink_real_bypass_caught",
+  "test_bypass_pinrule.py::test_shell_redir_real_bypass_still_caught",
+  "test_bypass_pinrule.py::test_v0518_read_pinrule_state_write_tmp_exempted",
+  "test_bypass_pinrule.py::test_v0518_cat_pinrule_pipe_to_python_exempted",
+  "test_bypass_pinrule.py::test_v0518_redirect_target_is_pinrule_path_still_blocked",
+  "test_bypass_pinrule.py::test_v0518_internal_field_name_write_to_tmp_now_exempted",
+  "test_bypass_pinrule.py::test_v0518_internal_field_name_write_to_pinrule_still_blocked",
+  "test_bypass_pinrule.py::test_build_state_path_re_default_mode_matches_home_writes",
+  "test_bypass_pinrule.py::test_build_state_path_re_PINRULE_HOME_mode_matches_isolated_writes",
+  "test_bypass_pinrule.py::test_build_state_path_re_PINRULE_HOME_in_home_dir_matches_tilde_literal",
+  "test_bypass_pinrule.py::test_rules_yaml_now_in_state_path_set"
+ ],
+ "not_applicable": [
+  {
+   "test": "test_checks.py::test_run_checks_unknown_function_silently_skipped",
+   "reason": "pinrule 的检查函数注册表与调试开关;Ballast 没有按名字注册的检查函数,规则的异常与未知由三值逻辑和 unknown 诊断承担(pinrule-mapping.md §1.1 的\"异常与无法判定\"行),对应测试在 internal/dsl 与 scripts/fault.sh"
+  },
+  {
+   "test": "test_checks.py::test_run_checks_check_exception_silently_swallowed_by_default",
+   "reason": "pinrule 的检查函数注册表与调试开关;Ballast 没有按名字注册的检查函数,规则的异常与未知由三值逻辑和 unknown 诊断承担(pinrule-mapping.md §1.1 的\"异常与无法判定\"行),对应测试在 internal/dsl 与 scripts/fault.sh"
+  },
+  {
+   "test": "test_checks.py::test_run_checks_check_exception_prints_traceback_under_debug",
+   "reason": "pinrule 的检查函数注册表与调试开关;Ballast 没有按名字注册的检查函数,规则的异常与未知由三值逻辑和 unknown 诊断承担(pinrule-mapping.md §1.1 的\"异常与无法判定\"行),对应测试在 internal/dsl 与 scripts/fault.sh"
+  },
+  {
+   "test": "test_checks.py::test_run_checks_unknown_name_prints_under_debug",
+   "reason": "pinrule 的检查函数注册表与调试开关;Ballast 没有按名字注册的检查函数,规则的异常与未知由三值逻辑和 unknown 诊断承担(pinrule-mapping.md §1.1 的\"异常与无法判定\"行),对应测试在 internal/dsl 与 scripts/fault.sh"
+  },
+  {
+   "test": "test_checks.py::test_v057_violation_roundtrip_trigger_key",
+   "reason": "pinrule 的 violations.jsonl 与 trigger_key 分组;Ballast 的审计格式、按规则 id 的统计由 internal/audit、internal/stats 的 golden 测试覆盖(scripts/accept-m3.sh)"
+  },
+  {
+   "test": "test_checks.py::test_v057_violation_backward_compat_no_trigger_key",
+   "reason": "pinrule 的 violations.jsonl 与 trigger_key 分组;Ballast 的审计格式、按规则 id 的统计由 internal/audit、internal/stats 的 golden 测试覆盖(scripts/accept-m3.sh)"
+  },
+  {
+   "test": "test_checks.py::test_v057_audit_groups_by_trigger_key_across_locales",
+   "reason": "pinrule 的 violations.jsonl 与 trigger_key 分组;Ballast 的审计格式、按规则 id 的统计由 internal/audit、internal/stats 的 golden 测试覆盖(scripts/accept-m3.sh)"
+  },
+  {
+   "test": "test_checks.py::test_v057_audit_legacy_no_key_fallback_to_trigger",
+   "reason": "pinrule 的 violations.jsonl 与 trigger_key 分组;Ballast 的审计格式、按规则 id 的统计由 internal/audit、internal/stats 的 golden 测试覆盖(scripts/accept-m3.sh)"
+  }
+ ],
+ "cases": [
+  {
+   "id": "P001",
+   "test": "test_checks.py::test_long_term_detects_hash_if_branch",
+   "name": "long id in an if branch",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "/repo/src/a.py",
+     "old_string": "x",
+     "new_string": "if turn_id == \"abc-def-12345\":\n    return special"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P002",
+   "test": "test_checks.py::test_long_term_detects_quick_fix_commit",
+   "name": "quick fix commit message",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"quick fix for that bug\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P003",
+   "test": "test_checks.py::test_long_term_commit_message_describe_pattern_passes",
+   "name": "hack words only in the long description",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"feat(x): 实现新功能 X\n\n本提交做了三件事:\n1. 加了 A 功能\n2. 改了 B 测试\n3. 重构了 C 模块的逻辑\n\n附带说明:这里讨论一下 quick fix 这个反 pattern,我们不应该这么做。\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P004",
+   "test": "test_checks.py::test_long_term_commit_message_subject_quick_fix_blocked",
+   "name": "hack in the subject",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"hack: 临时修个 bug\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P005",
+   "test": "test_checks.py::test_long_term_detects_no_verify",
+   "name": "commit --no-verify",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit --no-verify -m 'msg'"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P006",
+   "test": "test_checks.py::test_long_term_detects_temp_comment",
+   "name": "HACK comment",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/repo/src/a.py",
+     "content": "def foo():\n    # HACK: 临时这样\n    return 42"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P007",
+   "test": "test_checks.py::test_long_term_clean_code_passes",
+   "name": "clean code",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/repo/src/a.py",
+     "content": "def foo(x): return x * 2"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P008",
+   "test": "test_checks.py::test_long_term_write_with_no_verify_string_passes",
+   "name": "doc text mentioning --no-verify",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/tmp/doc.md",
+     "content": "# 检测规则\n这条规则会拦截 --no-verify、--skip、--force 等 flag。"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P009",
+   "test": "test_checks.py::test_long_term_bash_with_no_verify_blocked",
+   "name": "commit --no-verify -m fix",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit --no-verify -m 'fix'"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P010",
+   "test": "test_checks.py::test_long_term_cli_dispatch_kebab_passes",
+   "name": "CLI dispatch literal 1",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/cli.py",
+     "content": "if cmd == \"install-hooks\":\n    pass"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P011",
+   "test": "test_checks.py::test_long_term_cli_dispatch_kebab_passes",
+   "name": "CLI dispatch literal 2",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/cli.py",
+     "content": "if cmd == \"uninstall-hooks\":\n    pass"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P012",
+   "test": "test_checks.py::test_long_term_cli_dispatch_kebab_passes",
+   "name": "CLI dispatch literal 3",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/cli.py",
+     "content": "if name == \"no-testset-no-future-leakage\":\n    pass"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P013",
+   "test": "test_checks.py::test_long_term_cli_dispatch_kebab_passes",
+   "name": "CLI dispatch literal 4",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/cli.py",
+     "content": "if event == \"UserPromptSubmit\":\n    pass"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P014",
+   "test": "test_checks.py::test_long_term_uuid_hash_in_if_still_blocked",
+   "name": "long literal in an if 1",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/src/handler.py",
+     "content": "if user_id == \"abc-def-12345-uuid\":\n    pass"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P015",
+   "test": "test_checks.py::test_long_term_uuid_hash_in_if_still_blocked",
+   "name": "long literal in an if 2",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/src/handler.py",
+     "content": "if hash == \"9f5687fc2ab975ea\":\n    pass"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P016",
+   "test": "test_checks.py::test_long_term_uuid_hash_in_if_still_blocked",
+   "name": "long literal in an if 3",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/src/handler.py",
+     "content": "if token == \"tok_abc12345xyz\":\n    pass"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P017",
+   "test": "test_checks.py::test_long_term_pytest_skip_flag_passes",
+   "name": "pytest --skip-broken-isolation tests/",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest --skip-broken-isolation tests/"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P018",
+   "test": "test_checks.py::test_long_term_pytest_skip_flag_passes",
+   "name": "pip install --skip-existing requirements.txt",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pip install --skip-existing requirements.txt"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P019",
+   "test": "test_checks.py::test_long_term_pytest_skip_flag_passes",
+   "name": "cmake --build . --force",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cmake --build . --force"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P020",
+   "test": "test_checks.py::test_long_term_pytest_skip_flag_passes",
+   "name": "rsync --force /src /dst",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rsync --force /src /dst"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P021",
+   "test": "test_checks.py::test_long_term_pytest_skip_flag_passes",
+   "name": "tar --skip-old-files -xf x.tar",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "tar --skip-old-files -xf x.tar"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P022",
+   "test": "test_checks.py::test_long_term_pytest_skip_flag_passes",
+   "name": "cargo build --force",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cargo build --force"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P023",
+   "test": "test_checks.py::test_long_term_git_push_no_verify_blocked",
+   "name": "git push --no-verify",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git push --no-verify origin main"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P024",
+   "test": "test_checks.py::test_long_term_bash_with_todo_passes",
+   "name": "shell comment with TODO",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo hello  # TODO refactor later"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P025",
+   "test": "test_checks.py::test_long_term_blacklist_literal_blocked",
+   "name": "BLACKLIST literal list",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/src/filter.py",
+     "content": "BLACKLIST = [\"bot1\", \"bot2\", \"spammer\"]"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P026",
+   "test": "test_checks.py::test_long_term_samples_literal_passes",
+   "name": "samples/examples lists",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/src/util.py",
+     "content": "samples = [\"alice\", \"bob\"]\nexamples = [\"x\", \"y\"]"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P027",
+   "test": "test_checks.py::test_long_term_description_context_exempts",
+   "name": "long id in README.md",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/README.md",
+     "content": "if user_id == \"abc-def-12345\":\n    pass"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P028",
+   "test": "test_checks.py::test_long_term_description_context_exempts",
+   "name": "BLACKLIST in tests/",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "/repo/tests/test_foo.py",
+     "old_string": "x",
+     "new_string": "BLACKLIST = [\"a\", \"b\", \"c\"]"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P029",
+   "test": "test_checks.py::test_non_blocking_detects_sleep",
+   "name": "sleep 30",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 30"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.2 「任何 `sleep N`(N ≥ 1)都拦」一行:Ballast 只拦前台 sleep ≥ 60 秒;30 秒与 0.5 秒的 sleep 放行(计划 B1 回归第 12 例)。同一意图的 `sleep 300` 变体见下方 adapted 用例。"
+  },
+  {
+   "id": "P030",
+   "test": "test_checks.py::test_non_blocking_wait_blocking_blocked",
+   "name": "wait",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "wait"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P031",
+   "test": "test_checks.py::test_non_blocking_wait_blocking_blocked",
+   "name": "wait $!",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "wait $!"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P032",
+   "test": "test_checks.py::test_non_blocking_wait_blocking_blocked",
+   "name": "wait $pid",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "wait $pid"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P033",
+   "test": "test_checks.py::test_non_blocking_wait_blocking_blocked",
+   "name": "jobs; wait",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "jobs; wait"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P034",
+   "test": "test_checks.py::test_non_blocking_python_real_time_sleep_caught",
+   "name": "python -c \"import time; time.sleep(60)\"",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import time; time.sleep(60)\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P035",
+   "test": "test_checks.py::test_non_blocking_python_real_time_sleep_caught",
+   "name": "python -c \"import asyncio; asyncio.sleep(30)\"",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import asyncio; asyncio.sleep(30)\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.2:`no-lang-sleep` 与 `sleep` 同用 60 秒阈值,30 秒的 python 内等待放行;300 秒变体见 adapted 用例。"
+  },
+  {
+   "id": "P036",
+   "test": "test_checks.py::test_non_blocking_python_real_time_sleep_caught",
+   "name": "python -c \"import subprocess; subprocess.run('sleep 30', shell=True)\"",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import subprocess; subprocess.run('sleep 30', shell=True)\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.2:`no-lang-sleep` 与 `sleep` 同用 60 秒阈值,30 秒的 python 内等待放行;300 秒变体见 adapted 用例。"
+  },
+  {
+   "id": "P037",
+   "test": "test_checks.py::test_non_blocking_python_real_time_sleep_caught",
+   "name": "python -c \"import os; os.system('sleep 30')\"",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import os; os.system('sleep 30')\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.2:`no-lang-sleep` 与 `sleep` 同用 60 秒阈值,30 秒的 python 内等待放行;300 秒变体见 adapted 用例。"
+  },
+  {
+   "id": "P038",
+   "test": "test_checks.py::test_evidence_pytest_collect_only_not_exempted",
+   "name": "pytest --collect-only && git commit -m fix",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest --collect-only && git commit -m fix"
+    }
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P039",
+   "test": "test_checks.py::test_evidence_pytest_collect_only_not_exempted",
+   "name": "pytest --help && git commit -m fix",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest --help && git commit -m fix"
+    }
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P040",
+   "test": "test_checks.py::test_evidence_pytest_collect_only_not_exempted",
+   "name": "pytest --version && git commit -m fix",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest --version && git commit -m fix"
+    }
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P041",
+   "test": "test_checks.py::test_non_blocking_python_c_sleep_literal_exempted",
+   "name": "python3 -c with sleep literals",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python3 -c \"for c in ['sleep 5', 'sleep 30']: print(c)\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P042",
+   "test": "test_checks.py::test_non_blocking_python_c_sleep_literal_exempted",
+   "name": "node -e with sleep literal",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "node -e \"console.log('sleep 30')\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P043",
+   "test": "test_checks.py::test_non_blocking_python_c_sleep_literal_exempted",
+   "name": "ruby -e with sleep literal",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ruby -e \"puts 'sleep 5'\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P044",
+   "test": "test_checks.py::test_non_blocking_python_c_wait_identifier_exempted",
+   "name": "wait identifier inside python -c",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python3 -c \"from pinrule.checks.non_blocking import _WAIT_RE; print(_WAIT_RE)\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P045",
+   "test": "test_checks.py::test_non_blocking_real_bash_sleep_still_caught",
+   "name": "sleep 30 && echo done",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 30 && echo done"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.2 「任何 `sleep N`(N ≥ 1)都拦」一行:阈值 60 秒,`sleep 30` 放行;`sleep 300` 变体见 adapted 用例。"
+  },
+  {
+   "id": "P046",
+   "test": "test_checks.py::test_non_blocking_kubectl_wait_passes",
+   "name": "kubectl wait --for=condition=ready pod/foo",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "kubectl wait --for=condition=ready pod/foo"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P047",
+   "test": "test_checks.py::test_non_blocking_kubectl_wait_passes",
+   "name": "docker wait container_id",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "docker wait container_id"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P048",
+   "test": "test_checks.py::test_non_blocking_kubectl_wait_passes",
+   "name": "aws cloudformation wait stack-create-complete --stack-name foo",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "aws cloudformation wait stack-create-complete --stack-name foo"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P049",
+   "test": "test_checks.py::test_non_blocking_kubectl_wait_passes",
+   "name": "gcloud compute operations wait my-op",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "gcloud compute operations wait my-op"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P050",
+   "test": "test_checks.py::test_non_blocking_sleep_zero_not_blocking",
+   "name": "sleep 0",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 0"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P051",
+   "test": "test_checks.py::test_non_blocking_sleep_fractional_caught",
+   "name": "sleep 0.5",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 0.5"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.2 「任何 `sleep N`(N ≥ 1)都拦」一行:阈值 60 秒,`sleep 0.5` 放行。"
+  },
+  {
+   "id": "P052",
+   "test": "test_checks.py::test_non_blocking_cursor_shell_block_until_ms_default_not_blocking",
+   "name": "pinrule doctor with block_until_ms",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pinrule doctor",
+     "block_until_ms": 30000
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P053",
+   "test": "test_checks.py::test_non_blocking_cursor_shell_block_until_ms_default_not_blocking",
+   "name": "ls -la with block_until_ms",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls -la",
+     "block_until_ms": 30000
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P054",
+   "test": "test_checks.py::test_non_blocking_cursor_shell_block_until_ms_default_not_blocking",
+   "name": "echo hello with block_until_ms",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo hello",
+     "block_until_ms": 30000
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P055",
+   "test": "test_checks.py::test_non_blocking_cursor_shell_block_until_ms_default_not_blocking",
+   "name": "git status with block_until_ms",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git status",
+     "block_until_ms": 30000
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P056",
+   "test": "test_checks.py::test_non_blocking_real_sleep_still_caught_under_cursor_payload",
+   "name": "sleep 60 with block_until_ms",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 60",
+     "block_until_ms": 30000
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P057",
+   "test": "test_checks.py::test_non_blocking_detects_long_task_no_background",
+   "name": "docker compose up in the foreground",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "docker compose up",
+     "run_in_background": false
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P058",
+   "test": "test_checks.py::test_non_blocking_long_task_with_background_passes",
+   "name": "docker compose up in the background",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "docker compose up",
+     "run_in_background": true
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P059",
+   "test": "test_checks.py::test_non_blocking_pip_install_detected_v0914",
+   "name": "pip install pandas",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pip install pandas"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P060",
+   "test": "test_checks.py::test_non_blocking_pip_install_detected_v0914",
+   "name": "pip install -e .",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pip install -e ."
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P061",
+   "test": "test_checks.py::test_non_blocking_pip_install_detected_v0914",
+   "name": "pip install pandas in the background",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pip install pandas",
+     "run_in_background": true
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P062",
+   "test": "test_checks.py::test_non_blocking_test_commands_not_long_task",
+   "name": "pytest tests/",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest tests/"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P063",
+   "test": "test_checks.py::test_non_blocking_test_commands_not_long_task",
+   "name": "jest",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "jest"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P064",
+   "test": "test_checks.py::test_non_blocking_ignores_non_bash",
+   "name": "Write containing the word sleep",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/repo/a.txt",
+     "content": "sleep is a function"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P065",
+   "test": "test_checks.py::test_non_blocking_ignores_quoted_literals",
+   "name": "docker run inside a commit message",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"fix: docker run output parsing\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P066",
+   "test": "test_checks.py::test_non_blocking_ignores_quoted_literals",
+   "name": "echo of a sleep",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo \"sleep 30 before retry\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P067",
+   "test": "test_checks.py::test_non_blocking_ignores_quoted_literals",
+   "name": "docker run myapp",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "docker run myapp"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P068",
+   "test": "test_checks.py::test_non_blocking_ignores_heredoc_content",
+   "name": "python heredoc with docker/sleep words",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python <<'PYEOF'\nimport re\npat = re.compile(r'\\b(docker|sleep)\\b')\nprint(pat.search('foo'))\nPYEOF"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P069",
+   "test": "test_checks.py::test_non_blocking_ignores_heredoc_content",
+   "name": "docker compose up with a heredoc stdin",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "docker compose up <<'EOF'\nsome input\nEOF"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P070",
+   "test": "test_checks.py::test_chinese_plain_all_chinese_passes",
+   "name": "all Chinese",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "好的,开始干活了,先看下当前情况。这个改动应该不大。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P071",
+   "test": "test_checks.py::test_chinese_plain_detects_low_chinese_ratio",
+   "name": "English explanation",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "OK let me explain how the algorithm works. Basically it uses cosine similarity over embeddings to find nearest neighbors. The threshold parameter controls precision recall tradeoff."
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P072",
+   "test": "test_checks.py::test_chinese_plain_url_not_counted_in_ratio",
+   "name": "URL does not lower the ratio",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "v0.3.0 已发布到 https://github.com/example/proj/releases/tag/v0.3.0 看这个链接拿 release notes。本轮做了 codex backend 适配,跑通了实测。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit",
+   "divergence": "pinrule-mapping.md §2.8 「算比例前先剥 URL…」一行:算比例前只剥代码块,不剥 URL、表格、版本号、标识符、路径(口径更宽松,示例规则可能多报)。"
+  },
+  {
+   "id": "P073",
+   "test": "test_checks.py::test_chinese_plain_markdown_table_not_counted_in_ratio",
+   "name": "table is structural",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "本轮完成清单:\n\n| Release | 做 |\n|---|---|\n| v0.3.0 | Codex CLI backend |\n| v0.4.0 | Gemini CLI backend |\n\n跨平台测试全过。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P074",
+   "test": "test_checks.py::test_chinese_plain_table_with_3plus_jargons_blocked",
+   "name": "table stuffed with jargon",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "方案对比:\n\n| 方案 | 描述 |\n|---|---|\n| A | 用 retrieval 加 reranker 做精排,比 baseline 强 |\n| B | 用 transformer encoder 加 attention 做 embedding |\n"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P075",
+   "test": "test_checks.py::test_chinese_plain_jargon_in_table_cell_exempted",
+   "name": "jargon inside a table cell",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "最终交付清单:\n\n| # | 工作 | 证据 |\n|---|---|---|\n| 1 | 答 embedding 问 | 代码里只 3 处全是反例 |\n| 2 | retrieval 治理候选 | 跟 deep-fix 同根因 |\n"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit",
+   "divergence": "pinrule-mapping.md §2.8 「术语处于未闭合括号内豁免…」一行:表格行里术语的豁免不迁移。"
+  },
+  {
+   "id": "P076",
+   "test": "test_checks.py::test_chinese_plain_jargon_outside_table_still_caught",
+   "name": "jargon outside a table",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "我们用 retrieval 做检索效果不错。我们用 retrieval 做检索效果不错。我们用 retrieval 做检索效果不错。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P077",
+   "test": "test_checks.py::test_chinese_plain_kebab_snake_idents_not_counted",
+   "name": "kebab and snake identifiers",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "v0.4.10 发布 + karma-v1 永久归档完成。\n**v0.4.10**: chinese-plain 剥版本号 / markdown / emoji 后修掉累积 5 次 force_block 假阳。\n**karma-v1**: 已 `gh repo archive` 永久归档,readonly 状态。\n后续 sticky_id 报错时让同事贴 git remote -v 输出。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit",
+   "divergence": "pinrule-mapping.md §2.8 「算比例前先剥 URL…」一行:不剥标识符(kebab/snake),比例口径更宽松。"
+  },
+  {
+   "id": "P078",
+   "test": "test_checks.py::test_chinese_plain_markdown_emphasis_not_counted",
+   "name": "markdown emphasis",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "**深挖找到关键问题**(不是瞎扯也不是猜想):\n\n**这两类区分清楚**:\n- **codex Desktop App**:你这几天一直在用\n- **codex CLI**:装着但几乎没有跑过\n"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P079",
+   "test": "test_checks.py::test_chinese_plain_real_jargon_still_blocked",
+   "name": "real jargon pile",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "使用 retrieval embedding tokenizer hyperparameter softmax orchestrator dispatcher 实现 baseline。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P080",
+   "test": "test_checks.py::test_v0440_dotted_identifier_not_counted",
+   "name": "dotted identifiers",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "我刚改了 pre_tool_use.py 的 state.model 字段,调用 extract_model_from_transcript() 拿到了模型,pinrule.hooks.session_start 也写了 state,全跑通。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P081",
+   "test": "test_checks.py::test_v0440_path_literal_not_counted",
+   "name": "path literals",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "我看了 ~/.pinrule/session-state/abc.json 里的字段,又查了 /home/u/pinrule/pinrule/checks/chinese_plain.py 的实施,发现都对。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit",
+   "divergence": "pinrule-mapping.md §2.8 「算比例前先剥 URL…」一行:不剥路径字面,比例口径更宽松。"
+  },
+  {
+   "id": "P082",
+   "test": "test_checks.py::test_chinese_plain_jargon_in_parenthesis_list_exempted",
+   "name": "jargon listed in parentheses",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "扩通用编程词(mutex / orchestrator / dispatcher / observer),加进 jargon 列表。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit",
+   "divergence": "pinrule-mapping.md §2.8 「术语处于未闭合括号内豁免…」一行:括号内列举术语的豁免不迁移(只认术语后紧跟左括号的解释写法)。"
+  },
+  {
+   "id": "P083",
+   "test": "test_checks.py::test_chinese_plain_jargon_with_explanation_passes",
+   "name": "jargon followed by a Chinese gloss",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "这个用 precision (精度) 和 recall (召回率) 两个指标看,我会先优化精度。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P084",
+   "test": "test_checks.py::test_chinese_plain_jargon_no_explanation_fails",
+   "name": "bare jargon",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "这个 oracle 不行,咱们换 supervisor 试试,看 paradigm 是不是更好"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P085",
+   "test": "test_checks.py::test_chinese_plain_ignores_code_block",
+   "name": "English inside a code block",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "好的,跑这段代码就行:\n```python\ndef f(): return precision_recall(x)\n```\n看输出就知道了。"
+   },
+   "checks": [
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-ratio",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/chinese_plain.json#chinese-plain-jargon",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P086",
+   "test": "test_checks.py::test_evidence_completion_without_test_fails",
+   "name": "done without evidence",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "搞定了,已经修复完成"
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P087",
+   "test": "test_checks.py::test_evidence_completion_with_test_passes",
+   "name": "done with fresh evidence",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "搞定了,已经修复完成"
+   },
+   "fixture": {
+    "verify_fresh": "true"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P088",
+   "test": "test_checks.py::test_evidence_weak_claim_in_code_context_fails",
+   "name": "weak claim in code context",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "修复完了,代码应该可以了,应该没问题"
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P089",
+   "test": "test_checks.py::test_evidence_weak_claim_in_chitchat_passes",
+   "name": "weak claim in chit-chat",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "这个方向应该可以,慢慢来"
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P090",
+   "test": "test_checks.py::test_v080_english_weak_claim_in_code_context_fails",
+   "name": "Fixed the bug, should work now.",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "Fixed the bug, should work now."
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P091",
+   "test": "test_checks.py::test_v080_english_weak_claim_in_code_context_fails",
+   "name": "Code compiles, probably fine for production.",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "Code compiles, probably fine for production."
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P092",
+   "test": "test_checks.py::test_v080_english_weak_claim_in_code_context_fails",
+   "name": "Done with the test, should be okay.",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "Done with the test, should be okay."
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P093",
+   "test": "test_checks.py::test_v080_english_weak_claim_in_code_context_fails",
+   "name": "Build passes, likely works.",
+   "pinrule": "hit",
+   "input": {
+    "last_assistant_message": "Build passes, likely works."
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P094",
+   "test": "test_checks.py::test_v080_english_weak_claim_in_chitchat_passes",
+   "name": "English weak claim in chit-chat",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "That direction probably works, take it slow."
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P095",
+   "test": "test_checks.py::test_evidence_completion_in_chitchat_passes",
+   "name": "completion word outside code work",
+   "pinrule": "miss",
+   "input": {
+    "last_assistant_message": "今天先告一段落,明天再聊"
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/claim-needs-evidence.json#claim-needs-evidence",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P096",
+   "test": "test_checks.py::test_evidence_git_commit_without_test_fails",
+   "name": "commit without evidence",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m 'fix'"
+    }
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P097",
+   "test": "test_checks.py::test_evidence_docs_commit_exempted",
+   "name": "docs: commit",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"docs: update README\""
+    }
+   },
+   "fixture": {
+    "verify_fresh": "true"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "note": "按文件豁免(pinrule-mapping.md §2.3 「conventional commit … 豁免」一行):仅改文档的提交其待提交内容全属 `exempt`,`verify_fresh` 为真,以 fixture 表示。"
+  },
+  {
+   "id": "P098",
+   "test": "test_checks.py::test_evidence_docs_commit_exempted",
+   "name": "chore(deps): commit",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"chore(deps): bump version\""
+    }
+   },
+   "fixture": {
+    "verify_fresh": "true"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "note": "同上,以 fixture 表示 exempt 后 verify_fresh 为真。"
+  },
+  {
+   "id": "P099",
+   "test": "test_checks.py::test_evidence_docs_commit_exempted",
+   "name": "feat: commit",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"feat: 加新功能\""
+    }
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P100",
+   "test": "test_checks.py::test_evidence_git_commit_with_test_passes",
+   "name": "commit with evidence",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m 'fix'"
+    }
+   },
+   "fixture": {
+    "verify_fresh": "true"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P101",
+   "test": "test_checks.py::test_evidence_chained_pytest_commit_exempted",
+   "name": "pytest && git add && git commit",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": ".venv/bin/python -m pytest tests/ -q && git add -A && git commit -m 'fix: stuff'"
+    }
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit",
+   "divergence": "pinrule-mapping.md §2.3 「同一条命令里先跑过测试即豁免」一行:同一条命令里先跑测试不再作为证据,证据只来自 `ballast verify`(B3)。"
+  },
+  {
+   "id": "P102",
+   "test": "test_checks.py::test_evidence_heredoc_chore_commit_exempted",
+   "name": "heredoc chore(release) commit",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git add scripts/x.sh && git commit -m \"$(cat <<'EOF'\nchore(release): scripts/verify-installed.sh 防发版后忘装本机\nEOF\n)\""
+    }
+   },
+   "fixture": {
+    "verify_fresh": "true"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "note": "同上,以 fixture 表示 exempt 后 verify_fresh 为真。"
+  },
+  {
+   "id": "P103",
+   "test": "test_checks.py::test_evidence_pytest_in_commit_msg_not_exempted",
+   "name": "pytest only in the commit message",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"fix: improve pytest fixture\""
+    }
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P104",
+   "test": "test_checks.py::test_testset_detects_gold_cases_append",
+   "name": "gold_cases.append",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/repo/train/build.py",
+     "content": "gold_cases.append(new_case_from_eval)"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P105",
+   "test": "test_checks.py::test_testset_detects_cross_split_cp",
+   "name": "cp eval cache into train",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cp eval/cache/*.json train/cache/"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "unknown"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.7 「带通配符的 cp」一行:参数含未展开的通配符时 `args_regex` 无法判定,结果为 unknown(规则不命中并记诊断);去掉通配符的 adapted 用例命中。"
+  },
+  {
+   "id": "P106",
+   "test": "test_checks.py::test_testset_detects_split_boundary_hardcode",
+   "name": "turn_idx boundary",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "/repo/train/build.py",
+     "old_string": "x",
+     "new_string": "if turn_idx >= 400: skip"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P107",
+   "test": "test_checks.py::test_testset_clean_code_passes",
+   "name": "clean code",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/repo/train/build.py",
+     "content": "def foo(): return train_data"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P108",
+   "test": "test_checks.py::test_testset_long_hash_in_if_blocked",
+   "name": "long hash in an if",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "/x/src/handler.py",
+     "old_string": "x",
+     "new_string": "if turn_id == \"a1b2c3d4e5f6a7b8\":\n    return special"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P109",
+   "test": "test_checks.py::test_testset_long_hash_in_log_passes",
+   "name": "long hex in a log call",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/src/handler.py",
+     "content": "logger.info(\"commit: a1b2c3d4e5f6a7b8\")\ncommit_hash = \"a1b2c3d4e5f6a7b8\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P110",
+   "test": "test_checks.py::test_testset_case_id_assignment_blocked",
+   "name": "case_id assignment",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "/x/src/runner.py",
+     "old_string": "x",
+     "new_string": "case_id = \"a1b2c3d4e5f6a7b8\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P111",
+   "test": "test_checks.py::test_testset_python_c_string_literal_exempted",
+   "name": "python -c with a gold_cases literal",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"r = check(content='gold_cases.append(x)')\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P112",
+   "test": "test_checks.py::test_testset_real_bash_reverse_feed_still_blocked",
+   "name": "plain cp from eval to train",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cp eval/cache/x.json train/cache/"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P113",
+   "test": "test_checks.py::test_testset_v058_heredoc_to_tests_path_exempted",
+   "name": "heredoc into tests/",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat >> proj/tests/test_checks.py <<'PY'\ndef test_x():\n    case_id = \"a1b2c3d4e5f6a7b8\"\nPY"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P114",
+   "test": "test_checks.py::test_testset_v058_heredoc_to_md_doc_exempted",
+   "name": "heredoc into a .md file",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat >> docs/CHANGELOG.md <<'MD'\n示例 case_id 写法: case_id = \"a1b2c3d4e5f6a7b8\"\nMD"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P115",
+   "test": "test_checks.py::test_testset_v058_heredoc_to_src_still_blocked",
+   "name": "heredoc into src/",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat >> src/runner.py <<'PY'\ncase_id = \"a1b2c3d4e5f6a7b8\"\nPY"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.7 「对 Bash 命令文本扫描上述…模式」一行:不扫描 shell 命令文本,heredoc 写入源码文件不命中(文件工具写入才命中)。"
+  },
+  {
+   "id": "P116",
+   "test": "test_checks.py::test_read_first_denies_unread_edit",
+   "name": "edit of an unread existing file",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "/repo/abc.py",
+     "old_string": "x",
+     "new_string": "y"
+    }
+   },
+   "fixture": {
+    "exists": [
+     "abc.py"
+    ]
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#read-before-edit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P117",
+   "test": "test_checks.py::test_read_first_allows_after_read",
+   "name": "edit after reading",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "/repo/abc.py",
+     "old_string": "x",
+     "new_string": "y"
+    }
+   },
+   "fixture": {
+    "exists": [
+     "abc.py"
+    ],
+    "read": [
+     "abc.py"
+    ]
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#read-before-edit",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P118",
+   "test": "test_checks.py::test_read_first_allows_write_new_file",
+   "name": "write of a new file",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/repo/brand_new.py",
+     "content": "x = 1"
+    }
+   },
+   "fixture": {
+    "exists": []
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#read-before-edit",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P119",
+   "test": "test_checks.py::test_read_first_denies_write_existing_unread",
+   "name": "write over an unread file",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/repo/existing.py",
+     "content": "# overwrite"
+    }
+   },
+   "fixture": {
+    "exists": [
+     "existing.py"
+    ]
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#read-before-edit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P120",
+   "test": "test_checks.py::test_read_first_ignores_non_edit_tool",
+   "name": "a Bash call",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls"
+    }
+   },
+   "fixture": {
+    "exists": []
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#read-before-edit",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P121",
+   "test": "test_checks.py::test_run_checks_multiple_hits",
+   "name": "commit --no-verify with a quick fix message",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit --no-verify -m \"quick fix\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-skip-verify",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-git-force-skip",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hack-commit-message",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P122",
+   "test": "test_checks.py::test_v057_check_hits_carry_trigger_key",
+   "name": "non-blocking probe (sleep 30)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 30"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.2 「任何 `sleep N`(N ≥ 1)都拦」一行:阈值 60 秒,`sleep 30` 放行(trigger_key 字段本身不迁移,见 not_applicable)。"
+  },
+  {
+   "id": "P123",
+   "test": "test_checks.py::test_v057_check_hits_carry_trigger_key",
+   "name": "evidence probe (git commit)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m 'feat: x'"
+    }
+   },
+   "fixture": {
+    "verify_fresh": "false"
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#evidence-before-commit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P124",
+   "test": "test_checks.py::test_v057_check_hits_carry_trigger_key",
+   "name": "read-first probe",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "/x/y.py",
+     "old_string": "a",
+     "new_string": "b"
+    }
+   },
+   "fixture": {
+    "exists": [
+     "/x/y.py"
+    ]
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#read-before-edit",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P125",
+   "test": "test_checks.py::test_v057_check_hits_carry_trigger_key",
+   "name": "long-term probe (TODO comment)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "/x/y.py",
+     "content": "def f():\n    # TODO: fix\n    return 1\n"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/optional/long-term.json#no-todo-marker",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/long-term.json#no-hardcoded-list",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P126",
+   "test": "test_bypass_pinrule.py::test_manual_update_last_test_pass_ts_blocked",
+   "name": "python -c rewriting a state field",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"\nimport json\nfrom pathlib import Path\np = Path.home() / '.ballast/state/abc.json'\nd = json.loads(p.read_text())\nd['last_test_pass_ts'] = 9999\np.write_text(json.dumps(d))\n\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「Python 写接口」一行:不识别 python 内部的写文件调用;Ballast 状态在被保护路径下,但语言内写入不被 T0 检测(T1 的沙箱 denyWrite 兜底)。"
+  },
+  {
+   "id": "P127",
+   "test": "test_bypass_pinrule.py::test_clear_pending_bg_tasks_blocked",
+   "name": "python -c clearing a field",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"d['pending_bg_tasks'] = []; p.write_text(json.dumps(d))\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「命令含内部字段名」与「Python 写接口」两行:不匹配内部字段名,也不识别 python 内部的写文件调用。"
+  },
+  {
+   "id": "P128",
+   "test": "test_bypass_pinrule.py::test_write_session_state_path_blocked",
+   "name": "echo into a state file",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo '{}' > ~/.ballast/state/abc.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P129",
+   "test": "test_bypass_pinrule.py::test_pinrule_cli_command_exempted",
+   "name": "ballast verify",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ballast verify"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P130",
+   "test": "test_bypass_pinrule.py::test_pinrule_cli_command_exempted",
+   "name": "ballast verify --check",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ballast verify --check"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P131",
+   "test": "test_bypass_pinrule.py::test_pinrule_cli_command_exempted",
+   "name": "ballast stats",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ballast stats"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P132",
+   "test": "test_bypass_pinrule.py::test_pinrule_cli_command_exempted",
+   "name": "ballast rules promote some-rule",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ballast rules promote some-rule"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P133",
+   "test": "test_bypass_pinrule.py::test_normal_command_passes",
+   "name": "git status",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git status"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P134",
+   "test": "test_bypass_pinrule.py::test_normal_command_passes",
+   "name": "ls -la",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls -la"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P135",
+   "test": "test_bypass_pinrule.py::test_normal_command_passes",
+   "name": "pytest tests/",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest tests/"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P136",
+   "test": "test_bypass_pinrule.py::test_discussion_of_internal_without_write_passes",
+   "name": "grep a field name",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat state/x.json | grep last_test_pass_ts"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P137",
+   "test": "test_bypass_pinrule.py::test_discussion_of_internal_without_write_passes",
+   "name": "grep a field name into /tmp",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat state/x.json | grep last_test_pass_ts > /tmp/out"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P138",
+   "test": "test_bypass_pinrule.py::test_read_only_inspection_passes",
+   "name": "cat a state file",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat ~/.ballast/state/abc.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P139",
+   "test": "test_bypass_pinrule.py::test_readonly_inspection_with_dev_null_redirect_passes",
+   "name": "python -c \"print(1)\" 2>/dev/null",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"print(1)\" 2>/dev/null"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P140",
+   "test": "test_bypass_pinrule.py::test_readonly_inspection_with_dev_null_redirect_passes",
+   "name": "ls ~/.ballast/state/*.json 2>/dev/null | head -1",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls ~/.ballast/state/*.json 2>/dev/null | head -1"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P141",
+   "test": "test_bypass_pinrule.py::test_readonly_inspection_with_dev_null_redirect_passes",
+   "name": "cat ~/.ballast/audit/2026-01.jsonl 2>/dev/null | head -3",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat ~/.ballast/audit/2026-01.jsonl 2>/dev/null | head -3"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P142",
+   "test": "test_bypass_pinrule.py::test_real_write_to_dev_null_alternatives_still_blocked",
+   "name": "echo bad into a state file",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo bad > ~/.ballast/state/abc.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P143",
+   "test": "test_bypass_pinrule.py::test_user_backup_pinrule_files_passes",
+   "name": "cp ~/.ballast/rules.json ~/backup/rules.json.bak",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cp ~/.ballast/rules.json ~/backup/rules.json.bak"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P144",
+   "test": "test_bypass_pinrule.py::test_user_backup_pinrule_files_passes",
+   "name": "mv ~/.ballast/audit/2026-01.jsonl ~/old-audit.jsonl",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "mv ~/.ballast/audit/2026-01.jsonl ~/old-audit.jsonl"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P145",
+   "test": "test_bypass_pinrule.py::test_user_backup_pinrule_files_passes",
+   "name": "rm ~/.ballast/audit/2026-01.jsonl.3",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rm ~/.ballast/audit/2026-01.jsonl.3"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit",
+   "divergence": "pinrule-mapping.md §2.4 「写操作信号不含 cp/mv/rm」一行:`rm` 等删除/轮转命令也产生写入目标,按更严处理;合法维护走 `ballast` CLI。"
+  },
+  {
+   "id": "P146",
+   "test": "test_bypass_pinrule.py::test_user_backup_pinrule_files_passes",
+   "name": "cp ~/.ballast/rules.json ./snapshot/",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cp ~/.ballast/rules.json ./snapshot/"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P147",
+   "test": "test_bypass_pinrule.py::test_keep_pushing_workflow_not_blocked",
+   "name": "echo of a plan",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo \"我接下来去做 X\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P148",
+   "test": "test_bypass_pinrule.py::test_commit_message_describing_bypass_not_blocked",
+   "name": "commit message naming a field",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"fix: update last_test_pass_ts race (json.dump)\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P149",
+   "test": "test_bypass_pinrule.py::test_self_referential_commit_message_about_bypass_exempted",
+   "name": "commit message about the check",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git commit -m \"fix(ballast): bypass check 加 last_test_pass_ts 检测 + json.dump 写操作\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P150",
+   "test": "test_bypass_pinrule.py::test_python_heredoc_real_bypass_still_caught",
+   "name": "python heredoc rewriting a state file (pinrule: documented blind spot)",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python <<'EOF'\nimport json\nfrom pathlib import Path\np = Path.home() / '.ballast/state/x.json'\nd = json.loads(p.read_text())\nd['last_test_pass_ts'] = 9999\np.write_text(json.dumps(d))\nEOF"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P151",
+   "test": "test_bypass_pinrule.py::test_python_c_compare_operator_not_shell_redir",
+   "name": "comparison operator inside python -c",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import json, time\\ncutoff = time.time() - 600\\nwith open('/home/u/.ballast/audit/2026-01.jsonl') as f:\\n    new = [json.loads(l) for l in f if json.loads(l).get('ts', 0) > cutoff]\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P152",
+   "test": "test_bypass_pinrule.py::test_python_c_real_write_still_caught",
+   "name": "open(...).write inside python -c",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"open('.ballast/state.json', 'w').write('{}')\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「Python 写接口」一行:不识别 python 内部的写文件调用。"
+  },
+  {
+   "id": "P153",
+   "test": "test_bypass_pinrule.py::test_python_os_system_real_bypass_caught",
+   "name": "os.system rm inside python -c",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import os; os.system('rm ~/.ballast/state.json')\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「Python 写接口」一行:不识别 python 内部的 os.system 等调用(dsl-semantics §14)。"
+  },
+  {
+   "id": "P154",
+   "test": "test_bypass_pinrule.py::test_python_subprocess_real_bypass_caught",
+   "name": "subprocess rm inside python -c",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import subprocess; subprocess.run(['rm', '~/.ballast/rules.json'])\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「Python 写接口」一行:不识别 python 内部的 subprocess 调用。"
+  },
+  {
+   "id": "P155",
+   "test": "test_bypass_pinrule.py::test_cat_read_session_state_not_blocked",
+   "name": "cat a state file",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat ~/.ballast/state/abc.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P156",
+   "test": "test_bypass_pinrule.py::test_pipe_to_python_json_dumps_not_blocked",
+   "name": "json.dumps in a read-only pipeline",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat ~/.ballast/state/abc.json | python3 -c \"import json, sys; d = json.load(sys.stdin); print(json.dumps(d, indent=2, ensure_ascii=False))\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P157",
+   "test": "test_bypass_pinrule.py::test_release_notes_markdown_backtick_path_not_leaked",
+   "name": "release notes with a backticked path",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "gh release create v0.4.32 --notes \"$(cat <<'EOF'\n描述场景:`cat ~/.ballast/state/xxx.json` 被拦\nEOF\n)\" "
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P158",
+   "test": "test_bypass_pinrule.py::test_heredoc_in_subshell_recognizes_inner_command",
+   "name": "heredoc nested in a command substitution",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo \"$(cat <<'EOF'\n.ballast/state/x.json\nEOF\n)\" "
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P159",
+   "test": "test_bypass_pinrule.py::test_python_json_dump_real_write_still_caught",
+   "name": "json.dump into a state file",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c 'import json; json.dump({}, open(\".ballast/state/x.json\", \"w\"))'"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「Python 写接口」一行:不识别 python 内部的 json.dump 写文件。"
+  },
+  {
+   "id": "P160",
+   "test": "test_bypass_pinrule.py::test_python_pathlib_unlink_real_bypass_caught",
+   "name": "Path.unlink inside python -c",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"from pathlib import Path; Path('~/.ballast/audit/2026-01.jsonl').unlink()\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「Python 写接口」一行:不识别 python 内部的 Path.unlink。"
+  },
+  {
+   "id": "P161",
+   "test": "test_bypass_pinrule.py::test_shell_redir_real_bypass_still_caught",
+   "name": "redirect into state.json",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo '{}' > ~/.ballast/state.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P162",
+   "test": "test_bypass_pinrule.py::test_v0518_read_pinrule_state_write_tmp_exempted",
+   "name": "grep a state file into /tmp",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "grep deep-fix ~/.ballast/audit/2026-01.jsonl > /tmp/df_audit.jsonl"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P163",
+   "test": "test_bypass_pinrule.py::test_v0518_cat_pinrule_pipe_to_python_exempted",
+   "name": "cat into a pretty-printer into /tmp",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cat ~/.ballast/audit/2026-01.jsonl | python3 -m json.tool > /tmp/pretty.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P164",
+   "test": "test_bypass_pinrule.py::test_v0518_redirect_target_is_pinrule_path_still_blocked",
+   "name": "append into the audit file",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo '{}' >> ~/.ballast/audit/2026-01.jsonl"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P165",
+   "test": "test_bypass_pinrule.py::test_v0518_internal_field_name_write_to_tmp_now_exempted",
+   "name": "field name written to /tmp",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo 'last_test_pass_ts=999999' > /tmp/inject.txt"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P166",
+   "test": "test_bypass_pinrule.py::test_v0518_internal_field_name_write_to_pinrule_still_blocked",
+   "name": "field name written into the state dir",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo 'last_test_pass_ts=999999' > ~/.ballast/state/x"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P167",
+   "test": "test_bypass_pinrule.py::test_build_state_path_re_default_mode_matches_home_writes",
+   "name": "rm under ~/.ballast",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rm ~/.ballast/state/x.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P168",
+   "test": "test_bypass_pinrule.py::test_build_state_path_re_default_mode_matches_home_writes",
+   "name": "rm under another home",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rm /home/anyone/.ballast/audit/2026-01.jsonl"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P169",
+   "test": "test_bypass_pinrule.py::test_build_state_path_re_default_mode_matches_home_writes",
+   "name": "rm of a repo-relative .ballast file",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rm .ballast/rules.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P170",
+   "test": "test_bypass_pinrule.py::test_build_state_path_re_default_mode_matches_home_writes",
+   "name": "rm of an unrelated path",
+   "pinrule": "miss",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rm /tmp/random/state/x.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss"
+  },
+  {
+   "id": "P171",
+   "test": "test_bypass_pinrule.py::test_build_state_path_re_PINRULE_HOME_mode_matches_isolated_writes",
+   "name": "rm under a relocated state home",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rm /tmp/ballast-isolated/state/x.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「PINRULE_HOME 重定向」一行:规则写死 `.ballast` 路径,`BALLAST_HOME` 重定向到其他目录不在覆盖范围(已知局限)。"
+  },
+  {
+   "id": "P172",
+   "test": "test_bypass_pinrule.py::test_build_state_path_re_PINRULE_HOME_mode_matches_isolated_writes",
+   "name": "redirect into a relocated state home",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo '{}' > /tmp/ballast-isolated/audit/2026-01.jsonl"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「PINRULE_HOME 重定向」一行:规则写死 `.ballast` 路径,`BALLAST_HOME` 重定向到其他目录不在覆盖范围(已知局限)。"
+  },
+  {
+   "id": "P173",
+   "test": "test_bypass_pinrule.py::test_build_state_path_re_PINRULE_HOME_mode_matches_isolated_writes",
+   "name": "default path still matches",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rm ~/.ballast/state/x.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P174",
+   "test": "test_bypass_pinrule.py::test_build_state_path_re_PINRULE_HOME_in_home_dir_matches_tilde_literal",
+   "name": "tilde literal of a relocated home",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rm ~/.ballast-test-isolated/state/x.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「PINRULE_HOME 重定向」一行:同上,自定义目录名不在覆盖范围(已知局限)。"
+  },
+  {
+   "id": "P175",
+   "test": "test_bypass_pinrule.py::test_build_state_path_re_PINRULE_HOME_in_home_dir_matches_tilde_literal",
+   "name": "absolute path of a relocated home",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "rm /home/u/.ballast-test-isolated/state/x.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "miss",
+   "divergence": "pinrule-mapping.md §2.4 「PINRULE_HOME 重定向」一行:同上,自定义目录名不在覆盖范围(已知局限)。"
+  },
+  {
+   "id": "P176",
+   "test": "test_bypass_pinrule.py::test_rules_yaml_now_in_state_path_set",
+   "name": "echo into rules.json",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "echo '...' > ~/.ballast/rules.json"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-tamper",
+     "expect": "hit"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P177",
+   "test": "test_checks.py::test_non_blocking_detects_sleep",
+   "name": "sleep 300 (adapted to the 60 s threshold)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 300"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P178",
+   "test": "test_checks.py::test_non_blocking_real_bash_sleep_still_caught",
+   "name": "sleep 300 && echo done (adapted)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 300 && echo done"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P179",
+   "test": "test_checks.py::test_non_blocking_sleep_fractional_caught",
+   "name": "sleep 0.5 inside a loop stays allowed, sleep 90 does not (adapted)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 90"
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P180",
+   "test": "test_checks.py::test_non_blocking_python_real_time_sleep_caught",
+   "name": "asyncio.sleep(300) (adapted)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import asyncio; asyncio.sleep(300)\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P181",
+   "test": "test_checks.py::test_non_blocking_python_real_time_sleep_caught",
+   "name": "subprocess sleep 300 (adapted)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import subprocess; subprocess.run('sleep 300', shell=True)\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P182",
+   "test": "test_checks.py::test_non_blocking_python_real_time_sleep_caught",
+   "name": "os.system sleep 300 (adapted)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "python -c \"import os; os.system('sleep 300')\""
+    }
+   },
+   "checks": [
+    {
+     "rule": "rules/default.json#no-long-sleep",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-shell-wait",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-shell-wait.json#no-lang-sleep",
+     "expect": "hit"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-long-task",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-install",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-pip-module",
+     "expect": "miss"
+    },
+    {
+     "rule": "rules/optional/no-foreground-long-task.json#no-foreground-docker",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  },
+  {
+   "id": "P183",
+   "test": "test_checks.py::test_testset_detects_cross_split_cp",
+   "name": "cp eval file into train without a glob (adapted)",
+   "pinrule": "hit",
+   "input": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "cp eval/cache/a.json train/cache/"
+    }
+   },
+   "checks": [
+    {
+     "rule": "examples/testset.json#no-testset-leakage",
+     "expect": "miss"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-cross-copy",
+     "expect": "hit"
+    },
+    {
+     "rule": "examples/testset.json#no-testset-detail-append",
+     "expect": "miss"
+    }
+   ],
+   "ballast": "hit"
+  }
+ ]
+}

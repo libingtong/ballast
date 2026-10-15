@@ -1,6 +1,6 @@
-# Ballast 架构与接口契约(冻结版 v1.4)
+# Ballast 架构与接口契约(冻结版 v1.5)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -131,7 +131,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | `reviews/<rule_id>.json` | U9 | `stats.Review` | 原子 |
 | `labels/<rule_id>.jsonl` | 用户/U9 | `{"sample_id","label":"tp"\|"fp","note"}` | 用户追加 |
 | `install-manifest.json` | U10 | `model.InstallManifest` | 原子 + fsync |
-| `gc.stamp` | U7 | 空文件,mtime 即上次 GC 时间 | 只由 hook 在派生 `ballast gc` 之前 touch;派生失败时删除以便下次重试;`ballast gc` 本身不写(v1.3) |
+| `gc.stamp` | U7 | 空文件,mtime 即上次 GC 时间 | 只由 hook 在派生 `ballast gc` 之前 touch;派生失败时删除以便下次重试;`ballast gc` 本身不写(v1.3;v1.5 删除了 `runGC` 里残留的 touch,hook 与 gc 不再双写) |
 | `replay-set.txt` | 用户 | 每行一个 transcript 路径(不入库) | — |
 
 目录权限 0700,文件 0600。所有路径经 `layout.Layout` 解析,任何单元不得手拼 `~/.ballast`。
@@ -420,7 +420,7 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 - `testdata/bash-regress.json`:一个**合法的 RuleFile**,含显式 `action:"deny"` 的回归规则(如 `regress-no-long-sleep`、`regress-git-commit`),计划 B1 的 14 个回归用例写成这些规则的 `examples`(`git -C ../x commit -m m` 用 `bash.git_sub: commit` 的规则断言 `hit`)。
 - `docs/pinrule-mapping.md`:逐行引用 `/tmp/pinrule` 源码(文件:行号),按"DSL 等价 / 有意改变 / 舍弃"登记 8 项检查,并给出每个客户端的映射说明;其中 Codex 的 shell 读路径提取(`pinrule/backends/codex.py:576-612`)登记为"DSL 等价(经 `CommandNode.Reads`,覆盖面更宽)"。
 - **U11 单元验收**(只依赖契约包):`go test ./internal/model -run 'TestContentFilesDecode|TestSchemaExamplesDecode'` 通过(全部内容文件严格解码、id 合规且不重复、每条规则至少一个 hit 与一个非命中示例、message/inject 长度);人工核对默认包注入文本合计 ≤ 8000 字。
-- **U12 集成验收**(需要 U1/U2/U3/U4/U6 的真实实现与完整二进制):全部文件 `ballast lint --client all` 无错误、`ballast test-rules` 全通过(含 codex apply_patch 示例)、`ballast test-rules testdata/bash-regress.json` 全通过、默认包全文注入 ≤ 8000 字(`inject` 实测)。
+- **U12 集成验收**(需要 U1/U2/U3/U4/U6 的真实实现与完整二进制):`testdata/pinrule-parity.json`(pinrule `tests/test_checks.py`、`tests/test_bypass_pinrule.py` 的人工映射对照用例,v1.5)经 `TestPinruleParity` 全部通过,不一致处引用 `docs/pinrule-mapping.md` 的登记行;全部文件 `ballast lint --client all` 无错误、`ballast test-rules` 全通过(含 codex apply_patch 示例)、`ballast test-rules testdata/bash-regress.json` 全通过、默认包全文注入 ≤ 8000 字(`inject` 实测)。
 
 **U12 CLI 与集成**:
 
@@ -518,6 +518,20 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 ---
 
 ## 14. 修订记录
+
+### v1.5(2026-10-16,第 2 轮系统审计修复)
+
+| 审计项 | 级别 | 处理 | 涉及文件 |
+|---|---|---|---|
+| `TestSessionStartTouchesGCStamp` 比较 stamp 的 mtime,后台 gc 先跑完时间歇性失败,拖红 `accept-m1.sh` | major | 测试改为断言 gc 的可观测效果:hook 前写入已过保留期的 `audit/2000-01.jsonl`,轮询等它被删除;stamp 只断言"SessionStart 后存在" | `internal/cli/ops_e2e_test.go` |
+| §3.1/`internal/hook/doc.go` 写"`ballast gc` 不写 `gc.stamp`",`runGC` 却在末尾再 touch 一次 | minor | 采用契约的写法:删掉 `runGC` 里的 touch 与 `touchStamp`,`TestGC` 改为断言 gc **不**创建 stamp。`gc.stamp` 只由 hook 在派生 gc 之前 touch;派生失败时删除以便重试(不变) | `internal/cli/cmd_misc.go`、`internal/cli/ops_e2e_test.go`、§3.1 |
+| 计划要求的 pinrule 对照用例没有产物 | minor | 新增 `testdata/pinrule-parity.json`(126 个 pinrule 测试函数 → 183 个用例 + 8 个 `not_applicable`),`TestPinruleParity` 用 dsl 引擎核对每个检查的结果,并要求不一致处引用 `docs/pinrule-mapping.md` 中存在的章节;`PINRULE_SRC` 可选地核对测试函数清单;`accept-m1.sh` 单独运行一次。过程中补登记了 4 项:`mv` 源路径、带通配符的 `cp`、`core.hooksPath`、默认包文案语言 | `testdata/pinrule-parity.json`、`internal/cli/parity_e2e_test.go`、`scripts/accept-m1.sh`、`docs/pinrule-mapping.md` §1.1/§2.4/§2.6/§2.7/§4 |
+| `git -c core.hooksPath=… commit` 绕过 pre-commit 而 `no-skip-verify` 不拦 | minor | **不拦,登记为已知局限**:DSL 的 `flags` 与 `args_regex` 是 AND,把该形式并入同一规则只能放弃 `flags` 的逐词匹配而误报提交说明;另开规则会使默认包超过 5 条并破坏"同时生效 ≤ 12 条"的 bench 预算。该绕过不影响 `evidence-before-commit`。`no-skip-verify` 加一个 `miss` 示例钉住行为,README "已知局限"与 pinrule-mapping §2.6 说明 | `rules/default.json`、`README.md`、`docs/pinrule-mapping.md` |
+| 默认包 `message`/`inject` 全是中文 | minor | 按"面向中文使用者"处理为**有意取舍**并登记(默认包须复制到用户自己的规则文件后才生效,文案可直接改);是否改为英文或双语留给仓库所有者在公开前裁决 | `README.md`、`docs/pinrule-mapping.md` §1.1 |
+
+附带发现并登记(未改代码):`mv <被保护文件> <别处>` 的源路径不算写入目标,`no-tamper` 不命中(T0 只检测),见 `docs/pinrule-mapping.md` §2.4、`docs/trust-model.md` §2.1。
+
+导出签名:未修改已有导出签名;`cli.runGC`(包内)不再写 `gc.stamp`。
 
 ### v1.4(2026-10-16,第 1 轮系统审计修复)
 

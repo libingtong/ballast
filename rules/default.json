@@ -92,7 +92,7 @@
     },
     {
       "id": "no-skip-verify",
-      "description": "pinrule long_term 中 git --no-verify 一项的 DSL 版:禁止 git commit --no-verify / -n(含合并短选项如 -nm)。push/merge 等的跳过标志见 rules/optional/long-term.json 的 no-git-force-skip。默认影子模式(log),目标档位 deny。",
+      "description": "pinrule long_term 中 git --no-verify 一项的 DSL 版:禁止 git commit --no-verify / -n(含合并短选项如 -nm)。push/merge 等的跳过标志见 rules/optional/long-term.json 的 no-git-force-skip。已知局限:git -c core.hooksPath=… commit 同样绕过 hooks,但 DSL 的 flags 与 args_regex 是 AND,无法在不误报提交说明的前提下并入本规则,见 docs/pinrule-mapping.md §2.6。默认影子模式(log),目标档位 deny。",
       "action": "log",
       "target": "deny",
       "event": "PreToolUse",
@@ -109,6 +109,7 @@
         {"name": "global option before the subcommand", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git -C ../x commit --no-verify -m x"}}},
         {"name": "normal commit", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'no-verify mentioned in message'"}}},
         {"name": "other git subcommand", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git push --no-verify origin main"}}},
+        {"name": "known gap: hooksPath override is not matched", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git -c core.hooksPath=/dev/null commit -m x"}}},
         {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git.exe commit --no-verify -m x"}}},
         {"name": "PowerShell normal commit", "expect": "miss", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git commit -m x"}}}
       ]

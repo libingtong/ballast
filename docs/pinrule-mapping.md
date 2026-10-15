@@ -36,6 +36,7 @@
 | 异常与无法判定 | 检查函数抛异常时静默吞掉(`pinrule/checks/__init__.py:77-85`) | 三值逻辑:无法判定为 unknown,规则不命中,并累加 unknown 诊断计数与审计 | DSL 等价(更可观测) |
 | 命中后的动作 | 检查命中即拦截/反思 | 新规则默认 `log`,命中记 `would_<target>`,`ballast stats` 与 `rules promote` 决定升级(B2) | 有意改变 |
 | 状态作用域 | 单个 session 的集合 | `(repo_inst, session, agent)`;主 agent 与子 agent 互不继承(B6) | 有意改变(更严) |
+| 默认包文案语言 | pinrule 按 locale 选择中英文词表与提示(`tests/test_i18n.py`、`tests/test_locale_detect.py`) | 默认包与可选规则的 `message`、`inject` 为中文,规则匹配用的词表同时覆盖中英文。这是面向中文使用者的有意取舍(README、错误提示同为中文);默认包需要用户复制到自己的规则文件后才生效,`message` / `inject` 只是文本、不参与匹配,换成其他语言只需改自己的副本(README "默认 5 条规则"一节说明)。是否改为英文或双语由仓库所有者在公开前裁决 | 有意改变 |
 | 关键词层 | `rules.json` 的 `violation_keywords`(`data/rules.dev.example.json`)与检查函数并行 | 不迁移;不在 8 项检查范围内 | 舍弃 |
 
 ## 2. 逐项登记
@@ -100,6 +101,7 @@
 | 命令含 pinrule 状态文件路径(`~/.pinrule/{session-state,violations.jsonl,rules.json,config.json}`,`bypass_pinrule.py:42-77`)并写入它 | `no-tamper`:`path` 列表含 `**/.ballast/**`、`~/.ballast/**`,对 Bash/PowerShell 取解析出的写入目标 | DSL 等价 |
 | 命令含内部字段名(`last_test_pass_ts`、`pending_bg_tasks` 等,`bypass_pinrule.py:33-39`) | 不匹配字段名:Ballast 的状态与证据都在被保护路径下,任何写入都落在路径上 | 舍弃 |
 | 写操作信号不含 `cp/mv/rm`,避免拦合法备份和轮转(`bypass_pinrule.py:79-84`) | `cp`、`mv`、`install`、`rsync`、`rm`、`truncate`、`touch`、`sed -i`、`dd of=`、`tee`、重定向都产生写入目标,因而命中;合法维护走 `ballast` CLI,它在进程内写文件,不是 shell 写入目标 | 有意改变(更严) |
+| `mv` 把状态文件搬走(`mv ~/.pinrule/rules.json /tmp/x`)不在 pinrule 的写操作信号里,pinrule 同样放行 | `mv` 的**目标**是写入目标;**源路径**不算(bashparse 契约:`cp/mv/install SRC.. DEST` 只取 DEST),所以 `mv ~/.ballast/rules.json /tmp/x` 与 `mv ~/.ballast /tmp/b` 不命中 `no-tamper`;`rm`、`cp` 到被保护路径、重定向、`sed -i` 等都命中。T0 本来就只检测、不是安全边界(T1 的 `denyWrite` 才能拦住) | 有意改变(已知局限) |
 | 重定向写入排除 `/dev/null` 等丢弃路径(`bypass_pinrule.py:107-111`) | bashparse 的 `Writes` 同样排除 `/dev/null` | DSL 等价 |
 | `python -c` 内的 `>` 是比较运算符,跳过重定向检测(`bypass_pinrule.py:113-114`、`:168`、`:178`) | AST 不会把字符串里的 `>` 当重定向 | DSL 等价 |
 | Python 写接口:`.write_text`、`.write`、`json.dump`、`os.system`、`shutil`…(`bypass_pinrule.py:90-105`) | 不识别语言内写入(dsl-semantics §14);T0 本来就不是安全边界,T1 由沙箱 `denyWrite` 兜底 | 舍弃 |
@@ -133,6 +135,7 @@
 | pinrule 行为(源码) | Ballast | 类别 |
 |---|---|---|
 | `git commit` 带 `--no-verify`(`long_term.py:70-74`) | 默认 `no-skip-verify`:`git_sub: commit`,`flags: [--no-verify, -n]`;`git -C ../x commit` 等全局参数被跳过 | DSL 等价 |
+| (原实现没有)`git -c core.hooksPath=<路径> commit`、`git --config-env=core.hooksPath=<变量> commit` 把 hooks 目录指到别处,与 `--no-verify` 效果相同 | **不拦,登记为已知局限**。DSL 的同一个 `bash` 匹配器里 `flags` 与 `args_regex` 是 AND,没有"或":把 `-c core.hooksPath=…` 并进 `no-skip-verify` 只能改用 `args_regex` 匹配 `--no-verify` / `-n`,而 `args_regex` 看到的是空格拼接后的字面值,`git commit -m "别用 -n 跳过"` 这类提交说明会误报;另开一条规则则使默认包超过 5 条,并使"同时生效不超过 12 条"的预算(bench 的 12 条场景)失效。该绕过仍受 `evidence-before-commit` 约束:提交前必须有与待提交内容一致的 `ballast verify` 记录,与 git hooks 是否运行无关;服务端 CI 才是最终裁判。`no-skip-verify` 的 `examples` 里有一个 `miss` 示例钉住这一行为 | 有意改变(已知局限) |
 | (原实现没有)`-n` 与合并短选项如 `-anm` | `no-skip-verify` 新增 | 有意改变(新增) |
 | `git push\|merge\|rebase\|tag` 带 `--no-verify`、`--force`、`--skip-hooks`(`long_term.py:70-74`) | 可选 `no-git-force-skip`;`--force` 是精确标志匹配,`--force-with-lease` 不命中 | DSL 等价 |
 | `--force(?!-with-lease)` 前瞻(`long_term.py:72`) | 标志精确匹配代替前瞻 | 有意改变(RE2) |
@@ -159,6 +162,7 @@
 | `if turn_idx >= 400` 一类切分边界硬编码(`testset.py:53`) | `no-testset-leakage` | DSL 等价 |
 | 长 hash 作为分支条件或赋给 `case_id`(`testset.py:60-64`) | `no-testset-leakage` | DSL 等价 |
 | 变量名带测试集语义的列表里含长 hex(`testset.py:71-74`) | `no-testset-leakage` | DSL 等价 |
+| `cp eval/cache/*.json train/cache/` 这类带通配符的命令同样命中(`testset.py:43`) | 未展开的通配符是动态词,`args_regex` 不匹配时结果为 unknown(规则不命中,记 `bash:dynamic_args` 诊断);写成具体文件名则命中。其他带 `args_regex` 的规则同理 | 有意改变(三值逻辑) |
 | 对描述上下文(文档、数据、测试目录、探针)豁免(`testset.py:84-86`) | `path` 列表级取反 glob | DSL 等价 |
 | `python -c` 命令头豁免(`testset.py:91-97`) | 内容规则只扫描文件编辑工具的新内容,不涉及 Bash | DSL 等价 |
 | 对 Bash 命令文本扫描上述 1、2、5、6、7 号模式(`testset.py:82`、`:88-90`) | 不扫描 shell 命令文本 | 舍弃 |
@@ -212,5 +216,6 @@
 
 - `go test ./internal/model -run 'TestContentFilesDecode|TestSchemaExamplesDecode'`:全部内容文件严格解码,id 合规且不重复,每条规则至少一个 hit 与一个非命中示例,message ≤ 300 字、inject ≤ 400 字。
 - 默认包 5 条规则的 `inject` 文本合计 330 字(核对方法:对 `rules/default.json` 统计每条 `inject.text`(字符串形式取全文)的 Unicode 码点数之和,上限 `model.BudgetSessionStart = 8000`)。
+- `testdata/pinrule-parity.json`:计划"完成条件 1"要求的对照用例。逐条对应 pinrule 的 `tests/test_checks.py`(92 个)与 `tests/test_bypass_pinrule.py`(34 个)测试函数:每个函数要么有一到多个 `cases`(输入、pinrule 的期望、对应的 Ballast 规则及其求值结果),要么在 `not_applicable` 里写明理由(pinrule 的检查函数注册表、`violations.jsonl` 与 `trigger_key` 属于 pinrule 内部,不迁移)。Ballast 与 pinrule 结果不同的用例必须在 `divergence` 里引用本文件的"有意改变"或"舍弃"行(如 `§2.2`),并给出同一意图在 Ballast 阈值下的 `adapted` 变体。`go test ./internal/cli -run TestPinruleParity`(`scripts/accept-m1.sh` 会单独跑一次)用 dsl 引擎逐条核对;设置环境变量 `PINRULE_SRC=<pinrule 源码目录>` 时还会核对测试函数清单与 pinrule 源码一致。
 - 集成验收(U12,需要真实的适配器、路径服务与解析器):`ballast lint --client all` 对所有内容文件无错误,`ballast test-rules` 对所有内容文件与 `testdata/bash-regress.json` 全部通过。
 - `testdata/bash-regress.json` 的 14 个回归用例(计划 B1)与规则的对应关系:第 1–12 例与第 14 例是 `regress-no-long-sleep` 的 `examples`(名字以序号开头),第 13 例 `git -C ../x commit -m m` 是 `regress-git-commit` 的 `hit`。该文件另有写入目标、循环、sudo、管道、`eval`/解析失败的回归规则。

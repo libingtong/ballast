@@ -205,6 +205,8 @@ ballast test-rules ~/.ballast/rules.json
 | `no-skip-verify` | PreToolUse | 不得用 `--no-verify` / `-n` 跳过 git hooks |
 | `no-tamper` | PreToolUse | 不得改写 Ballast 的规则、状态、证据,或客户端的 hook 配置(文件工具和 shell 写入都覆盖) |
 
+默认包需要你把它**复制**到自己的规则文件(`~/.ballast/rules.json` 或 `<repo>/.ballast/rules.json`)后才生效。它的 `message`、`inject` 文案是中文——这是面向中文使用者的有意取舍,只会影响 Agent 看到的提示语言,不参与匹配;如果你的团队用其他语言,直接改自己副本里的这两个字段即可(改完用 `ballast lint` 和 `ballast test-rules` 复查)。个人偏好类规则(如 `chinese_plain`)不在默认包里。
+
 ## 可选规则
 
 放在 `rules/optional/`,按需复制到自己的规则文件里(同时生效的规则不能超过 12 条):
@@ -316,10 +318,12 @@ git 在提交阶段会把 `GIT_INDEX_FILE` 指向真正要提交的索引,`commi
 - **`git add … && git commit …` 写在同一条命令里**会被判为证据过期(Ballast 不模拟同一命令里前序节点的副作用)。请分两次执行。
 - **新鲜度只看已跟踪文件**。新建的文件要先 `git add` 再 `verify`;测试依赖未跟踪文件的情况交给 CI。
 - **shell 的读写目标只覆盖列出的常见命令**。`python -c "open(...).write()"` 这类语言内写入不会被识别;`find … | xargs cat` 之类的读取不计入"已读"。后者只会让 `read-before-edit` 更严,不会更松。
+- **`git -c core.hooksPath=<路径> commit` 能绕过 git hooks**(包括 `hooks/pre-commit` 模板),默认的 `no-skip-verify` 只匹配 `--no-verify` / `-n`,不拦它:DSL 里 `flags` 与 `args_regex` 是 AND,无法在不误报提交说明的前提下并入同一条规则,理由见 [`docs/pinrule-mapping.md`](docs/pinrule-mapping.md) §2.6。`evidence-before-commit` 不受影响:提交前仍要有一致的 `ballast verify` 记录,与 hooks 是否运行无关。
+- **`no-tamper` 不拦"搬走"**:`mv ~/.ballast/rules.json /tmp/x` 的源路径不算写入目标(只有目标算),所以不命中;这是 T0 只检测不防止的一个具体表现,见 [`docs/trust-model.md`](docs/trust-model.md)。
 - `flags` 匹配不知道哪些选项带值(`git commit -m -n` 会把 `-n` 当作标志)。
 - Codex 上字符串形式的 `apply_patch <<EOF` 仍被当作 shell 命令而不是文件编辑。
 - 磁盘写满会使强制失效;审计与 `doctor` 会告警。
-- 升级前留下的规则缓存(`~/.ballast/cache/rules-*.json`)不会自动回收,可以手动删除,下次加载会自动重建。
+- 规则缓存(`~/.ballast/cache/rules-*.json`)由每天一次的 `ballast gc`(SessionStart 派生的后台进程)回收超过 7 天且不再被引用的文件,也可以手动删除,下次加载会自动重建。`gc.stamp` 只由 hook 在派生 gc 前更新,`ballast gc` 自己不写它。
 
 ## 开发与测试
 

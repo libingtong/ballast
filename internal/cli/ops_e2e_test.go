@@ -159,6 +159,11 @@ func TestAuditLint(t *testing.T) {
 
 func TestGC(t *testing.T) {
 	s := newSandbox(t)
+	// The sandbox pre-creates a fresh gc.stamp; remove it so we can tell
+	// whether `ballast gc` writes one.
+	if err := os.Remove(filepath.Join(s.sb.BallastHome, "gc.stamp")); err != nil {
+		t.Fatal(err)
+	}
 	old := filepath.Join(s.sb.BallastHome, "audit", "2000-01.jsonl")
 	writeFile(t, old, "")
 	recent := filepath.Join(s.sb.BallastHome, "audit", time.Now().UTC().Format("2006-01")+".jsonl")
@@ -179,14 +184,19 @@ func TestGC(t *testing.T) {
 	if _, err := os.Stat(recent); err != nil {
 		t.Errorf("gc deleted the current audit file: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(s.sb.BallastHome, "gc.stamp")); err != nil {
-		t.Errorf("gc should refresh gc.stamp: %v", err)
+	// gc.stamp belongs to the hook (architecture.md §3.1): `ballast gc` must
+	// not create it.
+	if _, err := os.Stat(filepath.Join(s.sb.BallastHome, "gc.stamp")); err == nil {
+		t.Error("`ballast gc` must not write gc.stamp")
 	}
 	s.mustExit(2, "", "", "gc", "now")
 }
 
 // TestSessionStartTouchesGCStamp: the first SessionStart claims the daily GC
-// slot (gc.stamp) before spawning the detached `ballast gc`.
+// slot (gc.stamp) before spawning the detached `ballast gc`. The stamp is
+// asserted only as "exists after the hook"; that the detached gc ran is
+// asserted through its observable effect (an expired audit file is deleted),
+// never through the stamp's mtime, which would race with the child.
 func TestSessionStartTouchesGCStamp(t *testing.T) {
 	s := newSandbox(t)
 	installE2ERules(t, s)
@@ -194,21 +204,22 @@ func TestSessionStartTouchesGCStamp(t *testing.T) {
 	if err := os.Remove(stamp); err != nil {
 		t.Fatal(err)
 	}
+	expired := filepath.Join(s.sb.BallastHome, "audit", "2000-01.jsonl")
+	writeFile(t, expired, "")
 	wantJSON(t, "SessionStart", s.hook("claude-code", "SessionStart", map[string]any{"session_id": "g1", "cwd": s.work, "source": "startup"}))
-	fi, err := os.Stat(stamp)
-	if err != nil {
+	if _, err := os.Stat(stamp); err != nil {
 		t.Fatalf("SessionStart should touch gc.stamp: %v", err)
 	}
-	// The detached gc refreshes the stamp when it is done; wait for that so
-	// the sandbox is not removed under a running child.
-	deadline := time.Now().Add(5 * time.Second)
+	// Wait for the detached gc so the sandbox is not removed under a running
+	// child.
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		if cur, err := os.Stat(stamp); err == nil && !cur.ModTime().Equal(fi.ModTime()) {
+		if _, err := os.Stat(expired); err != nil {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Error("the detached `ballast gc` did not run")
+	t.Error("the detached `ballast gc` did not run (expired audit file still present)")
 }
 
 func TestConfigShow(t *testing.T) {
