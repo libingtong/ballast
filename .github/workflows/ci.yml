@@ -1,0 +1,333 @@
+# Ballast CI:三平台构建 / 测试 / 验收脚本 / bench 门槛,外加多语言真实矩阵。
+#
+# 约定(docs/architecture.md §8.3、§11):
+#   - 所有 action 固定到具体版本号;Go 版本取自 go.mod。
+#   - `go test` 一律 GOPROXY=off(依赖先由 `go mod download` 拉取一次),测试不得联网。
+#   - 测试自己把 HOME / BALLAST_HOME / CLAUDE_CONFIG_DIR / CODEX_HOME / HERMES_HOME /
+#     BALLAST_INSTALL_ROOT / GIT_CONFIG_GLOBAL 等重定向到临时目录;CI 不运行真实的
+#     claude / codex / cursor / hermes 客户端,也不触碰任何真实用户配置。
+#   - scripts/accept-m1..m4.sh、scripts/bench.sh、scripts/matrix.sh 由验收脚本任务维护;
+#     脚本尚不存在时跳过并打印 notice,存在后即成为硬性门槛。
+#   - 脚本统一用 `bash <脚本>` 调用,不依赖可执行位;Windows 用 Git Bash(shell: bash)。
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOFLAGS: -mod=readonly
+  GIT_CONFIG_NOSYSTEM: "1"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # 与平台无关的静态检查,以及三个目标系统的交叉 vet。
+  lint:
+    name: 静态检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 检出
+        uses: actions/checkout@v4.2.2
+
+      - name: 安装 Go(版本取自 go.mod)
+        uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 预取依赖
+        run: go mod download
+
+      - name: gofmt
+        run: |
+          out="$(gofmt -l ./internal ./cmd ./scripts)"
+          if [ -n "$out" ]; then
+            echo "以下文件未经 gofmt:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet(linux / windows / darwin)
+        run: |
+          go vet ./...
+          GOOS=linux go vet ./...
+          GOOS=windows go vet ./...
+          GOOS=darwin go vet ./...
+
+      - name: go.mod / go.sum 不得变化
+        run: git diff --exit-code -- go.mod go.sum
+
+      - name: 公开仓库卫生检查(本机绝对路径)
+        run: |
+          # 只允许出现在 Windows / macOS 路径样例里的 /Users/ 由测试数据承担;
+          # 文档与脚本中不得出现形如 /Users/<名字>/... 的真实家目录。
+          if git grep -nIE '(^|[^A-Za-z:}])/Users/[a-z][A-Za-z0-9._-]*/(NewCode|Documents|Desktop|Library|\.claude|\.ballast)' -- . ':!internal/*_test.go'; then
+            echo "发现本机绝对路径,请改为相对路径或占位符"
+            exit 1
+          fi
+
+      - name: YAML 语法检查(工作流)
+        run: |
+          ruby -ryaml -e 'ARGV.each { |f| YAML.load_file(f); puts "ok " + f }' .github/workflows/*.yml
+
+  test:
+    name: 测试(${{ matrix.os }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: 检出
+        uses: actions/checkout@v4.2.2
+
+      - name: 安装 Go(版本取自 go.mod)
+        uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 预取依赖(此后全部离线)
+        run: go mod download
+
+      - name: 工具链版本
+        run: |
+          go version
+          git --version
+          bash --version | head -n 1
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test(race)
+        env:
+          GOPROXY: "off"
+        run: |
+          race="-race"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # Windows 上 -race 需要 cgo(mingw gcc)。有 gcc 就开启;没有就退回不带 -race
+            # 的测试,并在日志里明确标注原因。
+            if command -v gcc >/dev/null 2>&1; then
+              export CGO_ENABLED=1
+            else
+              race=""
+              echo "::notice title=Windows 跳过 -race::runner 上没有 gcc,-race 依赖 cgo,改用不带 -race 的测试"
+            fi
+          fi
+          go test $race -count=1 ./...
+
+      - name: 架构检查(internal/archtest)
+        env:
+          GOPROXY: "off"
+        run: go test -count=1 -v ./internal/archtest/...
+
+      - name: 验收脚本 accept-m1 .. accept-m4
+        env:
+          GOPROXY: "off"
+        run: |
+          for n in 1 2 3 4; do
+            script="scripts/accept-m${n}.sh"
+            if [ -f "$script" ]; then
+              echo "::group::${script}"
+              bash "$script"
+              echo "::endgroup::"
+            else
+              echo "::notice title=跳过 ${script}::${script} 尚不存在,约定路径见 docs/architecture.md §8.3"
+            fi
+          done
+
+      - name: bench 门槛(p95 不超过 30ms)
+        env:
+          GOPROXY: "off"
+        run: |
+          if [ -f scripts/bench.sh ]; then
+            bash scripts/bench.sh
+          else
+            echo "::notice title=跳过 scripts/bench.sh::scripts/bench.sh 尚不存在,约定路径见 docs/architecture.md §8.3"
+          fi
+
+      # 原生 Windows 的 PowerShell 工具回归:用显式 deny 规则(testdata/bash-regress.json)
+      # 驱动真实二进制,断言 `Start-Sleep -Seconds 300` 被拒绝而短 sleep 放行。
+      # 全部在临时目录里进行,环境变量全部重定向。
+      - name: PowerShell 回归(仅 Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GOPROXY: "off"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tmp = Join-Path $env:RUNNER_TEMP 'ballast-ps-regress'
+          New-Item -ItemType Directory -Force -Path "$tmp\bin", "$tmp\home", "$tmp\work" | Out-Null
+          go build -o "$tmp\bin\ballast.exe" ./cmd/ballast
+          if ($LASTEXITCODE -ne 0) { throw 'go build 失败' }
+          Copy-Item testdata/bash-regress.json "$tmp\home\rules.json"
+
+          $env:HOME = "$tmp\home"
+          $env:USERPROFILE = "$tmp\home"
+          $env:BALLAST_HOME = "$tmp\home"
+          $env:CLAUDE_CONFIG_DIR = "$tmp\claude"
+          $env:CODEX_HOME = "$tmp\codex"
+          $env:HERMES_HOME = "$tmp\hermes"
+          $env:BALLAST_INSTALL_ROOT = "$tmp\root"
+          $env:GIT_CONFIG_GLOBAL = "$tmp\gitconfig"
+
+          function Invoke-Hook([string]$command) {
+            $payload = [ordered]@{
+              session_id      = 'ci-ps-regress'
+              cwd             = "$tmp\work"
+              hook_event_name = 'PreToolUse'
+              tool_name       = 'PowerShell'
+              tool_input      = @{ command = $command }
+            } | ConvertTo-Json -Compress -Depth 5
+            Push-Location "$tmp\work"
+            try {
+              $out = $payload | & "$tmp\bin\ballast.exe" hook --client claude-code --event PreToolUse
+              return @{ Code = $LASTEXITCODE; Out = ($out -join "`n") }
+            } finally { Pop-Location }
+          }
+
+          $deny = Invoke-Hook 'Start-Sleep -Seconds 300'
+          if ($deny.Code -ne 0 -or $deny.Out -notmatch '"permissionDecision":"deny"') {
+            throw "Start-Sleep 300 应被拒绝,实际 exit=$($deny.Code) stdout=$($deny.Out)"
+          }
+          $allow = Invoke-Hook 'Start-Sleep -Seconds 1'
+          if ($allow.Code -ne 0 -or $allow.Out.Trim() -ne '') {
+            throw "Start-Sleep 1 应放行(stdout 为空),实际 exit=$($allow.Code) stdout=$($allow.Out)"
+          }
+          Write-Host 'PowerShell 回归通过'
+
+  # 多语言证据矩阵的真实模式:缺少工具链即失败(B3 矩阵约定)。
+  #   Linux   :go node python rust maven gradle dotnet ruby(8 栈)
+  #   macOS   :swift
+  #   Windows :dotnet(另跑一遍)
+  # 具体跑哪些栈由 scripts/matrix.sh 按平台决定;本 job 只负责装好工具链。
+  matrix-real:
+    name: 真实矩阵(${{ matrix.os }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: 检出
+        uses: actions/checkout@v4.2.2
+
+      - name: 安装 Go(版本取自 go.mod)
+        uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 预取依赖
+        run: go mod download
+
+      # ---- Linux:8 种栈的工具链(swift 不在 Linux 上跑)----
+      - name: Node.js
+        if: runner.os == 'Linux'
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: "22.16.0"
+
+      - name: Python
+        if: runner.os == 'Linux'
+        uses: actions/setup-python@v5.6.0
+        with:
+          python-version: "3.12.10"
+
+      - name: Java(maven / gradle 的运行时)
+        if: runner.os == 'Linux'
+        uses: actions/setup-java@v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21.0.7+6"
+
+      - name: Gradle
+        if: runner.os == 'Linux'
+        uses: gradle/actions/setup-gradle@v4.4.1
+        with:
+          gradle-version: "8.14.3"
+
+      - name: .NET SDK
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        uses: actions/setup-dotnet@v4.3.1
+        with:
+          dotnet-version: "8.0.411"
+
+      - name: Ruby
+        if: runner.os == 'Linux'
+        uses: ruby/setup-ruby@v1.245.0
+        with:
+          ruby-version: "3.3.8"
+
+      - name: Rust 与 Maven 与测试辅助包
+        if: runner.os == 'Linux'
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          if ! command -v mvn >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y maven
+          fi
+          python -m pip install --upgrade pip pytest
+          gem install bundler rake rspec --no-document
+
+      - name: 核对工具链齐全(缺任何一个即失败)
+        run: |
+          set -e
+          case "$RUNNER_OS" in
+            Linux)   need="go node npm python rustc cargo mvn gradle dotnet ruby bundle" ;;
+            macOS)   need="go swift" ;;
+            Windows) need="go dotnet" ;;
+          esac
+          missing=""
+          for tool in $need; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "ok   $tool -> $(command -v "$tool")"
+            else
+              echo "缺失 $tool"
+              missing="$missing $tool"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error title=工具链缺失::$RUNNER_OS 缺少:$missing"
+            exit 1
+          fi
+          go version
+          case "$RUNNER_OS" in
+            Linux)
+              node --version; python --version; rustc --version; mvn -version | head -n 1
+              gradle --version | sed -n 1,3p; dotnet --version; ruby --version ;;
+            macOS)   swift --version ;;
+            Windows) dotnet --version ;;
+          esac
+
+      - name: matrix.sh --mode real
+        env:
+          GOPROXY: "off"
+        run: |
+          if [ -f scripts/matrix.sh ]; then
+            bash scripts/matrix.sh --mode real
+          else
+            echo "::notice title=跳过 scripts/matrix.sh::scripts/matrix.sh 尚不存在,约定路径见 docs/architecture.md §8.3"
+          fi

@@ -1,0 +1,146 @@
+# Ballast 信任模型与 org 部署指南
+
+> 依据:`docs/ballast-plan.md` B0 与 A13–A20、`docs/architecture.md` §3.3 与 §5.5、`internal/install`(`org render`、`doctor`)。
+>
+> **标注约定**:凡写着「**未核验,待 M0b**」的内容,表示只有文档层面的依据,没有在真实托管环境里实测过。M0b(在一次性 Linux 容器里写 `/etc/claude-code/managed-settings.json` 并实测)属于 P2,**尚未执行**。部署前请自行在测试环境里逐项验证,不要把本文当作已经证明的保证。
+
+## 1. 一句话
+
+**服务端 CI 是最终裁判。** 会话内的 Ballast 规则用来引导 agent、减少无效往返;它不替代 CI,也不保证交付质量。`ballast doctor` 每次都会重申这一点。
+
+## 2. 两个层级
+
+| 层级 | 适用条件 | 能兑现的保证 |
+|---|---|---|
+| **T1 托管强制** | macOS / Linux / WSL2,**且**组织部署了托管设置 | 设计目标:agent **不可写**规则、状态、证据和二进制。**未核验,待 M0b** |
+| **T0 尽力而为** | 个人安装、没有托管部署,或原生 Windows | 篡改**可检测、不可防** |
+
+`ballast doctor` 的第一行就是当前层级;处于 T0 时会列出缺失的 T1 组件(托管 hook、`allowManagedHooksOnly`、sandbox、`permissions.deny`、MCP 白名单)。
+
+### 2.1 T0:为什么只能检测
+
+hook、规则文件、状态与证据文件都和 agent 以**同一个用户**运行,agent 在原则上能改写它们。Ballast 在 T0 下提供的是"发现",不是"阻止":
+
+- 默认规则 `no-tamper` 检查文件工具和 shell 对 Ballast 规则、状态、证据以及客户端 hook 配置的写入,命中会写入审计。
+- 证据只认 `ballast verify` 写下的退出码与内容快照,不采信输出文本;快照与待提交内容不一致就判为过期。
+- 审计日志记录每次命中与诊断(见 `ballast audit lint`、`ballast stats`)。
+- 这些检测本身也运行在 agent 可触及的环境里:`python -c "open(...).write()"` 之类的语言内写入不会被 shell 解析识别(已知局限)。**不要把 T0 当成安全边界。**
+
+原生 Windows 上 Claude Code 没有沙箱,因此永远是 T0(**文档依据,未核验,待 M0b**)。
+
+### 2.2 T1:由哪些部分组成
+
+T1 完全依赖客户端的**托管设置**机制。设计中的组成如下(全部**未核验,待 M0b**):
+
+1. **托管 hook**:命令用 root 拥有的绝对路径(例如 `/usr/local/libexec/ballast/ballast`),不经过 `PATH`,也不调用 agent 能改的脚本。
+2. **`allowManagedHooksOnly: true`**:只运行托管层的 hook,阻止用户层、项目层、本地层和插件 hook(托管设置强制启用的插件 hook 例外)。文档称低层的 `disableAllHooks` 不能关闭托管 hook。
+3. **sandbox**:`enabled: true`、`allowUnsandboxedCommands: false`、`failIfUnavailable: true`、`excludedCommands: []`,并在 `filesystem.denyWrite` 里列出受保护路径。
+4. **`permissions.deny`**:对受保护路径禁止 `Edit`、`Write`、`NotebookEdit`,并设 `allowManagedPermissionRulesOnly: true` 使低层不能放宽。
+5. **MCP 白名单**:见下文"残余风险"。
+
+**受保护路径**(`org render` 默认包含前四项):
+
+- org 规则目录(`<托管目录>/ballast/`);
+- `~/.ballast/`(state、evidence、audit、cache、backups、install-manifest);
+- `<repo>/.ballast/`(`rules.json`、`project.json`);
+- Ballast 二进制所在目录;
+- `~/.claude/settings*.json`(同样由 `org render` 写入);`<repo>/.claude/settings*.json` 目前**不在**模板里,需要管理员自行追加。
+
+### 2.3 T1 的残余风险
+
+这些是设计阶段就已识别、并接受的边界:
+
+- **沙箱只覆盖 Bash**。文件工具、MCP server 和 hook 都在沙箱外运行,所以文件工具要靠 `permissions.deny`,MCP 要靠白名单(**文档依据,未核验,待 M0b**)。
+- **MCP server 在沙箱外运行**。白名单内的 MCP 工具如果有写文件能力,仍然能写受保护路径——这是残余风险,部署时必须逐个评估白名单内的 server。
+- **原生 Windows 没有沙箱**,无法达到 T1。
+- 托管值不能被低层覆盖,但"少数安全键例外:低层更严的值仍生效"(**未核验,待 M0b**)。
+- ConfigChange 事件只覆盖 Claude 设置与 skills,**不会**监视任意 Ballast 文件,部分托管刷新也不触发它(文档依据)。
+- 磁盘写满会使 hook 按"任何异常都放行"的设计失效强制。
+
+## 3. verify 链路与信任
+
+- `ballast verify` 一律**后台**运行:detached 的 runner 执行 `project.json` 里的命令,写下 `VerifyRecord`(退出码、起止快照 `S_start`/`S_end`,并 fsync);证据标注 `tier:"T0"`。
+- T0 下 agent 自己也能运行 `ballast verify`,所以 agent 理论上可以让测试命令"恰好通过"。Ballast 防不住这一点;`project.json` 里的命令应当是项目真正的测试命令,最终由 CI 复核。
+- T1 下的设计是:agent 在沙箱里运行的 `ballast verify` 写不了证据,由 hook 在沙箱外代为发起 runner,并把测试命令本身放进 OS 沙箱执行。**这条沙箱化 runner 链路属于 P2,当前未实现。** 所以即使部署了托管设置,当前版本的 verify 证据仍然是 T0 强度。
+- 新鲜度判断:`S_end == C`(验证结束时的内容快照等于将要提交的内容),并要求所有 required 的验证最新一条记录有效通过。工作区之后任何变化都会让它自动失效,不依赖编辑 hook。
+
+## 4. org 部署指南(**未核验,待 M0b**)
+
+下面是管理员如何使用 `ballast org render` 的步骤。命令的输出格式有单元测试覆盖,但"这些键在真实 Claude Code 托管环境里是否按预期生效"**未核验,待 M0b**。请先在一次性的测试机或容器里走通,再推广。
+
+### 4.1 前提
+
+- 目标是 Claude Code(`org render` 目前只渲染 `claude-code`)。
+- macOS / Linux / WSL2。原生 Windows 没有沙箱,模板对它没有 T1 意义。
+- 一个**root 拥有、普通用户不可写**的 Ballast 二进制位置,例如 `/usr/local/libexec/ballast/ballast`。
+
+### 4.2 步骤
+
+1. **放置二进制**:把构建好的 `ballast` 复制到 root 拥有的目录,父目录也必须是 root 拥有且不可被普通用户写入:
+
+   ```sh
+   sudo install -d -o root -g root -m 0755 /usr/local/libexec/ballast
+   sudo install -o root -g root -m 0755 ./ballast /usr/local/libexec/ballast/ballast
+   ```
+
+2. **渲染模板**(只打印,不写系统路径):
+
+   ```sh
+   ballast org render --binary /usr/local/libexec/ballast/ballast > ballast-managed.json
+   ```
+
+   输出包含:每个 Claude Code 原生事件的托管 hook(`command` + `args`)、`allowManagedHooksOnly`、`sandbox`、`permissions.deny` 与 `allowManagedPermissionRulesOnly`。
+
+3. **人工审阅并补全**:
+   - 核对 `sandbox.filesystem.denyWrite` 与 `permissions.deny` 里的受保护路径,按需追加(例如 `<repo>/.claude/settings*.json`)。
+   - **MCP 白名单需要手工补充**:CLI 没有提供对应参数。键名要按 Claude 托管设置文档核对(架构文档里的 open question,**未核验,待 M0b**)。只放行确实需要的 server,并评估它们的写文件能力。
+
+4. **下发**:由管理员用自己的流程(配置管理、MDM、手工)把内容放到托管目录:
+
+   | 平台 | 托管目录 |
+   |---|---|
+   | macOS | `/Library/Application Support/ClaudeCode` |
+   | Linux / WSL2 | `/etc/claude-code` |
+   | Windows | `C:\Program Files\ClaudeCode` |
+
+   写成 `managed-settings.d/ballast.json`(或合并进 `managed-settings.json`)。也可以让 Ballast 代写:
+
+   ```sh
+   sudo ballast org render --binary /usr/local/libexec/ballast/ballast --write --i-am-admin
+   ```
+
+   `--write` 只在以 root 运行**并且**带 `--i-am-admin` 时才写 `<托管目录>/managed-settings.d/ballast.json`,否则退出码 4。Ballast 不会在别的场合写系统路径。
+
+5. **放 org 规则**:把 org 层规则放到 `<托管目录>/ballast/rules.json`。org 规则整体不可变:repo、user 层出现同 id 规则时会被忽略并记 `rule_shadowed`。`ballast lint --layer org` 要求 org 层自身不超过 12 条。
+
+6. **验证**(每台机器都做,**不要跳过**):
+
+   ```sh
+   ballast doctor
+   ```
+
+   确认 `claude.managed_duplicate` 等检查为 ok,层级输出里不再缺失 T1 组件。
+
+### 4.3 上线后的行为
+
+- 已部署托管 Ballast 时,用户层 `ballast install --client claude-code` 会被拒绝(退出码 1),避免托管 hook 与用户 hook 因为"hook 在各层合并执行"而重复运行。
+- 其余客户端(Codex、Cursor、Hermes)没有托管层支持,仍然是 T0。
+
+### 4.4 部署后的验收清单(**待 M0b 才会成为自动化测试**)
+
+计划中的 `boundary-t1.sh` 与 `boundary-t0.sh` 尚未编写。在此之前,建议在测试容器里手工确认:
+
+| 项 | T1 期望 | T0 期望 |
+|---|---|---|
+| agent 用 `Edit` / `Write` 改 org 规则、`~/.ballast`、`<repo>/.ballast` | 被拒绝 | 能写入,但被 `no-tamper` 命中并写审计 |
+| agent 用 `echo >`、`sed -i`、`python -c` 写受保护路径 | 沙箱内被拒绝 | `echo >`、`sed -i` 被检测并审计;`python -c` 不被识别 |
+| agent 把伪造的 `ballast` 放进 `PATH` | 托管 hook 用绝对路径,不受影响 | 不适用(用户层安装同样用绝对路径) |
+| agent 直接写 evidence 文件 | 沙箱内被拒绝 | 能写入;`verify --check` 仍要求快照一致 |
+| agent 通过 MCP 写受保护路径 | 只能靠白名单收口(残余风险) | 不适用 |
+| 用户层 `disableAllHooks` | 不能关闭托管 hook | 能关闭 |
+
+## 5. 一页纸总结
+
+- 个人使用:T0。把它当作"行为教练 + 可审计记录",而不是安全产品。
+- 团队 / 组织:想要 T1,必须由管理员部署托管设置。**这条路径尚未在真实托管环境验证(待 M0b),沙箱化 runner 也尚未实现。**
+- 无论哪个层级:**CI 是最终裁判**。

@@ -20,7 +20,7 @@ Go 语言选择在"hook 本体"层面成立;需要决策的是 git 快照的实�
 
 | 项 | 值 |
 |---|---|
-| 机型 | Mac16,10(主机名 DylandeMac-mini),Apple M4,10 核,16GB 内存 |
+| 机型 | Mac16,10,Apple M4,10 核,16GB 内存 |
 | OS | macOS 26.5(Darwin 25.5.0),arm64,APFS |
 | Go | go1.27.2 darwin/arm64 |
 | git | 2.50.1(Apple Git-155) |

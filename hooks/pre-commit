@@ -1,0 +1,64 @@
+#!/bin/sh
+# Ballast git pre-commit 模板。
+#
+# 只做一件事:调用 `ballast verify --check`,确认「将要提交的内容」有一条与之一致、
+# 且已通过的 `ballast verify` 记录。它不会在提交时重跑测试,也不会读写别的东西。
+#
+# 安装(在被保护的仓库里):
+#   cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# 或者统一放到团队共享目录后设置:
+#   git config core.hooksPath <目录>
+#
+# 说明:
+#   - git 在提交阶段把 GIT_INDEX_FILE 指向真正要提交的索引(`commit -a`、带路径提交时
+#     是临时索引),`ballast verify --check` 会读取它;本脚本不要覆盖这个变量。
+#   - 可以用 BALLAST_BIN 指定 ballast 的绝对路径;缺省从 PATH 查找。
+#   - 这是本地的辅助闸门:`git commit --no-verify` 可以绕过它。
+#     服务端 CI 才是最终裁判,不要把它当成交付质量的保证。
+#
+# `ballast verify --check` 的退出码:
+#   0  新鲜,放行
+#   10 过期(验证之后内容变了)    -> 拒绝提交
+#   11 没有证据                   -> 拒绝提交
+#   13 同名验证仍在运行           -> 拒绝提交(稍后重试)
+#   12 无法判定(非 git、无 project.json、快照失败等)-> 提示后放行(不让配置缺失卡住提交)
+#   其他(含 ballast 不存在)      -> 提示后放行
+
+BALLAST="${BALLAST_BIN:-ballast}"
+
+if ! command -v "$BALLAST" >/dev/null 2>&1; then
+  echo "ballast pre-commit:找不到 '$BALLAST',跳过检查(可设置 BALLAST_BIN)。" >&2
+  exit 0
+fi
+
+"$BALLAST" verify --check
+code=$?
+
+case "$code" in
+  0)
+    exit 0
+    ;;
+  10)
+    echo "ballast pre-commit:验证记录已过期,待提交内容与最近一次通过的 verify 不一致。" >&2
+    echo "  先运行 'ballast verify',用 'ballast verify --status' 确认通过后再提交。" >&2
+    echo "  新文件需要先 'git add' 再 verify;有未暂存的已跟踪改动时先 'git add -u'。" >&2
+    exit 1
+    ;;
+  11)
+    echo "ballast pre-commit:没有与待提交内容对应的 verify 记录。" >&2
+    echo "  先运行 'ballast verify',用 'ballast verify --status' 确认通过后再提交。" >&2
+    exit 1
+    ;;
+  13)
+    echo "ballast pre-commit:同名 verify 仍在运行,请等它结束('ballast verify --status')后再提交。" >&2
+    exit 1
+    ;;
+  12)
+    echo "ballast pre-commit:无法判定新鲜度(退出码 12),本次放行。可运行 'ballast verify --check' 查看原因。" >&2
+    exit 0
+    ;;
+  *)
+    echo "ballast pre-commit:'ballast verify --check' 返回了意外的退出码 $code,本次放行。" >&2
+    exit 0
+    ;;
+esac

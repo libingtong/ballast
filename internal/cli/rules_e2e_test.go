@@ -121,7 +121,8 @@ func TestTestRulesAllContentFiles(t *testing.T) {
 	if !strings.Contains(r.stdout, "0 失败") {
 		t.Errorf("test-rules summary: %s", r.stdout)
 	}
-	if strings.Contains(r.stdout, "0 通过") {
+	// Match the whole count ("test-rules: 0 通过"), not a suffix of e.g. "300 通过".
+	if strings.Contains(r.stdout, "test-rules: 0 通过") {
 		t.Errorf("no example ran: %s", r.stdout)
 	}
 	// The regression file alone, as architecture §8.3 lists it separately.
