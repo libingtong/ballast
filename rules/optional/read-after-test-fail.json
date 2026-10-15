@@ -1,0 +1,24 @@
+{
+  "$schema": "../../schema/rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "read-after-test-fail",
+      "description": "pinrule bypass_pinrule 的第二路检测(bypass_pinrule.py:129-147)的 DSL 版:最近一次 verify 失败之后,本 agent 还没读过的已存在文件就被修改(报错没看源就改)。verify_failed_since_read 取 max(该路径最后读取时间, 会话开始) 之后的失败记录;原实现只拦 Edit,这里同时覆盖 MultiEdit、Write(已存在)与 NotebookEdit。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {"tool": ["Edit", "MultiEdit", "Write", "NotebookEdit"]},
+      "when": [{"path_exists": {}}, {"verify_failed_since_read": {}}],
+      "message": "最近一次 ballast verify 失败之后,你还没有读过这个文件。先用 `ballast verify --status` 查看失败输出并读取该文件,弄清根因再修改。",
+      "inject": {"text": "verify 失败后,先读失败输出和相关源文件,弄清根因再改;不要凭报错标题直接动手。", "anchor": "verify 失败后先读再改"},
+      "examples": [
+        {"name": "edit an unread file after a failed verify", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "y"}}, "fixture": {"exists": ["src/a.go"], "failed_since_read": ["src/a.go"]}},
+        {"name": "file was read after the failure", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "y"}}, "fixture": {"exists": ["src/a.go"], "read": ["src/a.go"], "failed_since_read": []}},
+        {"name": "no failed verify", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "y"}}, "fixture": {"exists": ["src/a.go"]}},
+        {"name": "new file", "expect": "miss", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/new.go", "content": "package src\n"}}, "fixture": {"exists": [], "failed_since_read": ["src/new.go"]}},
+        {"name": "multiedit after a failure", "expect": "hit", "input": {"tool_name": "MultiEdit", "tool_input": {"file_path": "/repo/src/a.go", "edits": [{"old_string": "x", "new_string": "y"}]}}, "fixture": {"exists": ["src/a.go"], "failed_since_read": ["src/a.go"]}}
+      ]
+    }
+  ]
+}

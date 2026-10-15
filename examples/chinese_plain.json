@@ -1,0 +1,55 @@
+{
+  "$schema": "../schema/rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "chinese-plain-ratio",
+      "description": "pinrule chinese_plain 的中文占比检测(chinese_plain.py:154-167)的 DSL 版:去掉代码块后,英文词不少于 8 个且中文字符占「中文+拉丁字母」的比例低于 40% 时提醒。原实现的分母是全部可见字符并先剥了 URL、表格行、版本号、标识符与路径(chinese_plain.py:138-152),DSL 版只剥代码块,比例口径更宽松。个人偏好,不进默认包;warn 只在 Claude Code 的 Stop 上可用。",
+      "action": "warn",
+      "event": "Stop",
+      "clients": ["claude-code"],
+      "match": {
+        "text": {
+          "source": "last_assistant_message",
+          "preprocess": ["strip_code_blocks"],
+          "cjk_ratio": {"lt": 0.4},
+          "count_regex": {"regex": "\\b[A-Za-z][A-Za-z-]{2,}\\b", "gte": 8}
+        }
+      },
+      "message": "请用直白的中文汇报,不要整段英文。代码、命令和专有名词可以保留原文,但要配一句中文解释。",
+      "inject": "用直白的中文汇报,不堆英文;专有名词保留原文并配中文解释。",
+      "examples": [
+        {"name": "english paragraph", "expect": "hit", "input": {"last_assistant_message": "The build is green now and all of the integration checks finished without any problems after the refactor landed on main."}},
+        {"name": "chinese reply with a command", "expect": "miss", "input": {"last_assistant_message": "构建已经修好,`go test ./...` 全部通过,可以合并了。"}},
+        {"name": "short english ack", "expect": "miss", "input": {"last_assistant_message": "Fixed."}},
+        {"name": "english only inside a code block", "expect": "miss", "input": {"last_assistant_message": "运行下面的命令:\n```\ngo test ./... && go vet ./... && staticcheck ./...\n```\n然后告诉我结果。"}}
+      ]
+    },
+    {
+      "id": "chinese-plain-jargon",
+      "description": "pinrule chinese_plain 的术语检测(chinese_plain.py:93-106、169-212)的 DSL 版:回复正文(去掉代码块)里出现 baseline、precision、dispatcher 等英文术语而后面没有紧跟括号解释时提醒。原实现要求括号内至少 2 个中文字符(chinese_plain.py:200),DSL 版简化为「术语后紧跟全/半角左括号即视为已解释」。",
+      "action": "warn",
+      "event": "Stop",
+      "clients": ["claude-code"],
+      "match": {
+        "text": {
+          "source": "last_assistant_message",
+          "preprocess": ["strip_code_blocks"],
+          "regex": [
+            "(?i)\\b(?:F1(?: score)?|precision|recall|oracle|supervisor|heuristic|paradigm|retrieval|inference|threshold|baseline|ground\\s*truth|embedding|transformer|tokenizer|softmax|gradient|epoch|hyperparameter|mutex|semaphore|coroutine|orchestrator|orchestration|dispatcher|observer|subscriber|publisher|scheduler|executor|coordinator)\\b(?:\\s*[^\\s（(]|\\s*$)"
+          ]
+        }
+      },
+      "message": "请把英文术语换成直白的中文;必须保留原文时,在术语后用括号给一句中文解释,例如「baseline(对照基线)」。",
+      "inject": "英文术语换成直白中文;必须保留时,后面括号加一句中文解释。",
+      "examples": [
+        {"name": "bare jargon", "expect": "hit", "input": {"last_assistant_message": "这次的 baseline 比之前强很多。"}},
+        {"name": "jargon at the end", "expect": "hit", "input": {"last_assistant_message": "下一步我们看看 recall"}},
+        {"name": "explained in parentheses", "expect": "miss", "input": {"last_assistant_message": "这次的 baseline(对照基线)比之前强很多。"}},
+        {"name": "full-width parentheses", "expect": "miss", "input": {"last_assistant_message": "这次的 baseline（对照基线）比之前强很多。"}},
+        {"name": "jargon only inside inline code", "expect": "miss", "input": {"last_assistant_message": "把配置项 `baseline` 改成 2 即可。"}},
+        {"name": "no jargon", "expect": "miss", "input": {"last_assistant_message": "这次的对照基线比之前强很多。"}}
+      ]
+    }
+  ]
+}

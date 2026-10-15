@@ -1,0 +1,87 @@
+{
+  "$schema": "../schema/rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "no-testset-leakage",
+      "description": "pinrule testset 的内容扫描(testset.py:31-77 的 1、2、5、6、7 号模式)的 DSL 版:禁止把测试集结果回喂训练/记忆、在代码里按测试集 case ID 或数据切分边界写死分支。适用于文件编辑工具;路径豁免(文档、数据、测试目录、探针)同 description_context.py:26-86。领域特定,不进默认包。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "tool": ["Edit", "MultiEdit", "Write", "NotebookEdit"],
+        "path": [
+          "**/*",
+          "!**/*.{md,rst,txt,markdown,adoc,yaml,yml,json,toml,ini,csv,tsv}",
+          "!**/{tests,test,__tests__,spec}/**",
+          "!**/test_*",
+          "!**/*_test.*",
+          "!**/*.{test,spec}.*",
+          "!/tmp/**",
+          "!/var/tmp/**",
+          "!**/*{probe,scratch,sample,playground,fixture}*"
+        ],
+        "input_regex": {
+          "new_text": [
+            "(?i)\\b(?:gold_cases|gold_data|eval_cases|test_cases)[\\w.]*\\.(?:append|extend|update|write\\w*)",
+            "(?i)detail[\\w.]*\\.json[\\s\\S]{0,80}?(?:open\\s*\\([^)]*['\"]w['\"]|write_text|\\.write\\b|\\.dump\\b)",
+            "if\\s+turn_idx\\s*[><=]+\\s*\\d{2,}",
+            "(?i)\\b(?:if|elif|while|case|when)\\s+\\w+\\s*==\\s*['\"][a-f0-9]{16,}-?[a-f0-9]{0,12}['\"]|\\b(?:case_id|test_id|eval_id|gold_id|fixture_id)\\s*=\\s*['\"][a-f0-9]{16,}",
+            "(?i)\\b\\w*(?:gold|eval|test|fixture|known|case|truth)_?(?:cases?|ids?|set|examples?|failing|skip)\\w*\\s*=\\s*\\[[^\\]]*['\"][a-f0-9]{16,}"
+          ]
+        }
+      },
+      "message": "这段代码把评测/测试集的结果或 case ID 写进了被评测的逻辑(反喂、切分边界、ID 分支)。评测数据只能用来评估,不能参与训练、记忆或分支判断。",
+      "inject": "评测/测试集只用来评估:不要把它的结果回喂训练或记忆,不要按 case ID、数据切分边界写死分支。",
+      "examples": [
+        {"name": "feeding gold cases back", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/train/build.py", "old_string": "x", "new_string": "gold_cases.append(result)"}}},
+        {"name": "branch on a case id", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/run.py", "old_string": "x", "new_string": "if case_id == 'a1b2c3d4e5f60718':\n    return 1"}}},
+        {"name": "hard-coded split boundary", "expect": "hit", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/split.py", "content": "if turn_idx >= 400:\n    mode = 'eval'\n"}}},
+        {"name": "test directory is exempt", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/tests/test_split.py", "old_string": "x", "new_string": "gold_cases.append(result)"}}},
+        {"name": "docs are exempt", "expect": "miss", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/docs/eval.md", "content": "gold_cases.append(result)\n"}}},
+        {"name": "ordinary change", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/run.py", "old_string": "x", "new_string": "return model.predict(x)"}}}
+      ]
+    },
+    {
+      "id": "no-testset-cross-copy",
+      "description": "pinrule testset 的跨切分拷贝检测(testset.py:42-46)的 DSL 版:cp/mv/rsync 把 eval/test/gold 路径拷进 train/fit/memory 路径。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "bash": {
+          "cmd": ["cp", "mv", "rsync"],
+          "args_regex": "(?i)(?:eval|test|gold)\\S*\\s+(?:\\S+\\s+)*?\\S*(?:train|fit|memory)"
+        },
+        "ps": {
+          "cmd": ["copy-item", "move-item"],
+          "args_regex": "(?i)(?:eval|test|gold)\\S*\\s+(?:\\S+\\s+)*?\\S*(?:train|fit|memory)"
+        }
+      },
+      "message": "不要把评测/测试集文件拷进训练或记忆目录。评测数据必须与训练数据保持隔离。",
+      "inject": "不要把 eval/test/gold 数据拷进 train/fit/memory 目录。",
+      "examples": [
+        {"name": "copy gold into train", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "cp eval/gold.json train/"}}},
+        {"name": "rsync into memory", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "rsync -a gold_cases/ memory/"}}},
+        {"name": "PowerShell Copy-Item", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "Copy-Item eval/gold.json train/"}}},
+        {"name": "unrelated copy", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "cp README.md docs/"}}},
+        {"name": "train to train", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "cp train/a.json train/b.json"}}}
+      ]
+    },
+    {
+      "id": "no-testset-detail-append",
+      "description": "pinrule testset 的评测明细回流检测(testset.py:47-51)的 DSL 版:把 detail*.json 用 cat 追加/写入其他文件。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {"bash": {"cmd": "cat", "args_regex": "(?i)detail[\\w.]*\\.json", "writes": ["**/*"]}},
+      "message": "不要把评测明细(detail*.json)追加到其他文件;评测结果不能回流进训练数据。",
+      "inject": "评测明细 detail*.json 不能追加进训练数据。",
+      "examples": [
+        {"name": "append details to a training file", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "cat detail_1.json >> train.jsonl"}}},
+        {"name": "just reading", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "cat detail_1.json"}}},
+        {"name": "other file", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "cat notes.json >> log.txt"}}}
+      ]
+    }
+  ]
+}

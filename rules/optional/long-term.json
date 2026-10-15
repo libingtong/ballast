@@ -1,0 +1,170 @@
+{
+  "$schema": "../../schema/rules.v1.json",
+  "version": 1,
+  "rules": [
+    {
+      "id": "no-todo-marker",
+      "description": "pinrule long_term 的 TODO/补丁意图注释检测(long_term.py:81-96)。文档、数据/配置、测试目录与测试文件名、/tmp、探针/样本文件豁免(description_context.py:26-86 的路径分类,以列表级取反 glob 表达)。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "tool": ["Edit", "MultiEdit", "Write", "NotebookEdit"],
+        "path": [
+          "**/*",
+          "!**/*.{md,rst,txt,markdown,adoc,yaml,yml,json,toml,ini,csv,tsv}",
+          "!**/{tests,test,__tests__,spec}/**",
+          "!**/test_*",
+          "!**/*_test.*",
+          "!**/*.{test,spec}.*",
+          "!/tmp/**",
+          "!/var/tmp/**",
+          "!**/*{probe,scratch,sample,playground,fixture}*"
+        ],
+        "input_regex": {
+          "new_text": [
+            "(?i)(?:#|//|--)\\s*(?:TODO|FIXME|HACK|XXX)(?:\\s*[:(]|\\s+@)|(?:#|//|--)\\s*临时(?:[^\\p{L}\\p{N}_]|$)",
+            "(?i)(?:#|//|--)\\s*[^\\n]{0,60}?(?:先打个?补丁|临时方案|快速绕过|workaround|hack\\s*around|quick\\s*fix|凑数|短期\\s*目标|hack\\s+for|patch\\s+for\\s+now)"
+          ]
+        }
+      },
+      "message": "写入内容里有 TODO/FIXME/HACK 或「临时方案」类注释。请直接把实现做完整,而不是留桩或打补丁。",
+      "inject": "不要在代码里留 TODO/HACK/「临时方案」注释;把实现做完整。",
+      "examples": [
+        {"name": "todo in source", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "// TODO: implement later\nreturn nil"}}},
+        {"name": "patch-intent comment", "expect": "hit", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/a.py", "content": "# 临时方案,后面再改\nx = 1\n"}}},
+        {"name": "codex patch adds a FIXME", "expect": "hit", "client": "codex", "input": {"tool_name": "apply_patch", "tool_input": {"input": "*** Begin Patch\n*** Update File: src/a.go\n@@\n-x\n+// FIXME: y\n*** End Patch\n"}}},
+        {"name": "temporary marker followed by punctuation", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "x := 1 // 临时\nreturn nil"}}},
+        {"name": "temporary-prefixed word is not a marker", "expect": "miss", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/a.go", "content": "// 临时文件路径\nvar p = \"\"\n"}}},
+        {"name": "test file is exempt", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a_test.go", "old_string": "x", "new_string": "// TODO: more cases"}}},
+        {"name": "docs are exempt", "expect": "miss", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/docs/notes.md", "content": "// TODO: write this\n"}}},
+        {"name": "clean change", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.go", "old_string": "x", "new_string": "return nil"}}}
+      ]
+    },
+    {
+      "id": "no-hardcoded-list",
+      "description": "pinrule long_term 的特例硬编码检测(long_term.py:23-53):长 ID 字面写在 if 分支、带黑白名单语义的变量名赋字面量列表、全大写常量名加 5 个以上字符串的列表。原长 ID 正则用了前瞻与反向引用(long_term.py:29),改写为 RE2 等价形式(长度 ≥ 12 且含数字,按数字位置展开)。路径豁免同 no-todo-marker。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "tool": ["Edit", "MultiEdit", "Write", "NotebookEdit"],
+        "path": [
+          "**/*",
+          "!**/*.{md,rst,txt,markdown,adoc,yaml,yml,json,toml,ini,csv,tsv}",
+          "!**/{tests,test,__tests__,spec}/**",
+          "!**/test_*",
+          "!**/*_test.*",
+          "!**/*.{test,spec}.*",
+          "!/tmp/**",
+          "!/var/tmp/**",
+          "!**/*{probe,scratch,sample,playground,fixture}*"
+        ],
+        "input_regex": {
+          "new_text": [
+            "\\bif\\s+\\w+\\s*==\\s*['\\\"](?:[\\w-]{11,}\\d[\\w-]*|\\d[\\w-]{11,}|[\\w-]{1}\\d[\\w-]{10,}|[\\w-]{2}\\d[\\w-]{9,}|[\\w-]{3}\\d[\\w-]{8,}|[\\w-]{4}\\d[\\w-]{7,}|[\\w-]{5}\\d[\\w-]{6,}|[\\w-]{6}\\d[\\w-]{5,}|[\\w-]{7}\\d[\\w-]{4,}|[\\w-]{8}\\d[\\w-]{3,}|[\\w-]{9}\\d[\\w-]{2,}|[\\w-]{10}\\d[\\w-]{1,})['\\\"]",
+            "(?i)\\b\\w*(?:blacklist|whitelist|stopwords?|badwords?|forbidden|banned|excluded?|ignored|filter_?words?|skip_?list|denylist|allowlist)\\w*\\s*=\\s*\\[\\s*[\"']",
+            "\\b[A-Z][A-Z0-9_]{2,}\\s*=\\s*\\[\\s*(?:[\"'][^\"'\\n]+[\"']\\s*,\\s*){4,}"
+          ]
+        }
+      },
+      "message": "这段代码把特例硬编码成了字面量(长 ID 分支、黑白名单、常量名单)。请找到规则背后的通用判断,而不是枚举个例。",
+      "inject": "不要把特例硬编码成 ID 分支或名单字面量;找通用规则。",
+      "examples": [
+        {"name": "long id branch", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.py", "old_string": "x", "new_string": "if user_id == 'a1b2c3d4e5f6g7':\n    skip()"}}},
+        {"name": "blacklist literal", "expect": "hit", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.py", "old_string": "x", "new_string": "user_blacklist = ['bob']"}}},
+        {"name": "uppercase name list", "expect": "hit", "input": {"tool_name": "Write", "tool_input": {"file_path": "/repo/src/a.py", "content": "BAD_USERS = ['a', 'b', 'c', 'd', 'e']\n"}}},
+        {"name": "kebab-case dispatch is fine", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.py", "old_string": "x", "new_string": "if cmd == 'install-hooks':\n    run()"}}},
+        {"name": "short sample list", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/a.py", "old_string": "x", "new_string": "samples = ['a', 'b']"}}},
+        {"name": "tests are exempt", "expect": "miss", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/repo/tests/test_a.py", "old_string": "x", "new_string": "user_blacklist = ['bob']"}}}
+      ]
+    },
+    {
+      "id": "no-patch-intent",
+      "description": "pinrule long_term 的回复侧话术检测(long_term.py:106-166):第一人称加短期动作(「我先打个补丁」「let me just hardcode」),或承认不是长期方案却仍然继续。原实现对每个命中看前 30 字有无否定词(long_term.py:173-178、218-221);DSL 版把「否定词在 40 字内领先于补丁词」的整句作为豁免(not_regex),近似但不逐命中判断。fenced 与行内代码先剥掉(long_term.py:182-194)。",
+      "action": "log",
+      "target": "deny",
+      "event": "Stop",
+      "match": {
+        "text": {
+          "source": "last_assistant_message",
+          "preprocess": ["strip_code_blocks"],
+          "regex": [
+            "(?:我|咱|让我|这次|目前|当前|临时)[^。\\n]{0,12}(?:先打个?补丁|打个?补丁|先硬编码|临时硬编码|先\\s*hack|凑数|短期\\s*绕|临时\\s*绕|短期方案|临时方案|绕过验证|先\\s*workaround|patch\\s+一下|先\\s*hardcode)",
+            "(?:知道|明白)[^。\\n]{0,20}(?:不是长期|不够根本|不优雅|是个补丁|不彻底)[^。\\n]{0,15}(?:但|可是|不过|先这样|先用|先\\s*ship)",
+            "(?i)(?:let\\s+me|i['’]?ll|let['’]?s\\s+just|i\\s+will|for\\s+now|temporarily|i\\s+can\\s+just|we['’]?ll\\s+just|just)[^.\\n]{0,50}?\\b(?:hardcode|patch\\s+(?:it|this|that)|hack\\s+around|workaround|quick\\s*fix|skip\\s+(?:the\\s+)?(?:test|check|verif)|ship\\s+it|kludge|band-?aid)\\b",
+            "(?i)(?:i\\s+know|aware|understand)[^.\\n]{0,30}(?:not\\s+(?:the\\s+)?(?:right|long-?term|clean|proper|ideal)|is\\s+a\\s+(?:patch|hack|kludge|band-?aid))[^.\\n]{0,25}(?:but|however|though|for\\s+now|just\\s+for\\s+now|temporarily)"
+          ],
+          "not_regex": [
+            "(?i)(?:不要|别|禁止|不能|反对|不准|不该|don['’]?t|do not|never|avoid|stop|prohibited|shouldn['’]?t|wouldn['’]?t|won['’]?t)[^。.\\n]{0,40}(?:先打个?补丁|打个?补丁|先硬编码|临时硬编码|先\\s*hack|凑数|短期方案|临时方案|绕过验证|先\\s*workaround|hardcode|hack around|workaround|quick\\s*fix|band-?aid|kludge)"
+          ]
+        }
+      },
+      "message": "你准备用短期补丁、硬编码或绕过验证的方式处理问题。请先停下来,找到最干净的长期解法;如果方案有分歧,先提出来和用户对齐。",
+      "inject": "遇到难题先想最干净的长期解法,不要用补丁、硬编码或跳过验证糊过去;方案有分歧就先和用户对齐。",
+      "examples": [
+        {"name": "announces a quick patch", "expect": "hit", "input": {"last_assistant_message": "这个问题比较棘手,我先打个补丁让测试通过,后面再重构。"}},
+        {"name": "english hardcode", "expect": "hit", "input": {"last_assistant_message": "Let me just hardcode the value for now."}},
+        {"name": "acknowledges but proceeds", "expect": "hit", "input": {"last_assistant_message": "我知道这不是长期方案,但先这样吧。"}},
+        {"name": "advice against patching", "expect": "miss", "input": {"last_assistant_message": "不要我先打补丁来糊弄,应该找根因。"}},
+        {"name": "inside a code block", "expect": "miss", "input": {"last_assistant_message": "反例如下:\n```\n我先打补丁\n```\n这是要避免的写法。"}},
+        {"name": "ordinary report", "expect": "miss", "input": {"last_assistant_message": "已经把根因修复,并补充了单元测试。"}}
+      ]
+    },
+    {
+      "id": "no-git-force-skip",
+      "description": "pinrule long_term 的 git 危险动作检测(long_term.py:65-77):git push/merge/rebase/tag 带 --no-verify、--force 或 --skip-hooks(--force-with-lease 不命中)。commit 的 --no-verify/-n 见默认包 no-skip-verify。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "bash": {
+          "cmd": "git",
+          "git_sub": ["push", "merge", "rebase", "tag"],
+          "flags": ["--no-verify", "--force", "--skip-hooks"]
+        },
+        "ps": {
+          "cmd": "git",
+          "git_sub": ["push", "merge", "rebase", "tag"],
+          "flags": ["--no-verify", "--force", "--skip-hooks"]
+        }
+      },
+      "message": "不要用 --force、--no-verify 或 --skip-hooks 绕过保护。需要强推时用 --force-with-lease,并先确认用户同意。",
+      "inject": "不要对 git push/merge/rebase/tag 使用 --force、--no-verify、--skip-hooks;强推用 --force-with-lease 并先征得同意。",
+      "examples": [
+        {"name": "force push", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git push --force origin main"}}},
+        {"name": "push without hooks", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git push origin main --no-verify"}}},
+        {"name": "merge without hooks", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git merge --no-verify topic"}}},
+        {"name": "force with lease", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git push --force-with-lease origin main"}}},
+        {"name": "normal push", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git push origin main"}}},
+        {"name": "PowerShell variant", "expect": "hit", "input": {"tool_name": "PowerShell", "tool_input": {"command": "git push --force"}}}
+      ]
+    },
+    {
+      "id": "no-hack-commit-message",
+      "description": "pinrule long_term 的提交说明检测(long_term.py:58-64):git commit 的 -m / --message 说明(前 80 字)含 quick fix、hack、temp、workaround、临时、凑数。PowerShell 的 -m 及其值按 cmdlet 参数处理,不一定出现在 argv 中,所以只写 bash 变体。",
+      "action": "log",
+      "target": "deny",
+      "event": "PreToolUse",
+      "match": {
+        "bash": {
+          "cmd": "git",
+          "git_sub": "commit",
+          "args_regex": "(?i)(?:\\s-[a-zA-Z]*m\\s+|\\s--message[=\\s])[^\\n]{0,80}?(?:quick\\s*fix|\\bhack\\b|\\btemp\\b|workaround|临时|凑数)|\\s-[a-zA-Z]*m(?:quick\\s*fix|hack\\b|temp\\b|workaround|临时|凑数)"
+        }
+      },
+      "message": "提交说明里出现了 quick fix / hack / temp / workaround / 临时 / 凑数。请改成真实的长期方案,再用准确的说明提交。",
+      "inject": "提交说明不要写 quick fix、hack、临时之类;如果真是临时方案,先改成长期方案。",
+      "examples": [
+        {"name": "quick fix message", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m \"quick fix for flaky test\""}}},
+        {"name": "combined flag", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -am 'temp workaround'"}}},
+        {"name": "chinese marker", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m '临时绕过超时'"}}},
+        {"name": "long message flag", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit --message \"quick fix\""}}},
+        {"name": "long message flag with equals", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit --message=hack"}}},
+        {"name": "value attached to -m", "expect": "hit", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m\"temp\""}}},
+        {"name": "normal message", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'fix: handle nil pointer in parser'"}}},
+        {"name": "not a commit", "expect": "miss", "input": {"tool_name": "Bash", "tool_input": {"command": "echo quick fix"}}}
+      ]
+    }
+  ]
+}
