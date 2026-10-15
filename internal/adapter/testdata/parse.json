@@ -28,6 +28,23 @@
     {"client": "hermes", "native": "pre_llm_call", "stdin": "{\"hook_event_name\":\"pre_llm_call\",\"session_id\":\"h\",\"extra\":{\"user_message\":\"hi\",\"is_first_turn\":true}}",
      "want": {"event": "UserPromptSubmit", "prompt": "hi", "is_first_turn": true}},
     {"client": "hermes", "native": "pre_tool_call", "stdin": "{\"session_id\":\"h\",\"tool_name\":\"terminal\",\"tool_input\":{\"command\":\"sleep 300\"}}",
-     "want": {"event": "PreToolUse", "tool": {"name": "Bash", "raw_name": "terminal", "command": "sleep 300"}}}
+     "want": {"event": "PreToolUse", "tool": {"name": "Bash", "raw_name": "terminal", "command": "sleep 300"}}},
+
+    {"client": "claude-code", "native": "PreToolUse", "stdin": "{\"session_id\":\"s\",\"tool_name\":\"PowerShell\",\"tool_input\":{\"command\":\"Start-Sleep 300\"}}",
+     "want": {"event": "PreToolUse", "tool": {"name": "PowerShell", "shell": "powershell", "command": "Start-Sleep 300"}}},
+    {"client": "claude-code", "native": "PreToolUse", "stdin": "{\"tool_name\":\"Task\",\"tool_input\":{\"prompt\":\"p\"}}",
+     "want": {"tool": {"name": "Agent", "raw_name": "Task"}}},
+    {"client": "claude-code", "native": "PreToolUse", "stdin": "{\"tool_name\":\"MultiEdit\",\"tool_input\":{\"file_path\":\"/a\",\"edits\":[{\"old_string\":\"1\",\"new_string\":\"2\"}]}}",
+     "want": {"tool": {"name": "MultiEdit", "targets": ["/a"], "edits": [{"path": "/a", "old_string": "1", "new_string": "2"}], "fields": {"edits.new_string": ["2"]}}}},
+    {"client": "claude-code", "native": "SessionStart", "stdin": "{\"session_id\":\"\",\"sessionId\":\"alt\"}",
+     "want": {"event": "SessionStart", "session_id": "alt"}},
+    {"client": "codex", "native": "PermissionRequest", "stdin": "{\"session_id\":\"s\",\"tool_name\":\"apply_patch\",\"tool_input\":\"*** Begin Patch\\n*** Delete File: gone.go\\n*** End Patch\"}",
+     "want": {"event": "PreToolUse", "native": "PermissionRequest", "tool": {"name": "Edit", "targets": ["gone.go"], "target_deletes": ["gone.go"]}}},
+    {"client": "cursor", "native": "beforeMCPExecution", "stdin": "{\"conversation_id\":\"c1\",\"server\":\"gh\",\"tool_name\":\"issue\",\"tool_input\":\"{\\\"n\\\":\\\"1\\\"}\"}",
+     "want": {"event": "PreToolUse", "tool": {"name": "mcp__gh__issue", "raw_name": "issue", "fields": {"n": ["1"]}}}},
+    {"client": "cursor", "native": "afterAgentResponse", "stdin": "{\"conversation_id\":\"c1\",\"text\":\"done\"}",
+     "want": {"event": "AgentResponse", "last_assistant_message": "done", "has_last_assistant_message": true}},
+    {"client": "hermes", "native": "on_session_end", "stdin": "{\"session_id\":\"h\"}",
+     "want": {"event": "SessionEnd", "session_id": "h"}}
   ]
 }
