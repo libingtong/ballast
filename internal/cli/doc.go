@@ -33,6 +33,36 @@
 // config, no package-level regexp). `--help`/`-h` on any command prints help
 // and exits 0 without side effects.
 //
+// Implementation notes (U12a):
+//
+//   - Main dispatches "hook" before anything else; WireHook performs no
+//     I/O beyond locating the running binary, and every other command is
+//     looked up through a switch (no package-level tables or regexps).
+//     Help is detected before the runtime context (layout, working
+//     directory) is built, so --help touches nothing.
+//   - Flags use the stdlib flag package with interspersed positional
+//     arguments ("--" ends flag parsing); usage errors exit 2 with the
+//     command's help on stderr.
+//   - lint/test-rules take files and directories (directories expand to their
+//     *.json files, non-recursive); without paths they use the existing
+//     layer files of the rule stack in effect.
+//   - verify --status aggregates several required entries into the most
+//     severe exit code (running 6, infra 5, signal 4, timeout 3, fail 1,
+//     superseded 7, no record 11). verify --check maps the FreshResult as
+//     the e2e freshness table does: true 0; false 10 (no_record 11);
+//     unknown 12 (job_running 13).
+//   - install leaves binary resolution to install.Options.Binary == "" (os.Executable,
+//     symlinks resolved, temporary/build directories refused with exit 2).
+//   - doctor prints the tier (T0/T1), one row per client (detected, installed,
+//     worst check status), every check, and restates that CI is the final
+//     arbiter.
+//
+// End-to-end tests (internal/cli/*_e2e_test.go) build the binary in TestMain
+// and run it as a subprocess with a fully redirected environment; they cover
+// the integration acceptance list of architecture §8.3 (U3/U11 content files,
+// U8 commitform.json through bashparse, hook protocols for the four clients,
+// verify → status → check, install round trips).
+//
 // Acceptance (U12): scripts/accept-m1.sh … accept-m4.sh, regress.sh,
 // fault.sh, concurrency.sh, hotreload.sh, freshness.sh, matrix.sh,
 // replay.sh, install-e2e.sh; scripts/bench (ported from proto/m0c/bench)
