@@ -217,6 +217,21 @@ func scenarios() []scenario {
 			f.git("add", "-A")
 			f.git("commit", "-qm", "attrs")
 		}, mutate: func(f *fixture) { f.write("data/x.id", "$Id$\n") }},
+		{name: "tracked gitattributes deleted from the work tree", fallback: true, setup: func(f *fixture) {
+			f.write(".gitattributes", "*.dat filter=nop\n")
+			f.write("data/x.dat", "dat\n")
+			f.git("config", "filter.nop.clean", "cat")
+			f.git("add", "-A")
+			f.git("commit", "-qm", "attrs")
+		}, mutate: func(f *fixture) { f.remove(".gitattributes"); f.write("data/x.dat", "dat2\n") }},
+		{name: "tracked subdir gitattributes deleted but nothing dirty below", setup: func(f *fixture) {
+			f.write("data/.gitattributes", "*.dat filter=nop\n")
+			f.write("data/x.dat", "dat\n")
+			f.git("config", "filter.nop.clean", "cat")
+			f.git("add", "-A")
+			f.git("commit", "-qm", "attrs")
+			f.settleSlow()
+		}, mutate: func(f *fixture) { f.remove("data/.gitattributes"); f.write("src/a.go", "package changed elsewhere\n") }},
 		{name: "text=auto lf only dirty stays native", setup: func(f *fixture) {
 			f.write(".gitattributes", "* text=auto\n")
 			f.git("add", "-A")
@@ -253,8 +268,14 @@ func scenarios() []scenario {
 		{name: "safecrlf true with autocrlf falls back", fallback: true, cfg: [][2]string{{"core.autocrlf", "true"}, {"core.safecrlf", "true"}},
 			mutate: func(f *fixture) { f.write("src/a.go", "package lf3\n") }},
 		{name: "autocrlf true clean worktree", cfg: [][2]string{{"core.autocrlf", "true"}}},
-		{name: "core.symlinks false", unixOnly: true, fallback: true, cfg: [][2]string{{"core.symlinks", "false"}},
+		{name: "core.symlinks false with symlink entry", unixOnly: true, fallback: true, cfg: [][2]string{{"core.symlinks", "false"}},
 			mutate: func(f *fixture) { f.write("src/a.go", "package ns\n") }},
+		{name: "core.symlinks false without symlinks stays native", unixOnly: true, cfg: [][2]string{{"core.symlinks", "false"}},
+			setup:  func(f *fixture) { f.git("rm", "-q", "link"); f.git("commit", "-qm", "no link") },
+			mutate: func(f *fixture) { f.write("src/a.go", "package ns\n"); f.remove("bin/run.sh") }},
+		{name: "core.symlinks false with new symlink in work tree", unixOnly: true, fallback: true, cfg: [][2]string{{"core.symlinks", "false"}},
+			setup:  func(f *fixture) { f.git("rm", "-q", "link"); f.git("commit", "-qm", "no link") },
+			mutate: func(f *fixture) { f.remove("src/b.go"); f.symlink("a.go", "src/b.go") }},
 	}
 }
 

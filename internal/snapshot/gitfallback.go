@@ -65,6 +65,9 @@ func firstArg(args []string) string {
 var inheritedGitVars = []string{
 	"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
 	"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_PREFIX",
+	// `git --literal-pathspecs` and friends export these to hooks; they
+	// would change how our ':(glob)' and commit pathspecs are read.
+	"GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_ICASE_PATHSPECS",
 }
 
 // gitEnv builds the child environment: inherited repository-pointing
@@ -94,14 +97,18 @@ loop:
 }
 
 // tempRoot is where the temporary index lives: never inside the user's
-// .git directory.
-func tempRoot(env sys.Env) string {
+// .git directory (a TMPDIR pointing there is ignored).
+func tempRoot(env sys.Env, repo *model.RepoInfo) string {
 	keys := []string{"TMPDIR"}
 	if env.GOOS() == "windows" {
 		keys = []string{"TMP", "TEMP"}
 	}
 	for _, k := range keys {
-		if v, ok := env.Getenv(k); ok && v != "" {
+		v, ok := env.Getenv(k)
+		if !ok || v == "" {
+			continue
+		}
+		if !isUnder(v, repo.GitDir) && !isUnder(v, repo.CommonDir) {
 			return v
 		}
 	}
@@ -179,7 +186,7 @@ func fallbackTree(opt Options, repo *model.RepoInfo, refresh bool, paths []strin
 // times with the index file time, and a fresher copy would hide racily clean
 // entries.
 func copyIndex(opt Options, repo *model.RepoInfo) (tmpDir, indexCopy string, err error) {
-	tmpDir = filepath.Join(tempRoot(opt.Env), "ballast-snap-"+sys.RandomID{}.NewID(8))
+	tmpDir = filepath.Join(tempRoot(opt.Env, repo), "ballast-snap-"+sys.RandomID{}.NewID(8))
 	if err := opt.FS.MkdirAll(tmpDir, 0o700); err != nil {
 		return "", "", err
 	}
@@ -208,4 +215,10 @@ func copyIndex(opt Options, repo *model.RepoInfo) (tmpDir, indexCopy string, err
 	}
 	_ = os.Chtimes(indexCopy, fi.ModTime(), fi.ModTime())
 	return tmpDir, indexCopy, nil
+}
+
+// isUnder reports whether dir is root or lies below it.
+func isUnder(dir, root string) bool {
+	dir, root = filepath.Clean(dir), filepath.Clean(root)
+	return dir == root || strings.HasPrefix(dir, root+string(filepath.Separator))
 }

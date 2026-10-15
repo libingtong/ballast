@@ -367,10 +367,14 @@ type attrResolver struct {
 	root string
 	base attrFlags
 	dirs map[string]attrFlags
+	// tracked holds the directories whose .gitattributes is in the index.
+	// git reads such a file from the index when the work tree copy is
+	// missing, and we cannot read objects: that case is "unknown".
+	tracked map[string]bool
 }
 
-func newAttrResolver(fsys sys.FS, repo *model.RepoInfo, s *repoSettings) *attrResolver {
-	r := &attrResolver{fs: fsys, root: repo.Toplevel, dirs: map[string]attrFlags{}}
+func newAttrResolver(fsys sys.FS, repo *model.RepoInfo, s *repoSettings, tracked map[string]bool) *attrResolver {
+	r := &attrResolver{fs: fsys, root: repo.Toplevel, dirs: map[string]attrFlags{}, tracked: tracked}
 	files := append([]string{filepath.Join(repo.CommonDir, "info", "attributes")}, s.attrFiles...)
 	for _, f := range files {
 		if f == "" {
@@ -406,9 +410,29 @@ func (r *attrResolver) flagsFor(dir string) (attrFlags, error) {
 	case err == nil:
 		fl = fl.or(scanAttributes(data))
 	case errors.Is(err, fs.ErrNotExist), isNotDir(err):
+		if r.tracked[dir] {
+			fl.hard = true
+		}
 	default:
 		return attrFlags{}, err
 	}
 	r.dirs[dir] = fl
 	return fl, nil
+}
+
+// trackedAttributeDirs lists the directories (slash form, "" = root) that
+// have a .gitattributes entry in the index.
+func trackedAttributeDirs(ents []IndexEntry) map[string]bool {
+	var out map[string]bool
+	for i := range ents {
+		p := ents[i].Path
+		if p != ".gitattributes" && !strings.HasSuffix(p, "/.gitattributes") {
+			continue
+		}
+		if out == nil {
+			out = map[string]bool{}
+		}
+		out[strings.TrimSuffix(strings.TrimSuffix(p, ".gitattributes"), "/")] = true
+	}
+	return out
 }

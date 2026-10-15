@@ -348,7 +348,7 @@ func TestAttrResolver(t *testing.T) {
 	writeFile(t, filepath.Join(repo.GitDir, "info", "attributes"), "")
 	env := settingsEnv(root, nil)
 	set := loadSettings(sys.OSFS{}, env, repo)
-	r := newAttrResolver(sys.OSFS{}, repo, set)
+	r := newAttrResolver(sys.OSFS{}, repo, set, nil)
 	for dir, want := range map[string]attrFlags{
 		"":        {},
 		"x":       {},
@@ -365,12 +365,12 @@ func TestAttrResolver(t *testing.T) {
 	}
 	// Sources outside the work tree.
 	writeFile(t, filepath.Join(repo.GitDir, "info", "attributes"), "* ident\n")
-	if got, _ := newAttrResolver(sys.OSFS{}, repo, set).flagsFor("x"); !got.hard {
+	if got, _ := newAttrResolver(sys.OSFS{}, repo, set, nil).flagsFor("x"); !got.hard {
 		t.Error("info/attributes ignored")
 	}
 	writeFile(t, filepath.Join(root, "xdg", "git", "attributes"), "* text=auto\n")
 	set = loadSettings(sys.OSFS{}, env, repo)
-	if got, _ := newAttrResolver(sys.OSFS{}, repo, set).flagsFor("x"); !got.soft {
+	if got, _ := newAttrResolver(sys.OSFS{}, repo, set, nil).flagsFor("x"); !got.soft {
 		t.Error("global attributes ignored")
 	}
 }
@@ -448,5 +448,65 @@ func TestUserConfigDecidesFallback(t *testing.T) {
 	want = f.reference(true, nil, nil)
 	if got, err := TreeS(f.opts(false), f.repo, nil); err != nil || got != want {
 		t.Errorf("native LF: %s err=%v", describe(got, want), err)
+	}
+}
+
+func FuzzScanConfig(f *testing.F) {
+	for _, s := range []string{
+		"[core]\n\tfilemode = false\n", "[remote \"origin\"]\n\turl = x\n", "[core]\n\tx = a\\\nb\n",
+		"[a.b]\nc\n", "[\n", "[a \"b\n", "x = 1", "\xff\xfe[core]\n= \\", "[core] # c\n\tbare = \"unterminated\n",
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, src string) {
+		scanConfig([]byte(src), func(section, sub, key, raw string, hasEq bool) {
+			_ = cfgString(raw)
+			_, _ = cfgBool(raw, hasEq)
+			if section == "" || key == "" {
+				t.Fatalf("empty section or key for %q", src)
+			}
+		})
+		_ = scanAttributes([]byte(src))
+	})
+}
+
+func TestPathHelpers(t *testing.T) {
+	for p, want := range map[string]bool{
+		"a": true, "a/b.go": true, "a b/é.txt": true, ".gitattributes": true, "a/.hidden": true, "...": true,
+		"": false, "/abs": false, "a/": false, "a//b": false, "./a": false, "a/./b": false, "../a": false, "a/..": false, "a/../b": false,
+		"a\x00b": false,
+	} {
+		if got := safeWorktreePath(p); got != want {
+			t.Errorf("safeWorktreePath(%q) = %v, want %v", p, got, want)
+		}
+	}
+	for in, want := range map[string]string{
+		"a/b": "a/b", "./a": "a", "a//b": "a/b", "a/./b": "a/b", "a/../b": "b", "a/": "a/", "a/.": "a/", "a/b/..": "a/", ".": "", "./": "", "": "", "a/**/b": "a/**/b",
+	} {
+		if got, err := normalizeSpec(in); err != nil || got != want {
+			t.Errorf("normalizeSpec(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"..", "../a", "a/../../b"} {
+		if _, err := normalizeSpec(bad); err == nil {
+			t.Errorf("normalizeSpec(%q) should fail", bad)
+		}
+	}
+	for in, want := range map[string]bool{strings.Repeat("a", 40): true, strings.Repeat("0f", 32): true, strings.Repeat("A", 40): false, "abc": false, "": false, strings.Repeat("g", 40): false} {
+		if isHexID(in) != want {
+			t.Errorf("isHexID(%q) = %v", in, !want)
+		}
+	}
+	if rel, ok := relInside("/r", "/r/a/b"); !ok || rel != "a/b" {
+		t.Errorf("relInside = %q %v", rel, ok)
+	}
+	if rel, ok := relInside("/r", "/r"); !ok || rel != "." {
+		t.Errorf("relInside root = %q %v", rel, ok)
+	}
+	if _, ok := relInside("/r", "/rr/a"); ok {
+		t.Error("sibling with common prefix is outside")
+	}
+	if _, ok := relInside("/r", "/x"); ok {
+		t.Error("outside")
 	}
 }

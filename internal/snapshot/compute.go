@@ -95,9 +95,13 @@ func nativeTree(opt Options, repo *model.RepoInfo, req request, f *Filter) (mode
 	if err != nil {
 		return "", err
 	}
+	var attrDirs map[string]bool
+	if req.refresh {
+		attrDirs = trackedAttributeDirs(idx.Entries) // before the filter compacts them
+	}
 	ents := f.removeExempt(idx.Entries)
 	if req.refresh {
-		r := newRefresher(opt, repo, set, idx)
+		r := newRefresher(opt, repo, set, idx, attrDirs)
 		if ents, err = r.run(ents, req); err != nil {
 			return "", err
 		}
@@ -112,8 +116,6 @@ func (s *repoSettings) checkNative() error {
 		return fallbackf("object format %s", s.objectFormat)
 	case s.uncertain != "":
 		return fallbackf("%s", s.uncertain)
-	case !s.symlinks:
-		return fallbackf("core.symlinks=false")
 	}
 	return nil
 }
@@ -156,13 +158,13 @@ type refresher struct {
 	lastOK  bool
 }
 
-func newRefresher(opt Options, repo *model.RepoInfo, set *repoSettings, idx *Index) *refresher {
+func newRefresher(opt Options, repo *model.RepoInfo, set *repoSettings, idx *Index, attrDirs map[string]bool) *refresher {
 	r := &refresher{
 		opt:     opt,
 		fs:      opt.FS,
 		root:    repo.Toplevel,
 		set:     set,
-		attrs:   newAttrResolver(opt.FS, repo, set),
+		attrs:   newAttrResolver(opt.FS, repo, set, attrDirs),
 		dirs:    map[string]bool{},
 		lastDir: "\x00",
 	}
@@ -264,6 +266,12 @@ func (r *refresher) refreshOne(e *IndexEntry) (keep bool, err error) {
 	if e.Flags&flagAssumeValid != 0 {
 		return true, nil // git add -u leaves assume-unchanged entries alone
 	}
+	if e.Mode == modeSymlink && !r.set.symlinks {
+		return false, fallbackf("core.symlinks=false with symlink entry %s", e.Path)
+	}
+	if !safeWorktreePath(e.Path) {
+		return false, fallbackf("unusual path %q", e.Path)
+	}
 	dir := path.Dir(e.Path)
 	if dir == "." {
 		dir = ""
@@ -280,6 +288,9 @@ func (r *refresher) refreshOne(e *IndexEntry) (keep bool, err error) {
 		return false, fallbackf("lstat %s: %v", e.Path, err)
 	}
 	st := statOf(fi)
+	if st.kind == fs.ModeSymlink && !r.set.symlinks {
+		return false, fallbackf("core.symlinks=false with symlink %s", e.Path)
+	}
 	switch st.kind {
 	case 0, fs.ModeSymlink:
 	case fs.ModeDir:
@@ -315,6 +326,29 @@ func (r *refresher) refreshOne(e *IndexEntry) (keep bool, err error) {
 		e.Mode = modeRegular
 	}
 	return true, nil
+}
+
+// safeWorktreePath rejects index paths that could leave the work tree or
+// name something else than an ordinary tracked file (git refuses them too).
+func safeWorktreePath(p string) bool {
+	if p == "" || p[0] == '/' || p[len(p)-1] == '/' {
+		return false
+	}
+	start := 0
+	for i := 0; i <= len(p); i++ {
+		if i < len(p) && p[i] != '/' {
+			if p[i] == 0 || (filepath.Separator != '/' && (p[i] == filepath.Separator || p[i] == ':')) {
+				return false
+			}
+			continue
+		}
+		switch comp := p[start:i]; comp {
+		case "", ".", "..":
+			return false
+		}
+		start = i + 1
+	}
+	return true
 }
 
 // statClean reports whether the index entry can be trusted without reading

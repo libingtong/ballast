@@ -45,7 +45,7 @@ func (l *Locator) locate(cwd string) (*model.RepoInfo, error) {
 			return nil, err
 		}
 		if found {
-			if within(dir, gitDir, real) {
+			if isUnder(real, gitDir) {
 				return nil, fmt.Errorf("%w: %s is inside the git directory", model.ErrNotRepo, cwd)
 			}
 			return buildRepoInfo(fsys, dir, gitDir)
@@ -56,14 +56,6 @@ func (l *Locator) locate(cwd string) (*model.RepoInfo, error) {
 		}
 		dir = parent
 	}
-}
-
-// within reports whether cwd lies in gitDir when gitDir is nested in top.
-func within(top, gitDir, cwd string) bool {
-	if !strings.HasPrefix(gitDir, top+string(filepath.Separator)) {
-		return false
-	}
-	return cwd == gitDir || strings.HasPrefix(cwd, gitDir+string(filepath.Separator))
 }
 
 // candidateGitDir inspects dir/.git. found is true when it names a usable git

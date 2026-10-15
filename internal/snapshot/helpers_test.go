@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
@@ -191,6 +192,16 @@ func (f *fixture) commitAll(msg string) {
 func (f *fixture) settle() {
 	f.t.Helper()
 	f.git("update-index", "--refresh", "-q")
+}
+
+// settleSlow waits for the clock to tick over and rewrites the index, so
+// that no entry is racily clean (git and the snapshot both treat entries
+// modified in the same second as the index write as racy).
+func (f *fixture) settleSlow() {
+	f.t.Helper()
+	time.Sleep(1100 * time.Millisecond)
+	f.git("update-index", "--chmod=+x", "--", "README.md")
+	f.git("update-index", "--chmod=-x", "--", "README.md")
 }
 
 // opts returns Options wired to the sandbox. AllowFallback is off unless the

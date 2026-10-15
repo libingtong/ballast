@@ -119,3 +119,69 @@ func TestNativeCUnderBudget(t *testing.T) {
 		t.Errorf("native C on 10k entries took %v (limit %v)", median, limit)
 	}
 }
+
+// bigFixture commits n tracked files (M0c layout) and edits a few of them.
+func bigFixture(tb testing.TB, n int) *fixture {
+	tb.Helper()
+	f := newFixture(tb)
+	for _, e := range synthEntries(n) {
+		p := f.path(e.path)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			tb.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(e.path+"\n"), 0o644); err != nil {
+			tb.Fatal(err)
+		}
+	}
+	f.commitAll("big")
+	f.relocate()
+	for _, p := range []string{"pkg003/sub3/file3.go", "docs/sec011/page11.txt", "pkg010/README10.md"} {
+		if _, err := os.Stat(f.path(p)); err == nil {
+			f.write(p, "edited\n")
+		}
+	}
+	return f
+}
+
+func BenchmarkTreeS10k(b *testing.B) {
+	f := bigFixture(b, 10000)
+	filt, _ := CompileExempt([]string{"docs/**", "**/*.md"})
+	opt := f.opts(false)
+	want := f.reference(true, nil, []string{"docs/**", "**/*.md"})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		got, err := TreeS(opt, f.repo, filt)
+		if err != nil || got != want {
+			b.Fatalf("%s err=%v", describe(got, want), err)
+		}
+	}
+}
+
+// TestNativeSOn10kFiles checks S on a real 10k-file work tree against git
+// and logs the time (git's own add -u takes 100ms+ on such a repository).
+func TestNativeSOn10kFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("creates 10k files")
+	}
+	f := bigFixture(t, 10000)
+	exempt := []string{"docs/**", "**/*.md"}
+	filt := mustFilter(t, exempt...)
+	want := f.reference(true, nil, exempt)
+	opt := f.opts(false)
+	var best time.Duration
+	for i := 0; i < 5; i++ {
+		start := time.Now()
+		got, err := TreeS(opt, f.repo, filt)
+		d := time.Since(start)
+		if err != nil || got != want {
+			t.Fatalf("%s err=%v", describe(got, want), err)
+		}
+		if best == 0 || d < best {
+			best = d
+		}
+	}
+	t.Logf("native S, 10k tracked files, 3 dirty: best of 5 = %v", best)
+	if best > 2*time.Second {
+		t.Errorf("S took %v", best)
+	}
+}

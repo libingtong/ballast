@@ -278,7 +278,7 @@ func TestStatCacheTrustAndRacy(t *testing.T) {
 		f.craft(2, future, func(e []bentry) { e[0].sha = stale })
 		idx, _ := readIndex(f.opts(false).FS, f.repo.IndexPath)
 		idx.FileMtime = time.Time{}
-		r := newRefresher(f.opts(false).withDefaults(), f.repo, loadSettings(f.opts(false).FS, nil, f.repo), idx)
+		r := newRefresher(f.opts(false).withDefaults(), f.repo, loadSettings(f.opts(false).FS, nil, f.repo), idx, nil)
 		ents, err := r.run(idx.Entries, request{refresh: true})
 		if err != nil {
 			t.Fatal(err)

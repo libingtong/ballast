@@ -134,12 +134,14 @@ func NeedsFallbackEnv(fsys sys.FS, env sys.Env, repo *model.RepoInfo) (bool, str
 		return true, reasonOf(err)
 	}
 	switch {
+	case !set.symlinks:
+		return true, "core.symlinks=false"
 	case set.convRisk:
 		return true, "core.autocrlf or core.eol conversion"
 	case set.safeCRLF:
 		return true, "core.safecrlf"
 	}
-	fl, err := newAttrResolver(fsys, repo, set).flagsFor("")
+	fl, err := newAttrResolver(fsys, repo, set, nil).flagsFor("")
 	switch {
 	case err != nil:
 		return true, "attributes unreadable: " + err.Error()
