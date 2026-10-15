@@ -164,6 +164,7 @@ expect_out_empty() {
 expect_out_has() { check_contains "$1" "$BL_OUT" "$2"; }
 expect_out_lacks() { check_lacks "$1" "$BL_OUT" "$2"; }
 expect_err_has() { check_contains "$1" "$BL_ERR" "$2"; }
+expect_err_lacks() { check_lacks "$1" "$BL_ERR" "$2"; }
 
 # expect_deny NAME: the last call produced a deny decision on stdout.
 expect_deny() {
@@ -662,11 +663,14 @@ static_checks() {
 }
 
 # run_bench NAME [ARGS...]: the plan's p95 gate through scripts/bench (the
-# Go program of unit U12c). Its contract here: `go run ./scripts/bench` with
-# BALLAST_BIN exported measures every scenario (warm-up 20, 300 runs, p95 of
-# ceil(0.95n), gate 30 ms) and exits non-zero when a gate fails; extra ARGS
-# narrow the run. Without scripts/bench the step is an explicit SKIP (FAIL
-# under CI).
+# Go program of unit U12c). It is called the way that program documents:
+# `go run ./scripts/bench -bin BIN -base DIR -root REPO [ARGS...]`, where BIN
+# is the shared ballast binary, DIR a scratch directory under $TMP_ROOT
+# (outside any git repository, bench creates it) and ARGS narrow the run
+# (`-only REGEXP` on scenario ids, `-n`, `-warm`). Bench measures with warm-up
+# 20 and 300 runs, p95 of ceil(0.95n), gate 30 ms, and exits non-zero when a
+# gate fails or its arguments are wrong. Without scripts/bench the step is an
+# explicit SKIP (FAIL under CI).
 run_bench() {
   local name=$1 rc=0
   shift
@@ -675,6 +679,8 @@ run_bench() {
     skip_or_fail "$name" "scripts/bench is not part of this tree"
     return 0
   fi
-  (cd "$REPO_ROOT" && gocmd run ./scripts/bench "$@") || rc=$?
+  (cd "$REPO_ROOT" && gocmd run ./scripts/bench \
+    -bin "$(native "$BALLAST_BIN")" -base "$(native "$TMP_ROOT/bench")" \
+    -root "$(native "$REPO_ROOT")" "$@") || rc=$?
   if [ "$rc" = 0 ]; then ok "$name"; else bad "$name" "scripts/bench exited $rc"; fi
 }

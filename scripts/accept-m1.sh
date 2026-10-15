@@ -23,9 +23,24 @@ static_checks
 
 sandbox_new gotest
 section "go test -race ./..."
+# Same rule as the CI workflow: on Windows -race needs cgo (a C compiler). With
+# gcc it is enabled; without one the tests run without -race and the step says
+# so as an explicit SKIP of the race part, never silently.
+race_flag="-race"
+race_label="go test -race ./... (GOPROXY=off)"
+if [ "$IS_WINDOWS" = 1 ]; then
+  if command -v gcc >/dev/null 2>&1; then
+    export CGO_ENABLED=1
+  else
+    race_flag=""
+    race_label="go test ./... (GOPROXY=off, without -race)"
+    skip "go test -race ./..." "-race is unavailable: Windows without gcc (cgo); running without it, as ci.yml does"
+  fi
+fi
 rc=0
-(cd "$REPO_ROOT" && gocmd test -race -count=1 ./...) || rc=$?
-if [ "$rc" = 0 ]; then ok "go test -race ./... (GOPROXY=off)"; else bad "go test -race ./..." "exit $rc"; fi
+# shellcheck disable=SC2086  # race_flag is empty or exactly one flag
+(cd "$REPO_ROOT" && gocmd test $race_flag -count=1 ./...) || rc=$?
+if [ "$rc" = 0 ]; then ok "$race_label"; else bad "$race_label" "exit $rc"; fi
 
 sandbox_new content
 section "lint and test-rules over every content file"

@@ -160,15 +160,47 @@ expect_out_has "with its new content" "fixed again"
 bl config show
 expect_rc "config show is clean again" 0
 
-section "6. an invalid layer without last-known-good counts as empty"
+section "6. last-known-good survives deleting the file"
+# The repo layer was loaded with valid content in sections 3 and 4, so its LKG
+# is on disk (keyed by path). Deleting the file and writing garbage must fall
+# back to that copy, not to an empty layer.
+rules_file hot-c deny "repo lkg rule" >"$REPO/.ballast/rules.json"
+frob "$REPO_N"
+expect_out_has "premise: the repo layer is loaded with valid content" "repo lkg rule"
+rm -f "$REPO/.ballast/rules.json"
 printf '{ never valid' >"$REPO/.ballast/rules.json"
 frob "$REPO_N"
-expect_deny "the other layers keep working"
-expect_out_has "the user rule still decides" "fixed again"
-expect_err_has "the broken repo layer is reported on stderr" "invalid"
+expect_deny "the repo layer keeps deciding from its stored copy"
+expect_out_has "with the old repo rule" "repo lkg rule"
+expect_err_has "and says so on stderr" "last-known-good"
 bl_dir "$REPO" config show
 expect_rc "config show exits 1" 1
+expect_out_has "config show marks the repo layer lkg" "lkg"
 rm -f "$REPO/.ballast/rules.json"
+
+section "6b. an invalid layer without last-known-good counts as empty"
+# A repository whose layer was never valid: there is nothing to fall back to.
+FRESH="$SB_WORK/repo-fresh"
+git_init "$FRESH"
+write_file "$FRESH/a.txt" "a
+"
+gitc "$FRESH" add -A
+gitc "$FRESH" commit -q -m init
+FRESH_N="$(native "$FRESH")"
+mkdir -p "$FRESH/.ballast"
+printf '{ never valid' >"$FRESH/.ballast/rules.json"
+rules_file hot-c deny "user rule not shadowed" >"$USER_RULES"
+frob "$FRESH_N"
+expect_deny "the user layer is not shadowed by the broken repo layer"
+expect_out_has "the user rule decides" "user rule not shadowed"
+expect_err_has "the broken repo layer is reported loudly on stderr" "invalid"
+expect_err_has "and states that there is no last-known-good to fall back to" "no last-known-good"
+expect_err_lacks "no stored copy is claimed to be in use" "using last-known-good"
+bl_dir "$FRESH" config show
+expect_rc "config show exits 1" 1
+repo_state="$(printf '%s\n' "$BL_OUT" | awk '$1 == "repo" { print $2; exit }')"
+check_eq "config show reports the never-valid repo layer as invalid, not lkg" "$repo_state" "invalid"
+rm -f "$FRESH/.ballast/rules.json"
 
 section "7. the cache is only an optimization"
 check_file "the stat cache exists" "$BALLAST_HOME/cache/stat.json"

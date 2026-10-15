@@ -120,9 +120,13 @@ func TestAdversarialBudget(t *testing.T) {
 		"open strings":      "Get-A " + strings.Repeat("\"$(", n/3),
 	}
 	// A quadratic scan of 100KB takes seconds, so a generous factor still
-	// separates linear from quadratic; a tight one flakes on a loaded
-	// machine (best of 5 reached ~400ms under -race next to 20 packages).
-	limit := 10 * budgetLimit()
+	// separates linear from quadratic. Only the race detector needs more
+	// room (best of 5 reached ~400ms under -race next to 20 packages); the
+	// plain and CI tiers keep the 4x factor.
+	limit := 4 * budgetLimit()
+	if raceEnabled {
+		limit = 10 * budgetLimit()
+	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {
 			if best := bestOf(5, src); best > limit {

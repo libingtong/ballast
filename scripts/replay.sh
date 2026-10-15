@@ -79,7 +79,7 @@ while [ "$n" -lt "$REPLAY_COUNT" ]; do
   if [ "$rss" -gt 0 ]; then
     check_int_le "transcript #$n: peak memory $((rss / 1024)) MB (< 200 MB), ${ms} ms" "$rss" 204799
   else
-    skip "transcript #$n: peak memory" "this OS does not report the child's peak RSS to the script"
+    skip "transcript #$n: peak memory" "the child's peak RSS could not be read on this OS"
   fi
 done
 

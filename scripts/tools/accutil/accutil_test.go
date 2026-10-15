@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -152,5 +153,45 @@ func TestGenTranscriptReachesTheRequestedSize(t *testing.T) {
 	fi, err := os.Stat(out)
 	if err != nil || fi.Size() < 200*1024 {
 		t.Fatalf("size %v err %v", fi, err)
+	}
+}
+
+// TestRunStatsReportPeakRSS runs this test binary as a child that touches
+// 64 MiB and checks that "run -stats" reports a peak of at least 32 MiB. On
+// Windows this exercises the K32GetProcessMemoryInfo probe, elsewhere rusage.
+func TestRunStatsReportPeakRSS(t *testing.T) {
+	stats := filepath.Join(t.TempDir(), "stats")
+	t.Setenv("ACCUTIL_TEST_ALLOC", "1")
+	code := cmdRun([]string{"-timeout", "60s", "-stats", stats, "--", os.Args[0], "-test.run=^TestAllocHelper$"})
+	if code != 0 {
+		t.Fatalf("run exited %d", code)
+	}
+	b, err := os.ReadFile(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kb int64
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(line, "rss_kb="); ok {
+			kb, _ = strconv.ParseInt(v, 10, 64)
+		}
+	}
+	if kb < 32*1024 {
+		t.Fatalf("peak rss_kb = %d, want >= %d (stats: %q)", kb, 32*1024, b)
+	}
+}
+
+// TestAllocHelper is the child of TestRunStatsReportPeakRSS; on its own it is
+// a no-op.
+func TestAllocHelper(t *testing.T) {
+	if os.Getenv("ACCUTIL_TEST_ALLOC") != "1" {
+		t.Skip("child helper only")
+	}
+	buf := make([]byte, 64<<20)
+	for i := 0; i < len(buf); i += 4096 {
+		buf[i] = 1
+	}
+	if buf[len(buf)-4096] != 1 {
+		t.Fatal("unreachable")
 	}
 }

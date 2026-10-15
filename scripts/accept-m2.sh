@@ -28,6 +28,8 @@ if [ "${BALLAST_ACCEPT_MATRIX_REAL:-0}" = 1 ]; then
 else
   skip "matrix.sh --mode real" "own CI job; BALLAST_ACCEPT_MATRIX_REAL=1 runs it here"
 fi
-run_bench "bench: git commit check (1k and 10k files)" -scenario commit
+# Scenario 6 of the plan's B10 plus its `commit -a` variants: 6a/6b are
+# `git commit` on 1k/10k files (C), 6c/6d `git commit -a` (S, worktree snapshot).
+run_bench "bench: git commit check (1k and 10k files)" -only '^6[abcd]$'
 
 finish

@@ -36,4 +36,4 @@
 
 ## 与 `scripts/bench` 的约定
 
-性能门槛由 U12c 的 `scripts/bench`(Go 程序)负责。`accept-m1.sh` 与 `accept-m2.sh` 通过 `lib.sh` 的 `run_bench` 以 `go run ./scripts/bench [参数]` 调用,环境里带 `BALLAST_BIN`;没有该目录时显式 SKIP(`CI=true` 时失败)。`accept-m2.sh` 传 `-scenario commit` 只测 `git commit` 检查场景。合并 U12c 后若参数名不同,只需改 `run_bench` 的调用处。
+性能门槛由 U12c 的 `scripts/bench`(Go 程序)负责,真实接口是 `go run ./scripts/bench -bin <二进制> -base <临时目录> -root <仓库根> [-only <场景 id 正则>] [-n N] [-warm N]`(`-bin` 与 `-base` 必填,缺一退出 2;用 `-list` 列出场景 id)。`accept-m1.sh` 与 `accept-m2.sh` 通过 `lib.sh` 的 `run_bench` 调用它:`-bin` 是脚本已构建的共用二进制,`-base` 是 `$TMP_ROOT/bench`(临时目录内,不在任何 git 仓库里),其余参数原样透传。`accept-m1.sh` 不加参数,跑全部场景;`accept-m2.sh` 传 `-only '^6[abcd]$'`,只测 `git commit` 检查场景(6a/6b 为 1k/10k 文件的 `git commit`,6c/6d 为 `git commit -a`)。没有 `scripts/bench` 目录时显式 SKIP(`CI=true` 时失败)。也可以直接用 U12c 的 `scripts/bench.sh`(用 `ONLY` 环境变量缩小范围)。

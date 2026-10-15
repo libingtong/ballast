@@ -76,12 +76,20 @@ func cmdRun(args []string) int {
 		return fail("run: %v", err)
 	}
 	start := time.Now()
-	runErr := cmd.Run()
+	// Start and Wait are separate so the Windows peak-memory probe can open
+	// the child before it exits (see rss_windows.go).
+	var probe *rssProbe
+	runErr := cmd.Start()
+	if runErr == nil {
+		probe = openRSSProbe(cmd.Process.Pid)
+		runErr = cmd.Wait()
+	}
+	defer probe.close()
 	elapsed := time.Since(start)
 	if *stats != "" {
 		rss := int64(0)
 		if cmd.ProcessState != nil {
-			rss = peakRSSKB(cmd.ProcessState)
+			rss = peakRSSKB(cmd.ProcessState, probe)
 		}
 		s := fmt.Sprintf("ms=%d\nrss_kb=%d\n", elapsed.Milliseconds(), rss)
 		if werr := os.WriteFile(*stats, []byte(s), 0o644); werr != nil {
