@@ -34,6 +34,17 @@
 //
 // Default exempt suggestion: ["**/*.md", "docs/**"].
 //
+// Implementation notes (U8b; additive):
+//
+//   - Decode leaves timeout_s at 0 when absent (readers apply
+//     DefaultTimeoutS); an explicit 0 or out-of-range value is an error.
+//     env entries must be KEY=VALUE. Exempt globs must also be repo-relative
+//     and free of ".." (what snapshot.CompileExempt requires).
+//   - Loader.LoadProjectBytes also returns the file bytes (for Hash).
+//   - Detect's suggestions are named "test" with timeout_s 1800; a dotnet
+//     solution found one level down sets the entry's cwd to that directory.
+//     Fixtures live in testdata/stacks/<stack>/ (markers only).
+//
 // Acceptance (U8): testdata/stacks/<stack>/ fixtures (stub mode, created by
 // U8) detect exactly one stack each; multi-stack repos list all; Load
 // rejects every invalid row of testdata/invalid.json; Loader implements

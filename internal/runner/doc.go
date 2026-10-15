@@ -26,6 +26,34 @@
 //     environment variables when set (unverified whether clients export
 //     a session id to tool subprocesses; see open questions).
 //
+// Implementation notes (U8b; additive):
+//
+//   - The detached child only receives the job id, so Start stores the
+//     resolved entry (repo root, argv, env, cwd, exempt, project hash,
+//     session/agent) in a sidecar next to the job file
+//     (evidence.Store.SpecPath). RunJob runs exactly that entry.
+//   - The child records its own PID in the job file when it starts; Start does
+//     not rewrite the file after spawning (it would race with a fast job).
+//   - Start returns the started jobs; the CLI prints Started.String()
+//     ("job=<id> name=<name>"). StatusExitCode maps a record to the
+//     `verify --status` code. Options.Output (default stdout) receives the
+//     command output in Foreground.
+//   - Supersede order: job file done/superseded, then the superseded record
+//     (same file name the old runner would use), then SIGTERM to the old
+//     runner (TerminateProcess on Windows). A running job also polls its job
+//     file once a second and stops itself when it sees the supersede mark; it
+//     then writes nothing. A job superseded before its child started never
+//     runs its command.
+//   - Timeout / stop: SIGTERM to the command's process group, SIGKILL after 3s
+//     (a Job Object on Windows). The command runs with the child
+//     environment (Options.Env plus the entry's env) and argv[0] is resolved
+//     against that environment's PATH. A command that cannot be started is
+//     outcome infra.
+//   - A failed audit append is noted in the job log and is not an error (the
+//     record is already durable).
+//   - The command output goes to <job_id>.log between a "# ballast verify"
+//     header and a "# ballast outcome=" footer.
+//
 // Acceptance (U8): matrix.sh stub mode (9 stacks × pass/fail) records the
 // right outcome; supersede marks the old record; timeout kills the whole
 // process group; Spawner children survive the parent's exit (unix setsid,

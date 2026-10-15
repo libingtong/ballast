@@ -75,6 +75,11 @@ func recordNS(name string) (int64, bool) {
 	if len(name) < tsDigits+1 || name[tsDigits] != '-' {
 		return 0, false
 	}
+	for i := 0; i < tsDigits; i++ {
+		if name[i] < '0' || name[i] > '9' {
+			return 0, false
+		}
+	}
 	n, err := strconv.ParseInt(name[:tsDigits], 10, 64)
 	if err != nil {
 		return 0, false

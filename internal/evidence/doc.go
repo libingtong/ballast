@@ -81,6 +81,28 @@
 //   - Provider implements ports.EvidenceProvider; Open performs no I/O
 //     (FS fake records zero calls).
 //
+// Implementation notes (U8b; additive, the contract above stays in force):
+//
+//   - Options.Env (optional) feeds snapshot (global git config, TMPDIR); nil
+//     means the process environment.
+//   - Store also exposes JobPath, LogPath, SpecPath (the runner's per-job
+//     sidecar, removed by GC with the job), ReadJob and JobActive.
+//   - A running job whose PID is not recorded yet (the detached child writes
+//     its own PID when it starts) counts as running for JobStartGrace (30s);
+//     afterwards only a live PID before the job Deadline counts.
+//   - A latest record that cannot be read or decoded is no evidence:
+//     false(not_valid_pass), never a pass from an older record.
+//   - FreshQuery.Kind "" is treated as worktree; any other unknown kind is
+//     unknown(unparseable_commit).
+//   - ParseCommitForm leaves CommitForm.Reason empty (the acceptance table
+//     compares whole forms). A dynamic word is unparseable except as the
+//     value of a value-taking option (-m "$(...)" cannot change which tree is
+//     committed). Unknown options, --git-dir/--work-tree, a -a with paths and
+//     -i/-o without paths are unparseable.
+//   - Check resolves a relative CheckOptions.IndexFile against cwd.
+//   - FinishedSince reads only files whose t_start is within 25h before
+//     `since` (a record cannot run longer than the 86400s timeout cap).
+//
 // Integration acceptance (U12): scripts/freshness.sh with the real binary
 // and an installed pre-commit hook running `ballast verify --check`.
 package evidence
