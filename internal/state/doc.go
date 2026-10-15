@@ -30,6 +30,23 @@
 // GC: removes session dirs whose newest file mtime is older than TTL (7d);
 // invoked by `ballast gc` (detached from SessionStart, ≤ once/day).
 //
+// Implementation notes:
+//   - Every non-duplicate delta consumes one event_seq (with or without a
+//     Summary); Summary.Seq is that value. Commit returns it in EventSeq.
+//   - A duplicate delta (DedupeKey already in "seen") applies only
+//     Generation, RuleDigest and ReportedJobs. Info.Duplicate is true; Applied
+//     is true only if one of those changed the file (otherwise the file is not
+//     rewritten).
+//   - A tool call and AnchorEmitted in one delta leave tool_count_since_inject
+//     at 0. ReadAt keeps the newest time per path; LastAssistantText keeps the
+//     last 4000 runes, PrevPromptTail the last 200.
+//   - Flushed evals that reach all-zero are removed from "evals".
+//   - GC(ttl<=0) uses TTL; a session is stale when its newest file (or the
+//     directory itself when empty) is older than ttl. Empty repo directories
+//     are removed.
+//   - On Windows the rename can fail while a lock-free reader has the file
+//     open; Commit retries it briefly.
+//
 // Acceptance (U5): scripts/concurrency.sh — 2–8 independent processes
 // committing to the same key lose no update (sum of applied deltas ==
 // event_seq); duplicate tool_use_id applied once; corrupt file recovers;

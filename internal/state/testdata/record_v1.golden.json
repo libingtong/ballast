@@ -1,0 +1,60 @@
+{
+  "v": 1,
+  "started_at": "2026-10-16T08:00:00Z",
+  "event_seq": 6,
+  "seen": [
+    "SessionStart:",
+    "PreToolUse:toolu_1",
+    "PostToolUse:toolu_1",
+    "PostToolUse:toolu_2"
+  ],
+  "read": {
+    "/repo/src/a.go": "2026-10-16T08:00:03Z"
+  },
+  "tool_count": 1,
+  "tool_count_since_inject": 0,
+  "prompt_count": 1,
+  "prev_prompt_tail": "please fix the bug",
+  "prior_hits": {
+    "read-before-edit": 1
+  },
+  "generation": "gen-1",
+  "rule_digest": {
+    "no-long-sleep": "warn",
+    "read-before-edit": "deny"
+  },
+  "full_injected": true,
+  "reported_jobs": [
+    "job-7"
+  ],
+  "last_job_report_at": "2026-10-16T08:00:04Z",
+  "last_assistant_text": "done",
+  "last_tool_failure_at": "2026-10-16T08:00:04Z",
+  "ring": [
+    {
+      "seq": 3,
+      "ts": "2026-10-16T08:00:02Z",
+      "ev": "PreToolUse",
+      "tool": "Edit",
+      "text": "Edit: src/a.go",
+      "hits": [
+        "read-before-edit"
+      ]
+    },
+    {
+      "seq": 4,
+      "ts": "2026-10-16T08:00:03Z",
+      "ev": "PostToolUse",
+      "tool": "Read",
+      "text": "Read: src/a.go"
+    }
+  ],
+  "evals": {
+    "read-before-edit": {
+      "evals": 1,
+      "hits": 1,
+      "would": 0,
+      "unknown": 0
+    }
+  }
+}
