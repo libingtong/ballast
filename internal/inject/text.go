@@ -49,8 +49,14 @@ func (ly layout) omitLine(n int) string { return fmt.Sprintf("…(+%d %s omitted
 // end; a single over-long first item is cut at a rune boundary. It returns
 // the text and how many items are fully or partly present (0 for no text).
 func (ly layout) fit(items []string, budget int) (string, int) {
+	s, n, _ := ly.fitCut(items, budget)
+	return s, n
+}
+
+// fitCut is fit that also reports whether the first item had to be cut.
+func (ly layout) fitCut(items []string, budget int) (string, int, bool) {
 	if len(items) == 0 || budget <= 0 {
-		return "", 0
+		return "", 0, false
 	}
 	build := func(k int) string {
 		s := ly.prefix + strings.Join(items[:k], ly.sep)
@@ -60,14 +66,22 @@ func (ly layout) fit(items []string, budget int) (string, int) {
 		return s
 	}
 	if s := build(len(items)); runeLen(s) <= budget {
-		return s, len(items)
+		return s, len(items), false
 	}
 	for k := len(items) - 1; k >= 1; k-- {
 		if s := build(k); runeLen(s) <= budget {
-			return s, k
+			return s, k, false
 		}
 	}
-	return cutRunes(ly.prefix+items[0], budget), 1
+	// Not even the first item plus the omitted line fits: cut the first item
+	// and keep the omitted line, unless that leaves no room for the item.
+	if len(items) > 1 {
+		omit := "\n" + ly.omitLine(len(items)-1)
+		if room := budget - runeLen(omit); room >= runeLen(ly.prefix)+2 {
+			return cutRunes(ly.prefix+items[0], room) + omit, 1, true
+		}
+	}
+	return cutRunes(ly.prefix+items[0], budget), 1, true
 }
 
 // firstLine returns the first non-empty line of s, trimmed.
@@ -157,7 +171,9 @@ func genSummary(prev map[string]model.Action, rs *model.CompiledRuleSet, budget 
 }
 
 // jobResults renders recs within budget and returns how many leading
-// records are present in the text.
+// records are present in full. A first line cut for lack of room counts as
+// not reported, so it is shown whole later; one that cannot fit even the
+// full job budget counts as reported to avoid repeating it forever.
 func jobResults(recs []model.VerifyRecord, budget int) (string, int) {
 	items := make([]string, len(recs))
 	for i := range recs {
@@ -169,7 +185,11 @@ func jobResults(recs []model.VerifyRecord, budget int) (string, int) {
 		items[i] = s + ")"
 	}
 	ly := layout{sep: "\n", what: "results"}
-	return ly.fit(items, budget)
+	t, n, cut := ly.fitCut(items, budget)
+	if cut && budget < BudgetJobResults {
+		n = 0
+	}
+	return t, n
 }
 
 func noticesText(notices []model.ConfigNotice, budget int) string {

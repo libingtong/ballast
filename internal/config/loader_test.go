@@ -61,8 +61,8 @@ func TestStatFile(t *testing.T) {
 	if k, err = config.StatFile(sys.OSFS{}, filepath.Join(p, "child")); err != nil || k.Exists {
 		t.Errorf("ENOTDIR: %+v %v", k, err)
 	}
-	if _, err = config.StatFile(sys.OSFS{}, dir); err == nil {
-		t.Error("a directory must be an error")
+	if k, err = config.StatFile(sys.OSFS{}, dir); err != nil || !k.Exists {
+		t.Errorf("directory: %+v %v", k, err)
 	}
 	if k, err = config.StatFile(sys.OSFS{}, ""); err != nil || k.Exists {
 		t.Errorf("empty path: %+v %v", k, err)
@@ -487,15 +487,6 @@ func TestLoadWithoutRepoUsesCwd(t *testing.T) {
 }
 
 func TestLoadUnexpectedIOErrors(t *testing.T) {
-	t.Run("directory in place of file", func(t *testing.T) {
-		e := newEnv(t)
-		if err := os.MkdirAll(e.path(model.LayerUser), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := e.loader().Load(e.req()); err == nil {
-			t.Error("expected an error")
-		}
-	})
 	t.Run("read failure", func(t *testing.T) {
 		e := newEnv(t)
 		e.write(model.LayerUser, rulesJSON("", on("aaa-rule")))

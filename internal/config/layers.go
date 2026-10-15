@@ -18,10 +18,19 @@ func isNotExist(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)
 }
 
+// isUnusable reports an error that makes a layer file unusable without being
+// an I/O fault: a directory in its place, or no permission to read it.
+func isUnusable(err error) bool {
+	return errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EISDIR)
+}
+
 // loadMode tunes readLayers.
 type loadMode struct {
 	writeLKG bool // refresh LKG files for valid layers
 	report   bool // print config_invalid diagnostics to stderr
+	// lkgFailed, when non-nil, is set if an LKG write failed, so the caller
+	// can skip the cache and retry on the next load.
+	lkgFailed *bool
 }
 
 // statLayers resolves the layer paths and stats them. A repo layer that is
@@ -40,7 +49,11 @@ func (l *Loader) statLayers(req model.LoadRequest) ([]LayerPath, []model.StatKey
 		}
 		st, err := StatFile(fsys, paths[i].Path)
 		if err != nil {
-			return nil, nil, err
+			if !isUnusable(err) {
+				return nil, nil, err
+			}
+			// Stat itself was refused: readLayers reports the layer invalid.
+			st = model.StatKey{Path: paths[i].Path, Exists: true}
 		}
 		stats[i] = st
 	}
@@ -97,22 +110,30 @@ func (l *Loader) readLayers(paths []LayerPath, stats []model.StatKey, mode loadM
 			out[i] = lr
 			continue
 		}
+		var cause string
+		var data []byte
+		var file *model.RuleFile
+		var diags []model.Diagnostic
 		data, err := fsys.ReadFile(p.Path)
-		if err != nil {
-			if isNotExist(err) {
-				out[i] = lr
-				continue
-			}
+		switch {
+		case err == nil:
+			var perr error
+			file, diags, perr = l.opt.Compiler.ParseFile(p.Layer, p.Path, data)
+			cause = validationError(file, diags, perr)
+		case isNotExist(err):
+			out[i] = lr
+			continue
+		case isUnusable(err):
+			cause = "unreadable: " + err.Error()
+		default:
 			return nil, fmt.Errorf("config: read %s: %w", p.Path, err)
 		}
-		file, diags, perr := l.opt.Compiler.ParseFile(p.Layer, p.Path, data)
-		cause := validationError(file, diags, perr)
 		if cause == "" {
 			lr.Source.Status = model.LayerOK
 			lr.Source.Hash = hashHex(data)
 			lr.File, lr.Diags = file, diags
-			if mode.writeLKG {
-				l.refreshLKG(p, data, lr.Source.Hash)
+			if mode.writeLKG && !l.refreshLKG(p, data, lr.Source.Hash) && mode.lkgFailed != nil {
+				*mode.lkgFailed = true
 			}
 			out[i] = lr
 			continue
@@ -174,13 +195,16 @@ func (l *Loader) readLKG(p LayerPath) (lkgEntry, bool) {
 }
 
 // refreshLKG rewrites the LKG file when the valid layer's hash changed.
-// Failures are diagnostics, never errors.
-func (l *Loader) refreshLKG(p LayerPath, data []byte, hash string) {
+// Failures are diagnostics, never errors; it reports whether the LKG file is
+// in place.
+func (l *Loader) refreshLKG(p LayerPath, data []byte, hash string) bool {
 	path := l.lkgPath(p.Layer, p.Path)
 	if old, err := l.fs().ReadFile(path); err == nil && hashHex(old) == hash {
-		return
+		return true
 	}
 	if err := sys.WriteFileAtomic(l.fs(), l.ids(), path, data, 0o600, false); err != nil {
 		l.diag("cannot write last-known-good for %s: %v", p.Path, err)
+		return false
 	}
+	return true
 }

@@ -69,16 +69,31 @@ func (l *Loader) readStatIndex() statIndex {
 	return idx
 }
 
-func sameSources(a []model.LayerSource, stats []model.StatKey) bool {
+// matchSources checks that the cached sources describe the current layer
+// stats and returns the sources to report. rules-<generation>.json is shared
+// by every load context with the same merged rules, so a layer that is
+// missing both in the cache and now may differ only in its path (another
+// repo without repo rules); it contributes no rules, and its source is
+// re-stamped with the current stat.
+func matchSources(a []model.LayerSource, stats []model.StatKey) ([]model.LayerSource, bool) {
 	if len(a) != len(stats) {
-		return false
+		return nil, false
 	}
+	out, copied := a, false
 	for i := range a {
-		if a[i].Stat != stats[i] {
-			return false
+		if a[i].Stat == stats[i] {
+			continue
 		}
+		if a[i].Stat.Exists || stats[i].Exists {
+			return nil, false
+		}
+		if !copied {
+			out, copied = append([]model.LayerSource(nil), a...), true
+		}
+		out[i].Path = stats[i].Path
+		out[i].Stat = stats[i]
 	}
-	return true
+	return out, true
 }
 
 // cacheLookup serves a hit: stat index → rules file → Compile. Anything
@@ -93,10 +108,14 @@ func (l *Loader) cacheLookup(idx statIndex, key string, stats []model.StatKey) (
 		return nil, false
 	}
 	var c cachedRules
-	if json.Unmarshal(b, &c) != nil || c.V != cacheFormat || c.Generation != gen || !sameSources(c.Sources, stats) {
+	if json.Unmarshal(b, &c) != nil || c.V != cacheFormat || c.Generation != gen {
 		return nil, false
 	}
-	rs, err := l.compile(c.Rules, c.Settings, gen, c.Sources, c.Notices)
+	sources, ok := matchSources(c.Sources, stats)
+	if !ok {
+		return nil, false
+	}
+	rs, err := l.compile(c.Rules, c.Settings, gen, sources, c.Notices)
 	if err != nil {
 		return nil, false
 	}

@@ -58,14 +58,17 @@ func (l *Loader) Load(req model.LoadRequest) (*model.CompiledRuleSet, error) {
 		key = cacheKey(l.opt.Version, stats)
 		idx = l.readStatIndex()
 		if rs, ok := l.cacheLookup(idx, key, stats); ok {
+			l.reportCached(rs)
 			return rs, nil
 		}
 	}
-	layers, err := l.readLayers(paths, stats, loadMode{writeLKG: !l.opt.NoCache, report: true})
+	var lkgFailed bool
+	layers, err := l.readLayers(paths, stats, loadMode{writeLKG: !l.opt.NoCache, report: true, lkgFailed: &lkgFailed})
 	if err != nil {
 		return nil, err
 	}
 	res := Merge(layers)
+	l.reportDropped(res.Notices)
 	rules := make([]model.Rule, len(res.Rules))
 	for i := range res.Rules {
 		rules[i] = res.Rules[i].Rule
@@ -79,7 +82,8 @@ func (l *Loader) Load(req model.LoadRequest) (*model.CompiledRuleSet, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !l.opt.NoCache {
+	// A failed LKG write leaves the cache unwritten so the next load retries.
+	if !l.opt.NoCache && !lkgFailed {
 		l.cacheStore(idx, key, res, gen, sources)
 	}
 	return rs, nil
@@ -107,6 +111,33 @@ func (l *Loader) stderr() io.Writer {
 		return l.opt.Stderr
 	}
 	return os.Stderr
+}
+
+// reportDropped prints rule_dropped notices; org rules being dropped must
+// never go unnoticed.
+func (l *Loader) reportDropped(notices []model.ConfigNotice) {
+	for _, n := range notices {
+		if n.Kind == model.NoticeRuleDropped {
+			l.diag("%s", n.Message)
+		}
+	}
+}
+
+// reportCached re-emits, on a cache hit, the diagnostics that only a
+// cache-missing load prints: rule_dropped and a config_invalid layer that has
+// no last-known-good.
+func (l *Loader) reportCached(rs *model.CompiledRuleSet) {
+	l.reportDropped(rs.Notices)
+	for _, n := range rs.Notices {
+		if n.Kind != model.NoticeConfigInvalid {
+			continue
+		}
+		for _, src := range rs.Sources {
+			if src.Layer == n.Layer && src.Status == model.LayerInvalid {
+				l.diag("%s", n.Message)
+			}
+		}
+	}
 }
 
 func (l *Loader) diag(format string, args ...any) {
@@ -139,7 +170,8 @@ func LayerPaths(lay layout.Layout, req model.LoadRequest) []LayerPath {
 	}
 }
 
-// StatFile returns the StatKey of path (Exists=false when missing).
+// StatFile returns the StatKey of path (Exists=false when missing). A
+// directory is reported like a file; reading it later fails as unusable.
 func StatFile(fsys sys.FS, path string) (model.StatKey, error) {
 	key := model.StatKey{Path: path}
 	if path == "" {
@@ -151,9 +183,6 @@ func StatFile(fsys sys.FS, path string) (model.StatKey, error) {
 			return key, nil
 		}
 		return key, fmt.Errorf("config: stat %s: %w", path, err)
-	}
-	if fi.IsDir() {
-		return key, fmt.Errorf("config: %s is a directory", path)
 	}
 	key.Exists = true
 	key.Size = fi.Size()
