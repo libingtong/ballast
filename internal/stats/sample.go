@@ -55,6 +55,9 @@ func validRuleID(id string) bool {
 	return true
 }
 
+// MaxSample bounds the sample count accepted by Sample.
+const MaxSample = 10000
+
 // ReviewPath returns reviews/<rule_id>.json.
 func ReviewPath(lay layout.Layout, ruleID string) string {
 	return filepath.Join(lay.ReviewsDir, ruleID+".json")
@@ -67,12 +70,15 @@ func sample(src ports.AuditSource, lay layout.Layout, fsys sys.FS, ids sys.IDGen
 	if n <= 0 {
 		return nil, fmt.Errorf("%w: sample count must be positive, got %d", ErrUsage, n)
 	}
+	if n > MaxSample {
+		return nil, fmt.Errorf("%w: sample count %d exceeds the maximum %d", ErrUsage, n, MaxSample)
+	}
 	if src == nil {
 		return nil, fmt.Errorf("stats: nil audit source")
 	}
 
 	// Keep the n most recent hits in a ring (records arrive chronologically).
-	ring := make([]model.AuditRecord, 0, n)
+	ring := make([]model.AuditRecord, 0, min(n, 256))
 	next := 0
 	_, err := src.Records(time.Time{}, time.Time{}, func(rec *model.AuditRecord) error {
 		if rec.Type != model.AuditHit || rec.RuleID != rule {

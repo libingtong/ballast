@@ -106,8 +106,21 @@ func TestEvidenceViewSemantics(t *testing.T) {
 	if r := v.VerifyFresh(model.FreshQuery{Names: []string{"vet"}}); r.Value != model.TriFalse || r.Cause != "no_record" {
 		t.Errorf("vet (not finished yet): %+v", r)
 	}
-	if r := v.VerifyFresh(model.FreshQuery{}); r.Value != model.TriFalse { // all names seen: lint is torn
-		t.Errorf("all names: %+v", r)
+	// Without names the required list of project.json decides, not the names seen.
+	if r := v.VerifyFresh(model.FreshQuery{}); r.Value != model.TriUnknown || r.Cause != causeRequiredAbsent {
+		t.Errorf("no resolver: %+v", r)
+	}
+	req := func(names ...string) func() ([]string, string) {
+		return func() ([]string, string) { return names, "" }
+	}
+	if r := v.withRequired(req("test")).VerifyFresh(model.FreshQuery{}); r.Value != model.TriTrue {
+		t.Errorf("required test: %+v", r)
+	}
+	if r := v.withRequired(req("test", "vet")).VerifyFresh(model.FreshQuery{}); r.Value != model.TriFalse || r.Cause != "no_record" {
+		t.Errorf("a required check that never ran must not be fresh: %+v", r)
+	}
+	if r := v.withRequired(func() ([]string, string) { return nil, causeNoProject }).VerifyFresh(model.FreshQuery{}); r.Value != model.TriUnknown || r.Cause != causeNoProject {
+		t.Errorf("no project: %+v", r)
 	}
 	// A write after the pass makes it stale.
 	stale := newEvidenceView(all, base.Add(30*time.Second), base.Add(25*time.Second))
@@ -133,7 +146,7 @@ func TestEvidenceViewSemantics(t *testing.T) {
 	if got := v.FinishedSince(base.Add(12 * time.Second)); len(got) != 2 {
 		t.Errorf("FinishedSince = %d records", len(got))
 	}
-	if r := newEvidenceView(nil, base, time.Time{}).VerifyFresh(model.FreshQuery{}); r.Value != model.TriFalse {
+	if r := newEvidenceView(nil, base, time.Time{}).VerifyFresh(model.FreshQuery{Names: []string{"test"}}); r.Value != model.TriFalse || r.Cause != "no_record" {
 		t.Errorf("empty view: %+v", r)
 	}
 }

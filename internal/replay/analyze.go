@@ -52,6 +52,11 @@ func walkConds(conds []model.Cond, m *ruleMeta) {
 const (
 	causeNoEvidence = "no_trusted_evidence"
 	causeEvalError  = "evaluate_error"
+
+	causeNoProject      = "no_project"
+	causeProjectInvalid = "project_invalid"
+	causeNoRequired     = "no_required"
+	causeRequiredAbsent = "required_names_unavailable"
 )
 
 // classify assigns the replay class (doc.go "Classification").

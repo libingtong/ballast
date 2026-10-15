@@ -138,7 +138,7 @@ func Promote(opt PromoteOptions, deps PromoteDeps) (*PromoteResult, error) {
 	if st, err := deps.FS.Stat(loc.path); err == nil {
 		perm = st.Mode().Perm()
 	}
-	if err := sys.WriteFileAtomic(deps.FS, deps.IDs, loc.path, newData, perm, false); err != nil {
+	if err := sys.WriteFileAtomic(deps.FS, deps.IDs, loc.path, newData, perm, true); err != nil {
 		return nil, fmt.Errorf("stats: rewriting %s: %w", loc.path, err)
 	}
 	if !opt.Force {

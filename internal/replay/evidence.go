@@ -68,7 +68,7 @@ func loadEvidenceDir(fsys sys.FS, dir, session string) []model.VerifyRecord {
 func loadEvidenceFile(fsys sys.FS, path string) ([]model.VerifyRecord, error) {
 	data, err := fsys.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("replay: reading evidence file: %w", err)
 	}
 	trim := bytes.TrimSpace(data)
 	var out []model.VerifyRecord
@@ -121,6 +121,9 @@ func sortRecords(recs []model.VerifyRecord) {
 type evidenceView struct {
 	records   []model.VerifyRecord // chronological by t_start, all visible at now
 	lastWrite time.Time
+	// required resolves the required names of the repo's project.json and,
+	// when unavailable, the cause. nil ⇒ unavailable.
+	required func() ([]string, string)
 }
 
 var _ model.EvidenceView = (*evidenceView)(nil)
@@ -136,20 +139,23 @@ func newEvidenceView(all []model.VerifyRecord, now, lastWrite time.Time) *eviden
 	return v
 }
 
+// withRequired sets the project.json required-names resolver.
+func (v *evidenceView) withRequired(f func() ([]string, string)) *evidenceView {
+	v.required = f
+	return v
+}
+
 func (v *evidenceView) VerifyFresh(q model.FreshQuery) model.FreshResult {
 	names := q.Names
 	if len(names) == 0 {
-		seen := map[string]bool{}
-		for i := range v.records {
-			if n := v.records[i].Name; !seen[n] {
-				seen[n] = true
-				names = append(names, n)
-			}
+		if v.required == nil {
+			return model.FreshResult{Value: model.TriUnknown, Cause: causeRequiredAbsent}
 		}
-		sort.Strings(names)
-	}
-	if len(names) == 0 {
-		return model.FreshResult{Value: model.TriFalse, Cause: "no_record"}
+		req, cause := v.required()
+		if cause != "" {
+			return model.FreshResult{Value: model.TriUnknown, Cause: cause}
+		}
+		names = req
 	}
 	res := model.FreshResult{Value: model.TriTrue, Cause: "fresh", Names: names}
 	for _, name := range names {

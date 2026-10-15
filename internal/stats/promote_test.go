@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -484,5 +485,38 @@ func TestPromoteConcurrentDistinctRules(t *testing.T) {
 	}
 	if len(e.sink.recs) != 2 {
 		t.Errorf("audit records = %d", len(e.sink.recs))
+	}
+}
+
+// syncFS counts Sync calls on files opened through it.
+type syncFS struct {
+	sys.FS
+	syncs *int
+}
+
+type syncFile struct {
+	sys.File
+	syncs *int
+}
+
+func (f syncFile) Sync() error { *f.syncs++; return f.File.Sync() }
+
+func (s syncFS) OpenFile(n string, flag int, perm fs.FileMode) (sys.File, error) {
+	f, err := s.FS.OpenFile(n, flag, perm)
+	if err != nil {
+		return nil, err
+	}
+	return syncFile{File: f, syncs: s.syncs}, nil
+}
+
+func TestPromoteFsyncsRuleFile(t *testing.T) {
+	e := newPromoteEnv(t, nil)
+	n := 0
+	e.deps.FS = syncFS{FS: sys.OSFS{}, syncs: &n}
+	if _, err := Promote(PromoteOptions{RuleID: "read-before-edit", To: model.ActionDeny, Force: true}, e.deps); err != nil {
+		t.Fatal(err)
+	}
+	if n == 0 {
+		t.Error("the rewritten rule file was not fsynced")
 	}
 }

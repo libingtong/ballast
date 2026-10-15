@@ -206,6 +206,15 @@ func TestRunSubagents(t *testing.T) {
 	if got := counts(summary(t, rep, "main-stop")); got != [4]int{0, 0, 0, 0} {
 		t.Errorf("main-stop = %v (main transcript has no final answer)", got)
 	}
+
+	// The sub-agent's first user record is the Task input: no UserPromptSubmit
+	// fires for it, and it does not feed the prompt state.
+	prompt := cr("any-prompt", model.EventUserPromptSubmit, nil)
+	e4 := newEnv(t, rset("g", prompt))
+	rep = mustRun(t, e4, path, Options{Subagents: true})
+	if got := counts(summary(t, rep, "any-prompt")); got != [4]int{1, 0, 0, 0} {
+		t.Errorf("any-prompt = %v (only the main prompt counts)", got)
+	}
 }
 
 func TestRunMissingSubagentDirIsFine(t *testing.T) {
@@ -410,10 +419,29 @@ func TestRunVerifyNeedsTrustedEvidence(t *testing.T) {
 				t.Errorf("%s: fresh evidence hit: %+v", name, smp)
 			}
 		}
-		// A missing or empty evidence file leaves the rule unknown.
-		rep := mustRun(t, e, build(e), Options{EvidenceMode: "file", EvidenceFile: filepath.Join(e.sb.Root, "nope.json")})
+		// A missing file is an I/O error, undecodable content a usage error.
+		tp := build(e)
+		_, err := Run(Options{Transcript: tp, EvidenceMode: "file", EvidenceFile: filepath.Join(e.sb.Root, "nope.json")}, e.deps)
+		if !errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrUsage) {
+			t.Errorf("missing file: %v", err)
+		}
+		for name, content := range map[string]string{"array": `[{"job_id":`, "lines": "{\"job_id\":\"a\"}\nnot json\n", "wrong type": `[1,2]`} {
+			p := filepath.Join(e.sb.Root, "bad-"+name+".json")
+			if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Run(Options{Transcript: tp, EvidenceMode: "file", EvidenceFile: p}, e.deps); !errors.Is(err, ErrUsage) {
+				t.Errorf("%s: err = %v", name, err)
+			}
+		}
+		// An empty file is valid: the rule stays unknown.
+		empty := filepath.Join(e.sb.Root, "empty.json")
+		if err := os.WriteFile(empty, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		rep := mustRun(t, e, tp, Options{EvidenceMode: "file", EvidenceFile: empty})
 		if got := counts(summary(t, rep, "verify-before-stop")); got != [4]int{0, 0, 0, 1} {
-			t.Errorf("missing file: counts = %v", got)
+			t.Errorf("empty file: counts = %v", got)
 		}
 	})
 }
@@ -1089,5 +1117,139 @@ func TestRunSubagentFileWithoutAgentIDInRecords(t *testing.T) {
 	rep := mustRun(t, e, path, Options{Subagents: true})
 	if got := counts(summary(t, rep, "sub-edit")); got != [4]int{2, 0, 0, 0} {
 		t.Errorf("counts = %v", got)
+	}
+}
+
+func TestScopePendingBounded(t *testing.T) {
+	sc := &scope{pending: map[string]pendingCall{}}
+	// Resolved calls must neither count toward the bound nor grow order unboundedly.
+	for i := 0; i < 20*maxPending; i++ {
+		id := fmt.Sprintf("r%d", i)
+		sc.addPending(id, pendingCall{})
+		delete(sc.pending, id)
+	}
+	if len(sc.order) > 4*maxPending {
+		t.Errorf("order grew to %d with nothing outstanding", len(sc.order))
+	}
+	for i := 0; i < maxPending; i++ {
+		sc.addPending(fmt.Sprintf("u%d", i), pendingCall{})
+	}
+	if len(sc.pending) != maxPending {
+		t.Fatalf("pending = %d, want %d (resolved ids must not evict live ones)", len(sc.pending), maxPending)
+	}
+	// Overflow evicts the oldest unresolved call and keeps the bound.
+	for i := 0; i < 3*maxPending; i++ {
+		sc.addPending(fmt.Sprintf("o%d", i), pendingCall{})
+		if len(sc.pending) > maxPending {
+			t.Fatalf("pending = %d exceeds %d", len(sc.pending), maxPending)
+		}
+	}
+	if _, ok := sc.pending["u0"]; ok {
+		t.Error("oldest call survived")
+	}
+	if _, ok := sc.pending[fmt.Sprintf("o%d", 3*maxPending-1)]; !ok {
+		t.Error("newest call evicted")
+	}
+}
+
+func TestRunEvidenceUsesWritesAsOfEvent(t *testing.T) {
+	e := newEnv(t, rset("g", cr("sub-verify", model.EventSubagentStop, func(r *model.Rule) {
+		r.When = []model.Cond{{Not: &model.Cond{VerifyFresh: &model.VerifyFreshArg{Names: []string{"test"}}}}}
+	})))
+	main := newTx("S", e.workdir)
+	main.user("delegate")
+	main.tool("m1", "Task", map[string]any{"description": "d"})
+	main.ts = main.ts.Add(100 * time.Second) // the main agent writes long after the sub-agent finished
+	main.tool("m2", "Edit", map[string]any{"file_path": e.workdir + "/late.go"}).result("m2", "ok", false)
+	path := main.write(t, filepath.Join(e.dir, "S.jsonl"))
+
+	sub := newTx("S", e.workdir)
+	sub.agent, sub.side = "ag1", true
+	sub.user("sub task")
+	sub.tool("s1", "Edit", map[string]any{"file_path": e.workdir + "/a.go"}).result("s1", "ok", false) // 09:00:03
+	sub.final("done")                                                                                  // 09:00:04
+	sub.write(t, filepath.Join(e.dir, "S", "subagents", "agent-ag1.jsonl"))
+
+	base := time.Date(2026, 10, 10, 9, 0, 0, 0, time.UTC)
+	rec := model.VerifyRecord{V: 1, JobID: "j1", Name: "test", RepoInst: "ri", Tier: model.TierT0, SStart: "T", SEnd: "T",
+		TStart: base.Add(3200 * time.Millisecond), TEnd: base.Add(3500 * time.Millisecond), Outcome: model.OutcomePass, SessionID: "S"}
+	dir := filepath.Join(e.evDir, "ri", "test")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "1.json"), []byte(mustJSON(t, rec)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rep := mustRun(t, e, path, Options{Subagents: true})
+	if smp := samplesOf(rep, "sub-verify"); len(smp) != 0 {
+		t.Errorf("a pass after the sub-agent's last write is fresh at that moment: %+v", smp)
+	}
+	if got := counts(summary(t, rep, "sub-verify")); got != [4]int{0, 0, 1, 0} {
+		t.Errorf("counts = %v", got)
+	}
+}
+
+func TestRunVerifyFreshWithoutNamesUsesProjectRequired(t *testing.T) {
+	rule := cr("verify-all", model.EventStop, func(r *model.Rule) {
+		r.When = []model.Cond{{Not: &model.Cond{VerifyFresh: &model.VerifyFreshArg{}}}}
+	})
+	base := time.Date(2026, 10, 10, 9, 0, 0, 0, time.UTC)
+	run := func(t *testing.T, project string) *Report {
+		e := newEnv(t, rset("g", rule))
+		if err := os.MkdirAll(filepath.Join(e.workdir, ".ballast"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if project != "" {
+			if err := os.WriteFile(filepath.Join(e.workdir, ".ballast", "project.json"), []byte(project), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// Only "lint" ever passed.
+		rec := model.VerifyRecord{V: 1, JobID: "j1", Name: "lint", RepoInst: "ri", Tier: model.TierT0, SStart: "T", SEnd: "T",
+			TStart: base.Add(time.Second), TEnd: base.Add(2 * time.Second), Outcome: model.OutcomePass, SessionID: "S"}
+		dir := filepath.Join(e.evDir, "ri", "lint")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "1.json"), []byte(mustJSON(t, rec)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		x := newTx("S", e.workdir)
+		x.user("go").final("done")
+		return mustRun(t, e, x.write(t, filepath.Join(e.dir, "S.jsonl")), Options{})
+	}
+	req := func(names ...string) string {
+		var vs []model.VerifySpec
+		for _, n := range names {
+			vs = append(vs, model.VerifySpec{Name: n, Argv: []string{"x"}, Required: true})
+		}
+		return mustJSON(t, model.ProjectConfig{Version: 1, Verify: vs})
+	}
+	t.Run("required check that never ran is not fresh", func(t *testing.T) {
+		rep := run(t, req("lint", "test"))
+		if got := counts(summary(t, rep, "verify-all")); got != [4]int{0, 0, 1, 0} {
+			t.Errorf("counts = %v", got)
+		}
+		if smp := samplesOf(rep, "verify-all"); len(smp) != 1 || smp[0].Class != Approximate {
+			t.Errorf("samples = %+v", smp)
+		}
+	})
+	t.Run("all required checks passed", func(t *testing.T) {
+		rep := run(t, req("lint"))
+		if got := counts(summary(t, rep, "verify-all")); got != [4]int{0, 0, 1, 0} {
+			t.Errorf("counts = %v", got)
+		}
+		if smp := samplesOf(rep, "verify-all"); len(smp) != 0 {
+			t.Errorf("samples = %+v", smp)
+		}
+	})
+	for name, project := range map[string]string{"no project.json": "", "invalid project.json": "{", "no required entries": `{"verify":[{"name":"x","argv":["x"]}]}`} {
+		t.Run(name, func(t *testing.T) {
+			rep := run(t, project)
+			if got := counts(summary(t, rep, "verify-all")); got != [4]int{0, 0, 0, 1} {
+				t.Errorf("counts = %v (the required list is unknown: unknown, not approximate)", got)
+			}
+		})
 	}
 }

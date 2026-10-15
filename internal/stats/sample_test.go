@@ -118,6 +118,12 @@ func TestSampleErrors(t *testing.T) {
 	if _, err := Sample(src, lay, sys.OSFS{}, &sys.SeqID{}, clk, "rule-a", 0); !errors.Is(err, ErrUsage) {
 		t.Errorf("n=0: %v", err)
 	}
+	if _, err := Sample(src, lay, sys.OSFS{}, &sys.SeqID{}, clk, "rule-a", MaxSample+1); !errors.Is(err, ErrUsage) {
+		t.Errorf("n too large: %v", err)
+	}
+	if _, err := Sample(src, lay, sys.OSFS{}, &sys.SeqID{}, clk, "rule-a", 1<<40); !errors.Is(err, ErrUsage) {
+		t.Errorf("n huge: %v", err)
+	}
 	if _, err := Sample(nil, lay, sys.OSFS{}, &sys.SeqID{}, clk, "rule-a", 1); err == nil {
 		t.Error("nil source accepted")
 	}

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libingtong/ballast/internal/layout"
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/ports"
 	"github.com/libingtong/ballast/internal/sys"
@@ -73,10 +74,10 @@ type runner struct {
 	scopes        map[scopeKey]*scope
 	// per-session facts
 	cwdBySession   map[string]string
-	writeBySession map[string]time.Time
+	writeBySession map[string][]time.Time // sorted file-tool write times
 	evidence       map[string][]model.VerifyRecord
 	evidenceFile   []model.VerifyRecord
-	evidenceLoaded bool
+	projects       map[string]projectEntry // by project root
 	pathCtx        map[string]model.PathContext
 	homeRaw        string
 	homeNorm       string
@@ -169,7 +170,8 @@ func newRunner(opt Options, deps Deps) (*runner, error) {
 		opt: opt, deps: deps, client: client, adapter: adapter,
 		scopes:         map[scopeKey]*scope{},
 		cwdBySession:   map[string]string{},
-		writeBySession: map[string]time.Time{},
+		writeBySession: map[string][]time.Time{},
+		projects:       map[string]projectEntry{},
 		evidence:       map[string][]model.VerifyRecord{},
 		pathCtx:        map[string]model.PathContext{},
 		summaries:      map[string]*RuleSummary{},
@@ -191,6 +193,13 @@ func newRunner(opt Options, deps Deps) (*runner, error) {
 		r.homeNorm = deps.Paths.Normalize(r.homeRaw, "", ctx0)
 	}
 	r.transcriptRef = r.refOf(opt.Transcript)
+	if opt.EvidenceMode == "file" {
+		recs, err := loadEvidenceFile(deps.FS, opt.EvidenceFile)
+		if err != nil {
+			return nil, err
+		}
+		r.evidenceFile = recs
+	}
 	return r, nil
 }
 
@@ -458,6 +467,9 @@ func (r *runner) handle(it *Item) {
 	}
 	switch it.Kind {
 	case ItemUserPrompt:
+		if sc.agent != "main" {
+			return // a sub-agent's prompt is the Task input; the client fires no UserPromptSubmit for it
+		}
 		ev := r.buildEvent(sc, model.EventUserPromptSubmit, it, payloadIn{prompt: it.Text})
 		hits := r.runRules(sc, ev, it, ts)
 		sc.st.touch(ts, model.EventUserPromptSubmit, "")
@@ -500,6 +512,31 @@ func (r *runner) handle(it *Item) {
 	}
 }
 
+// addPending records a call awaiting its result, evicting the oldest still
+// unresolved call once maxPending are outstanding.
+func (sc *scope) addPending(id string, pc pendingCall) {
+	if _, dup := sc.pending[id]; !dup {
+		for len(sc.pending) >= maxPending && len(sc.order) > 0 {
+			old := sc.order[0]
+			sc.order = sc.order[1:]
+			delete(sc.pending, old) // no-op for ids already resolved
+		}
+		// Resolved ids stay in order until they reach the front; compact
+		// when they dominate so the slice stays proportional to maxPending.
+		if len(sc.order) >= 4*maxPending {
+			live := sc.order[:0]
+			for _, o := range sc.order {
+				if _, ok := sc.pending[o]; ok {
+					live = append(live, o)
+				}
+			}
+			sc.order = live
+		}
+		sc.order = append(sc.order, id)
+	}
+	sc.pending[id] = pc
+}
+
 func (r *runner) handleResult(sc *scope, it *Item, ts time.Time) {
 	pc, ok := sc.pending[it.ToolUseID]
 	if !ok {
@@ -530,6 +567,76 @@ func (r *runner) handleResult(sc *scope, it *Item, ts time.Time) {
 	sc.st.onMidTurn(r.batchAfter)
 }
 
+// noteWrite records a file-tool write time, keeping the list sorted (sub-agent
+// streams are replayed after the main one).
+func (r *runner) noteWrite(session string, ts time.Time) {
+	w := r.writeBySession[session]
+	i := sort.Search(len(w), func(i int) bool { return w[i].After(ts) })
+	w = append(w, time.Time{})
+	copy(w[i+1:], w[i:])
+	w[i] = ts
+	r.writeBySession[session] = w
+}
+
+// lastWriteAt is the latest write at or before ts (the latest overall when ts
+// is unknown); zero when none.
+func (r *runner) lastWriteAt(session string, ts time.Time) time.Time {
+	w := r.writeBySession[session]
+	if ts.IsZero() {
+		if len(w) == 0 {
+			return time.Time{}
+		}
+		return w[len(w)-1]
+	}
+	i := sort.Search(len(w), func(i int) bool { return w[i].After(ts) })
+	if i == 0 {
+		return time.Time{}
+	}
+	return w[i-1]
+}
+
+// projectEntry caches one repo's project.json.
+type projectEntry struct {
+	required []string
+	cause    string // non-empty when the required list is unavailable
+}
+
+// requiredNames resolves the required verify names of the repo at ctx's
+// project root from .ballast/project.json (verify_fresh without names).
+func (r *runner) requiredNames(ctx model.PathContext) func() ([]string, string) {
+	return func() ([]string, string) {
+		root := ctx.ProjectRoot
+		e, ok := r.projects[root]
+		if !ok {
+			e = r.loadProject(root)
+			r.projects[root] = e
+		}
+		return e.required, e.cause
+	}
+}
+
+func (r *runner) loadProject(root string) projectEntry {
+	if root == "" {
+		return projectEntry{cause: causeNoProject}
+	}
+	data, err := r.deps.FS.ReadFile(layout.ProjectJSON(filepath.FromSlash(root)))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return projectEntry{cause: causeNoProject}
+		}
+		return projectEntry{cause: causeProjectInvalid}
+	}
+	var pc model.ProjectConfig
+	if err := json.Unmarshal(data, &pc); err != nil {
+		return projectEntry{cause: causeProjectInvalid}
+	}
+	req := pc.Required()
+	if len(req) == 0 {
+		return projectEntry{cause: causeNoRequired}
+	}
+	return projectEntry{required: req}
+}
+
 // registerReads applies the PostToolUse read-set rule of internal/hook/doc.go.
 func (r *runner) registerReads(sc *scope, ev *model.Event, ts time.Time) {
 	tool := ev.Tool
@@ -544,7 +651,7 @@ func (r *runner) registerReads(sc *scope, ev *model.Event, ts time.Time) {
 			sc.exists[r.norm(sc, p)] = false
 		}
 		if tool.Name != model.ToolRead {
-			r.writeBySession[sc.session] = ts
+			r.noteWrite(sc.session, ts)
 		}
 	}
 	if tool.Shell != model.ShellNone {
@@ -681,7 +788,7 @@ func (r *runner) runRules(sc *scope, ev *model.Event, it *Item, ts time.Time) []
 	}
 	recs, hasEvidence := r.evidenceFor(sc.session)
 	if hasEvidence {
-		in.Evidence = newEvidenceView(recs, ts, r.writeBySession[sc.session])
+		in.Evidence = newEvidenceView(recs, ts, r.lastWriteAt(sc.session, ts)).withRequired(r.requiredNames(ctx))
 	}
 
 	verdict, err := r.deps.Engine.Evaluate(r.rs, in)
@@ -740,13 +847,6 @@ func (r *runner) evidenceFor(session string) ([]model.VerifyRecord, bool) {
 		return nil, false
 	}
 	if r.opt.EvidenceMode == "file" {
-		if !r.evidenceLoaded {
-			r.evidenceLoaded = true
-			recs, err := loadEvidenceFile(r.deps.FS, r.opt.EvidenceFile)
-			if err == nil {
-				r.evidenceFile = recs
-			}
-		}
 		return r.evidenceFile, len(r.evidenceFile) > 0
 	}
 	recs, ok := r.evidence[session]
