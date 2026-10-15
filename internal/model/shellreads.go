@@ -14,7 +14,10 @@ package model
 //     case-insensitively for PowerShell) is cd/pushd/popd (bash) or
 //     set-location/push-location/pop-location/cd/sl/chdir/pushd/popd
 //     (PowerShell), only candidates for which IsAbsShellPath is true are
-//     returned.
+//     returned. For bash (and ShellNone) a node whose Argv[0] is the
+//     non-dynamic literal "builtin" is looked through: its first argument
+//     (non-dynamic, after any further "builtin" words) is compared instead,
+//     so `builtin cd /x` changes directory (contract v1.3).
 //
 // Implemented by U2 (owner of the read-extraction tables); this file is the
 // only file under internal/model U2 may edit, plus shellreads_test.go.
@@ -29,6 +32,11 @@ func ShellReadPaths(cl *CommandList) []string {
 		n := &cl.Nodes[i]
 		if !changesDir && len(n.Argv) > 0 && !n.Argv[0].Dynamic {
 			cmd := n.Argv[0].Lit
+			if cl.Shell != ShellPowerShell {
+				for k := 1; cmd == "builtin" && k < len(n.Argv) && !n.Argv[k].Dynamic; k++ {
+					cmd = n.Argv[k].Lit
+				}
+			}
 			if cl.Shell == ShellPowerShell {
 				lower := []byte(cmd)
 				for j, c := range lower {

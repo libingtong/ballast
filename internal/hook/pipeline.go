@@ -24,7 +24,7 @@ import (
 //     stdout commit and never fails the invocation.
 
 // shellReadPaths is the single shared shell-read rule (U2). It is a variable
-// only so tests can stand in until model.ShellReadPaths is implemented.
+// only so tests can substitute it.
 var shellReadPaths = model.ShellReadPaths
 
 // maxNewJobs bounds the finished-job list handed to the injector.

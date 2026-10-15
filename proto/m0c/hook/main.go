@@ -1,3 +1,5 @@
+//go:build !windows
+
 // Command hook 是 M0c 的最小完整 hook 原型(M1 前删除)。
 //
 // 每次进程执行完整流程:

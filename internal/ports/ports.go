@@ -104,14 +104,21 @@ type PathService interface {
 
 // StateStore (U5 state). Scope directories are created on demand.
 type StateStore interface {
-	// Load reads WITHOUT locking. Missing ⇒ empty state, info.Exists=false.
-	// Corrupt ⇒ empty state, info.Corrupt=true. Never returns a nil state.
+	// Load reads WITHOUT locking. Missing ⇒ empty state, info.Exists=false,
+	// info.Readable=true, nil error. Corrupt ⇒ empty state,
+	// info.Corrupt=true, Readable=true, nil error. Any other I/O error ⇒
+	// empty state, Readable=false and the error (contract v1.3: Readable is
+	// false exactly when err != nil). Never returns a nil state.
 	Load(key model.ScopeKey) (model.SessionState, model.StateLoadInfo, error)
 	// Commit locks (≤20ms), re-reads, merges d, atomically replaces the
 	// file. A lock timeout returns info.LockTimeout=true and a nil error.
 	Commit(key model.ScopeKey, d *model.StateDelta) (model.StateCommitInfo, error)
-	// DropAgent removes one agent file (SubagentStop); DropSession removes
-	// the session directory (SessionEnd). Missing ⇒ nil.
+	// DropAgent removes one agent state file (SubagentStop); DropSession
+	// removes every agent state file of the session (SessionEnd). Missing ⇒
+	// nil. Both remove a file only while holding its lock and never unlink
+	// "<file>.lock" (a held lock would otherwise be split in two); lock
+	// files and the emptied directory are left to GC. Best effort: a lock
+	// timeout leaves the file for GC and returns nil (contract v1.3).
 	DropAgent(key model.ScopeKey) error
 	DropSession(key model.ScopeKey) error
 }
