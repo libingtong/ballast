@@ -2,6 +2,15 @@
 
 package evidence
 
+import (
+	"errors"
+	"syscall"
+)
+
 func processAlive(pid int) bool {
-	panic("unimplemented: evidence.processAlive (unix)")
+	if pid <= 0 {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
