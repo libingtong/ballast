@@ -488,10 +488,15 @@ func ManagedForms(lay layout.Layout, self string, extra []string) (denyWrite, pe
 //   - "fail", "needs_credentials" or "unverifiable" (not proven) ⇒ the
 //     default is model.WeakenedProjectDeny.
 //
-// The skeleton freezes the not-proven branch (deny). P2-CLI sets the final
-// value at integration from docs/facts/m0b-cases.json, together with the
-// org render golden of P2-INSTALL; flipping it to audit requires that pass
-// row (contract change recorded in docs/p2-design.md §13).
+// The skeleton freezes the not-proven branch (deny). P2-CLI finalized it at
+// integration from docs/facts/m0b-cases.json: managed-denywrite-anydepth is
+// "needs_credentials" (the mock-mode observation is that the "**/" forms do
+// NOT stop Bash writes, docs/facts/M0b-CONCLUSIONS.md §5), so the value
+// STAYS deny and the org render golden is unchanged;
+// internal/cli's TestDefaultWeakenedProjectMatchesM0b fails if the constant,
+// that row and the `org render` output ever disagree. Flipping it to audit
+// requires a pass row in credentials mode (contract change recorded in
+// docs/p2-design.md §13).
 const DefaultWeakenedProject = model.WeakenedProjectDeny
 
 // EffectiveWeakenedProject returns org.WeakenedProject, or

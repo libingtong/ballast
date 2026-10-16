@@ -184,7 +184,33 @@ func TestGC(t *testing.T) {
 	if err := os.Chtimes(filepath.Dir(stale), longAgo, longAgo); err != nil {
 		t.Fatal(err)
 	}
+	// P2: request files and quarantine entries older than 30 days, work-tree
+	// leftovers of unknown jobs older than 24 hours; recent ones stay.
+	oldReq := filepath.Join(s.sb.BallastHome, "requests", "repo1", "20000101T000000-aaaaaa.json")
+	newReq := filepath.Join(s.sb.BallastHome, "requests", "repo1", "20261001T000000-bbbbbb.json")
+	oldQuar := filepath.Join(s.sb.BallastHome, "quarantine", "20000101T000000-aaaaaa", ".claude", "settings.local.json")
+	oldWork := filepath.Join(s.sb.BallastHome, "work", "20000101T000000-cccccc", "tree", "a.txt")
+	newWork := filepath.Join(s.sb.BallastHome, "work", "20261001T000000-dddddd", "tree", "a.txt")
+	for _, p := range []string{oldReq, newReq, oldQuar, oldWork, newWork} {
+		writeFile(t, p, "x")
+	}
+	ancient := time.Now().Add(-90 * 24 * time.Hour)
+	for _, p := range []string{oldReq, filepath.Join(s.sb.BallastHome, "quarantine", "20000101T000000-aaaaaa"), filepath.Join(s.sb.BallastHome, "work", "20000101T000000-cccccc")} {
+		if err := os.Chtimes(p, ancient, ancient); err != nil {
+			t.Fatal(err)
+		}
+	}
 	s.mustExit(0, "", "", "gc")
+	for _, p := range []string{oldReq, filepath.Dir(filepath.Dir(oldQuar)), filepath.Dir(filepath.Dir(oldWork))} {
+		if _, err := os.Stat(p); err == nil {
+			t.Errorf("gc should delete the expired P2 leftover %s", filepath.Base(p))
+		}
+	}
+	for _, p := range []string{newReq, newWork} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("gc deleted a recent P2 file %s: %v", filepath.Base(p), err)
+		}
+	}
 	if _, err := os.Stat(filepath.Dir(stale)); err == nil {
 		t.Error("gc should delete expired session state")
 	}

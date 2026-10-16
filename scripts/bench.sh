@@ -10,6 +10,10 @@
 #   OUT=        报告目录(默认 <repo>/dist/bench,含 report.md 与 report.json)
 #   KEEP=1      保留临时目录(默认运行结束后删除)
 #
+# 场景 12–14(假 T1 的规范 verify、强制重定向锁、weakened_project:deny)需要 `-tags ballast_fault`
+# 构建的第二个二进制(BALLAST_TEST_* 开关只在那里生效,生产构建忽略);其余场景(含 ConfigChange)
+# 用生产构建。门槛对所有场景一致:p95 <= 30ms 且 Bad == 0、样本齐全。
+#
 # 所有临时文件(含 1k/10k 文件的测试仓库、各场景的 BALLAST_HOME)都在 mktemp 目录下;
 # 子进程环境由 bench 从零构造(HOME、BALLAST_HOME、CLAUDE_CONFIG_DIR、CODEX_HOME、
 # HERMES_HOME、BALLAST_INSTALL_ROOT、GIT_CONFIG_GLOBAL 全部重定向),不触碰任何真实配置,不联网。
@@ -33,15 +37,17 @@ trap cleanup EXIT
 
 EXE="$(cd "$ROOT" && GOPROXY=off go env GOEXE)"
 BIN="$BASE/bin/ballast$EXE"
+FBIN="$BASE/bin/ballast-fault$EXE"
 BENCH="$BASE/bin/bench$EXE"
 mkdir -p "$BASE/bin" "$OUT"
 
-echo "== 构建 ballast(-trimpath -ldflags='-s -w')与 bench"
+echo "== 构建 ballast(-trimpath -ldflags='-s -w')、带 ballast_fault 标签的同款(场景 12–14)与 bench"
 (cd "$ROOT" \
   && GOPROXY=off go build -trimpath -ldflags='-s -w' -o "$BIN" ./cmd/ballast \
+  && GOPROXY=off go build -trimpath -ldflags='-s -w' -tags ballast_fault -o "$FBIN" ./cmd/ballast \
   && GOPROXY=off go build -o "$BENCH" ./scripts/bench)
 
-ARGS=(-bin "$BIN" -base "$BASE/run" -root "$ROOT" -n "$N" -warm "$WARM" -json "$OUT/report.json" -md "$OUT/report.md")
+ARGS=(-bin "$BIN" -fault-bin "$FBIN" -base "$BASE/run" -root "$ROOT" -n "$N" -warm "$WARM" -json "$OUT/report.json" -md "$OUT/report.md")
 if [[ -n "${ONLY:-}" ]]; then
   ARGS+=(-only "$ONLY")
 fi

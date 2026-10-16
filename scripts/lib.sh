@@ -679,8 +679,11 @@ run_bench() {
     skip_or_fail "$name" "scripts/bench is not part of this tree"
     return 0
   fi
+  # Scenarios 12-14 (P2) need a binary built with -tags ballast_fault: the
+  # BALLAST_TEST_* switches exist only there (docs/p2-design.md §3.6).
+  build_ballast_fault
   (cd "$REPO_ROOT" && gocmd run ./scripts/bench \
-    -bin "$(native "$BALLAST_BIN")" -base "$(native "$TMP_ROOT/bench")" \
+    -bin "$(native "$BALLAST_BIN")" -fault-bin "$(native "$BALLAST_FAULT_BIN")" -base "$(native "$TMP_ROOT/bench")" \
     -root "$(native "$REPO_ROOT")" "$@") || rc=$?
   if [ "$rc" = 0 ]; then ok "$name"; else bad "$name" "scripts/bench exited $rc"; fi
 }

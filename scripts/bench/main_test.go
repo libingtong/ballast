@@ -96,6 +96,33 @@ func TestScenarioTable(t *testing.T) {
 	}
 }
 
+// TestP2Scenarios: the P2 scenarios exist, only the BALLAST_TEST_* ones need
+// the fault binary, and no pre-P2 scenario was switched to it.
+func TestP2Scenarios(t *testing.T) {
+	want := map[string]bool{"12": true, "13": true, "14a": true, "14b": true, "C-configchange": false}
+	seen := map[string]bool{}
+	for _, sc := range scenarios() {
+		needsFault, isP2 := want[sc.id]
+		if isP2 {
+			seen[sc.id] = true
+		}
+		if sc.fault != (isP2 && needsFault) {
+			t.Errorf("scenario %s: fault=%v, want %v", sc.id, sc.fault, isP2 && needsFault)
+		}
+		if sc.fault && len(sc.env) == 0 {
+			t.Errorf("fault scenario %s has no BALLAST_TEST_* switch", sc.id)
+		}
+		if !sc.fault && len(sc.env) != 0 {
+			t.Errorf("scenario %s sets env for the production binary", sc.id)
+		}
+	}
+	for id := range want {
+		if !seen[id] {
+			t.Errorf("P2 scenario %s missing", id)
+		}
+	}
+}
+
 func TestCoverage(t *testing.T) {
 	all := scenarios()
 	var full []result

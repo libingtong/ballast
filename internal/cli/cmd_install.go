@@ -10,6 +10,7 @@ import (
 	"github.com/libingtong/ballast/internal/inject"
 	"github.com/libingtong/ballast/internal/install"
 	"github.com/libingtong/ballast/internal/model"
+	"github.com/libingtong/ballast/internal/sandbox"
 )
 
 // parseClients parses repeated/comma-separated --client values; "all"
@@ -230,8 +231,14 @@ func runDoctor(a *app, c *command, args []string) int {
 			lintClients = cl
 		}
 	}
+	self, serr := resolvedSelf()
+	if serr != nil {
+		self = selfPath()
+	}
 	dopt := install.DoctorOptions{
 		Layout: a.lay, FS: a.fs, Env: a.env,
+		Self: self, Cwd: a.cwd,
+		SandboxAvailable: a.sandboxAvailable,
 		LintRules: func() []model.Diagnostic {
 			inputs, err := a.stackInputs()
 			if err != nil {
@@ -347,6 +354,20 @@ func runDoctor(a *app, c *command, args []string) int {
 	return ExitOK
 }
 
+// sandboxAvailable is install.DoctorOptions.SandboxAvailable: nil ⇒ the
+// runner's OS sandbox backend (sandbox-exec / bwrap) works on this host.
+// install never imports internal/sandbox; the CLI injects this probe.
+func (a *app) sandboxAvailable() error {
+	kind, err := sandbox.Probe(sandbox.Options{FS: a.fs, Env: a.env, GOOS: a.env.GOOS()})
+	if err != nil {
+		return err
+	}
+	if kind == sandbox.KindNone {
+		return errors.New("no sandbox backend available")
+	}
+	return nil
+}
+
 func worseStatus(a, b install.CheckStatus) install.CheckStatus {
 	rank := func(s install.CheckStatus) int {
 		switch s {
@@ -372,10 +393,13 @@ func runOrg(a *app, c *command, args []string) int {
 	fs := newFlagSet("org render")
 	var client, binary string
 	var write, admin bool
+	var homeRoots, protect multiFlag
 	fs.StringVar(&client, "client", string(model.ClientClaude), "")
 	fs.StringVar(&binary, "binary", "", "")
 	fs.BoolVar(&write, "write", false, "")
 	fs.BoolVar(&admin, "i-am-admin", false, "")
+	fs.Var(&homeRoots, "home-root", "")
+	fs.Var(&protect, "protect", "")
 	pos, err := parseArgs(fs, args[1:])
 	if err != nil {
 		return a.usageErr(c, "%v", err)
@@ -386,18 +410,25 @@ func runOrg(a *app, c *command, args []string) int {
 	if client != string(model.ClientClaude) {
 		return a.usageErr(c, "only --client claude-code has a managed template, got %q", client)
 	}
-	out, err := install.OrgRender(a.lay, a.fs, install.OrgRenderOptions{
+	r, err := install.OrgRenderFull(a.lay, a.fs, install.OrgRenderOptions{
 		GOOS: a.env.GOOS(), Binary: binary, Write: write, IAmAdmin: admin,
+		HomeRoot: homeRoots, Protected: protect, Env: a.env,
 	})
 	if err != nil {
-		if errors.Is(err, install.ErrOrgWriteDenied) {
+		switch {
+		case errors.Is(err, install.ErrOrgWriteDenied):
 			return a.errorf(ExitRefused, "%v", err)
+		case errors.Is(err, install.ErrUsage):
+			return a.errorf(ExitUsage, "%v", err)
 		}
 		return a.errorf(ExitInfra, "%v", err)
 	}
-	_, _ = a.out.Write(out)
-	if write {
-		fmt.Fprintf(a.errw, "ballast: 已写入 %s/ballast.json\n", a.lay.ClaudeManagedSettingsD())
+	_, _ = a.out.Write(r.Stdout)
+	for _, w := range r.Written {
+		fmt.Fprintf(a.errw, "ballast: 已写入 %s\n", w)
+	}
+	for _, n := range r.Notes {
+		fmt.Fprintf(a.errw, "ballast: %s\n", n)
 	}
 	return ExitOK
 }

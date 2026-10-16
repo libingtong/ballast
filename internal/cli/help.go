@@ -21,7 +21,8 @@ const topUsage = `ballast(压舱石):AI 编码客户端的行为策略引擎
   install       把 hook 安装到客户端配置
   uninstall     按 manifest 卸载
   doctor        自检(层级 T0/T1、各客户端状态)
-  org render    输出组织托管设置模板
+  org render    输出组织托管设置模板与 org.json 段
+  report        把审计日志脱敏聚合成一个本地文件(--out <文件>),不联网
   gc            清理过期状态(内部)
   version       显示版本
 
@@ -64,7 +65,11 @@ const verifyUsage = `用法:
   ballast verify --check [--commit|--worktree]   供 git pre-commit 使用
   ballast verify --foreground <名称>          前台运行并流式输出
   ballast verify --run-job <job_id>           内部:分离的 runner
+  ballast verify --hook-start --request <id> --cwd <目录> --client <id> [--session <id>] [--agent <id>]
+                 [--project-dir <目录>] -- [名称...]        内部:T1 下由 hook 代起(参数格式冻结)
 
+--status 的参数可以是 hook 代起时给出的 request id:没有同名 job 时回退读取请求文件(~/.ballast/requests),
+多个 job 取最差结果(fail > timeout > signal > infra > 运行中 > pass);请求文件也不存在则按"无记录"退出 11。
 退出码(启动):0 已启动;2 配置错误(无仓库 / 无 project.json / 未知名称 / project.json 非法);5 基础设施错误。
 退出码(--status / --foreground / --run-job):0 pass;1 fail;3 timeout;4 signal;5 infra;6 运行中;7 superseded;11 无记录。
 退出码(--check):0 新鲜;10 过期;11 无证据;12 无法判定;13 同名 job 运行中。
@@ -125,11 +130,25 @@ const doctorUsage = `用法:ballast doctor [--json]
 退出码:0 无 fail(可有 warn);1 有 fail。CI 是最终裁判:会话内规则只负责引导 agent。
 `
 
-const orgUsage = `用法:ballast org render [--client claude-code] [--binary <绝对路径>] [--write --i-am-admin]
+const orgUsage = `用法:ballast org render [--client claude-code] [--binary <绝对路径>] [--home-root <目录>]... [--protect <路径>]...
+                        [--write --i-am-admin]
 
-输出 Claude 托管设置片段(T1 模板)。--write 需要 --i-am-admin 且以 root 运行,写入
-<托管目录>/managed-settings.d/ballast.json。
-退出码:0;2 用法;4 --write 但非 root 或缺 --i-am-admin。
+输出 Claude 托管设置片段(T1 模板)与 org.json 段(风险注释以 "//" 开头,写入的文件是纯 JSON)。
+  --home-root  写入 org.json 的 home_root(可重复;sssd/LDAP 用户 passwd 查不到时的家目录父目录)
+  --protect    额外受保护路径(可重复),同时写入 org.json 的 protected_extra
+  --write      需要 --i-am-admin 且以 root 运行:先写 <托管目录>/managed-settings.d/ballast.json,
+               再写 <托管目录>/ballast/org.json(写入它即锁定本机);带 SUDO_UID 时先预检该用户的家目录
+退出码:0;2 用法(含 --write 预检失败:调用 sudo 的用户 passwd 无条目且没有 home_root);4 --write 但非 root 或缺 --i-am-admin;5 I/O。
+`
+
+const reportUsage = `用法:ballast report --out <文件> [--since 30d] [--force]
+
+把审计日志聚合成一个脱敏的本地文件(窗口、会话/仓库计数、各客户端与层级记录数、规则命中、诊断计数、
+verify 结果、hook 延迟直方图)。默认不运行、不联网、不发送任何东西;绝不包含 session/repo id、路径、
+命令文本、提示词或主机/用户名,非内置规则的 id 只输出哈希。分享前请自行检查文件。
+  --out    输出文件(必需;已存在则退出 4,除非 --force)
+  --since  统计窗口:Nd、Nh 或 RFC3339,默认 30d
+退出码:0 已写入;1 隐私自检失败(什么都不写,这是 bug);2 用法;4 文件已存在且无 --force;5 I/O。
 `
 
 const gcUsage = `用法:ballast gc

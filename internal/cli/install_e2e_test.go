@@ -377,9 +377,19 @@ func TestDoctorFreshHomeOnlyWarns(t *testing.T) {
 func TestOrgRender(t *testing.T) {
 	s := newSandbox(t)
 	r := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast")
+	// stdout = the managed-settings fragment (pure JSON), then the org.json
+	// section introduced by "//" comment lines (docs/p2-design.md §3.5).
+	settings, org := splitOrgStdout(t, r.stdout)
 	var doc map[string]any
-	if err := json.Unmarshal([]byte(r.stdout), &doc); err != nil {
-		t.Fatalf("org render output is not JSON: %v\n%s", err, r.stdout)
+	if err := json.Unmarshal([]byte(settings), &doc); err != nil {
+		t.Fatalf("org render settings fragment is not JSON: %v\n%s", err, settings)
+	}
+	var orgDoc map[string]any
+	if err := json.Unmarshal([]byte(org), &orgDoc); err != nil {
+		t.Fatalf("org.json section is not JSON: %v\n%s", err, org)
+	}
+	if orgDoc["tier"] != "T1" || orgDoc["runner_sandbox"] != "require" || orgDoc["runner_network"] != "deny" {
+		t.Errorf("org.json section: %v", orgDoc)
 	}
 	if doc["allowManagedHooksOnly"] != true || dig(doc, "sandbox", "enabled") != true || dig(doc, "sandbox", "failIfUnavailable") != true {
 		t.Errorf("T1 template keys: %v", doc)
@@ -403,5 +413,48 @@ func TestOrgRender(t *testing.T) {
 	s.mustExit(2, "", "", "org")
 	if runtime.GOOS == "windows" {
 		t.Log("windows: geteuid is -1; root branch skipped by design")
+	}
+}
+
+// splitOrgStdout splits `ballast org render` stdout into the settings JSON
+// and the org.json JSON (its "//" comment lines removed).
+func splitOrgStdout(t *testing.T, out string) (settings, org string) {
+	t.Helper()
+	i := strings.Index(out, "// ---- org.json")
+	if i < 0 {
+		t.Fatalf("org render output has no org.json section:\n%s", out)
+	}
+	settings = out[:i]
+	var keep []string
+	for _, ln := range strings.Split(out[i:], "\n") {
+		if strings.HasPrefix(strings.TrimSpace(ln), "//") {
+			continue
+		}
+		keep = append(keep, ln)
+	}
+	return settings, strings.Join(keep, "\n")
+}
+
+// TestOrgRenderHomeRoot: --home-root lands in the org.json section, a bad
+// value is a usage error and nothing is written without --write.
+func TestOrgRenderHomeRoot(t *testing.T) {
+	s := newSandbox(t)
+	r := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast",
+		"--home-root", "/home", "--home-root", "/home/corp.example", "--protect", "/opt/secret")
+	_, org := splitOrgStdout(t, r.stdout)
+	var doc struct {
+		HomeRoot       []string `json:"home_root"`
+		ProtectedExtra []string `json:"protected_extra"`
+	}
+	if err := json.Unmarshal([]byte(org), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(doc.HomeRoot, ",") != "/home,/home/corp.example" || strings.Join(doc.ProtectedExtra, ",") != "/opt/secret" {
+		t.Errorf("home_root=%v protected_extra=%v", doc.HomeRoot, doc.ProtectedExtra)
+	}
+	for _, bad := range []string{"relative/dir", "/", "~/x", "/home/*"} {
+		if r := s.run("", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast", "--home-root", bad); r.code != 2 {
+			t.Errorf("--home-root %q: exit %d, want 2\n%s", bad, r.code, r.stderr)
+		}
 	}
 }

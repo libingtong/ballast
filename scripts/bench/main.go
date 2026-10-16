@@ -18,6 +18,14 @@
 // supported client has at least one PreToolUse scenario, and no scenario is
 // missing. The exit code is 0 only then (1 gate failed, 2 usage/setup error).
 //
+// P2 scenarios (docs/p2-design.md §3.6, §5.1): 12 (a canonical `ballast verify`
+// denied under a faked T1), 13 (forced redirect lock with the real passwd
+// lookup), 14a/14b (forced lock, weakened_project:"deny", project directory
+// without / with a clean .claude/settings.json) and C-configchange (the
+// ConfigChange audit). 12–14 need a binary built with `-tags ballast_fault`
+// (-fault-bin): the BALLAST_TEST_* switches exist only there, production
+// builds ignore them. Every other scenario runs the production binary.
+//
 // Isolation: every scenario gets its own BALLAST_HOME under -base, and the
 // child environment is built from scratch (only PATH and the Windows system
 // variables are inherited); HOME, CLAUDE_CONFIG_DIR, CODEX_HOME, HERMES_HOME,
@@ -86,6 +94,18 @@ type scenario struct {
 	// measured runs (proves the intended code path really ran).
 	hitRule string
 	preTool bool // counts as the client's PreToolUse coverage
+
+	// P2 additions.
+	//
+	// fault runs the scenario with the -fault-bin binary (built with
+	// -tags ballast_fault) and env appended to the child environment
+	// (BALLAST_TEST_*); both are off for every pre-P2 scenario.
+	fault bool
+	env   []string
+	// workSub, when set, is a directory under -base used instead of "work"
+	// (rc.work); settings, when set, becomes its .claude/settings.json.
+	workSub  string
+	settings string
 }
 
 type result struct {
@@ -355,6 +375,34 @@ func scenarios() []scenario {
 				return mustJSON(map[string]any{"session_id": "bench-sess", "cwd": rc.work,
 					"tool_name": "terminal", "tool_input": map[string]any{"command": "sleep 300"}})
 			}},
+
+		// P2 scenarios (docs/p2-design.md §3.6, §5.1).
+		{id: "12", name: "假 T1 下的规范 verify PreToolUse(代起 deny)", group: "p2", client: "claude-code", event: "PreToolUse",
+			expect: "deny", preTool: true, fault: true, env: []string{"BALLAST_TEST_TIER=T1"},
+			payload: func(rc *runCtx, it, proc int) []byte {
+				return claudeBash(rc.work, "bench-sess", uid("t1verify", it, proc), "ballast verify test")
+			}, post: hookStartCheck},
+		{id: "13", name: "强制已锁定(真实 passwd 查询与 home_root 判定,结果丢弃)", group: "p2", client: "claude-code", event: "PreToolUse",
+			expect: "empty", preTool: true, fault: true,
+			env:     []string{"BALLAST_TEST_LOCKED=1", "BALLAST_TEST_WEAKENED=audit"},
+			payload: bashShort("locked"), post: lockedCheck(false)},
+		{id: "14a", name: "已锁定 + weakened_project:deny,项目目录无 .claude", group: "p2", client: "claude-code", event: "PreToolUse",
+			expect: "empty", preTool: true, fault: true, workSub: "work14a",
+			env:     []string{"BALLAST_TEST_LOCKED=1", "BALLAST_TEST_WEAKENED=deny"},
+			payload: bashShort("lockeddeny"), post: lockedCheck(true)},
+		{id: "14b", name: "已锁定 + weakened_project:deny,项目目录有干净的 .claude/settings.json", group: "p2", client: "claude-code", event: "PreToolUse",
+			expect: "empty", preTool: true, fault: true, workSub: "work14b",
+			settings: `{"sandbox":{"enabled":true,"filesystem":{"denyWrite":["/x"]}}}` + "\n",
+			env:      []string{"BALLAST_TEST_LOCKED=1", "BALLAST_TEST_WEAKENED=deny"},
+			payload:  bashShort("lockeddenyclean"), post: lockedCheck(true)},
+		{id: "C-configchange", name: "claude-code ConfigChange(审计,stdout 恒空)", group: "p2", client: "claude-code", event: "ConfigChange",
+			expect: "empty",
+			payload: func(rc *runCtx, it, proc int) []byte {
+				m := claudeBase(rc.work, "bench-sess", "ConfigChange")
+				m["source"] = "user_settings"
+				m["file_path"] = filepath.Join(filepath.Dir(rc.work), "fakehome", ".claude", "settings.json")
+				return mustJSON(m)
+			}, post: configChangeCheck},
 	}
 }
 
@@ -472,6 +520,66 @@ func lockCheck(rc *runCtx, runs int) ([]string, []string) {
 	return notes, problems
 }
 
+// hookStartCheck (scenario 12): every measured and warm-up run must have
+// audited a verify_hook_start diag with spawn_ok (the deny came from the
+// T1 path, not from a rule, and the detached child was really spawned).
+func hookStartCheck(rc *runCtx, runs int) ([]string, []string) {
+	n := 0
+	for _, r := range readAudit(rc.home) {
+		if diagName(r) != "verify_hook_start" {
+			continue
+		}
+		if d, ok := r["detail"].(map[string]any); ok && d["spawn_ok"] == true {
+			n++
+		}
+	}
+	notes := []string{fmt.Sprintf("%d 次执行中审计到 verify_hook_start(spawn_ok)%d 次", runs, n)}
+	var problems []string
+	if n < runs {
+		problems = append(problems, fmt.Sprintf("verify_hook_start 只有 %d 条,应为 %d", n, runs))
+	}
+	return notes, problems
+}
+
+// lockedCheck (scenarios 13/14): the forced lock must really have been
+// active - the session's first event audits env_redirect_ignored (the
+// bench sets all three redirection variables) - and, for the deny policy,
+// a clean or absent project layer must never produce lower_sandbox_deny.
+func lockedCheck(deny bool) func(rc *runCtx, runs int) ([]string, []string) {
+	return func(rc *runCtx, runs int) ([]string, []string) {
+		recs := readAudit(rc.home)
+		ignored := countDiag(recs, "env_redirect_ignored")
+		denied := countDiag(recs, "lower_sandbox_deny")
+		weak := countDiag(recs, "lower_sandbox_weakened")
+		notes := []string{fmt.Sprintf("env_redirect_ignored=%d lower_sandbox_deny=%d lower_sandbox_weakened=%d(deny=%v,执行 %d 次)", ignored, denied, weak, deny, runs)}
+		var problems []string
+		if ignored == 0 {
+			problems = append(problems, "没有 env_redirect_ignored 审计:强制锁定没有生效")
+		}
+		if denied != 0 || weak != 0 {
+			problems = append(problems, "干净或缺失的项目层不应产生 lower_sandbox_deny / lower_sandbox_weakened")
+		}
+		return notes, problems
+	}
+}
+
+// configChangeCheck: every run audited one config_change line and none of
+// them blocked (stdout is empty by the scenario's expectation).
+func configChangeCheck(rc *runCtx, runs int) ([]string, []string) {
+	n := 0
+	for _, r := range readAudit(rc.home) {
+		if r["type"] == "config_change" {
+			n++
+		}
+	}
+	notes := []string{fmt.Sprintf("%d 次执行中审计到 config_change %d 条", runs, n)}
+	var problems []string
+	if n < runs {
+		problems = append(problems, fmt.Sprintf("config_change 只有 %d 条,应为 %d", n, runs))
+	}
+	return notes, problems
+}
+
 // ---- environment ----
 
 func baseEnv(base, home, work string) []string {
@@ -554,8 +662,30 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 	_ = os.WriteFile(filepath.Join(home, "gc.stamp"), nil, 0o600)
 
 	work := filepath.Join(o.base, "work")
+	if sc.workSub != "" {
+		work = filepath.Join(o.base, sc.workSub)
+		if err := os.MkdirAll(work, 0o755); err != nil {
+			return failedSetup(sc, err)
+		}
+		if err := os.WriteFile(filepath.Join(work, "target.go"), []byte("package main\n"), 0o600); err != nil {
+			return failedSetup(sc, err)
+		}
+		if sc.settings != "" {
+			if err := os.MkdirAll(filepath.Join(work, ".claude"), 0o755); err != nil {
+				return failedSetup(sc, err)
+			}
+			if err := os.WriteFile(filepath.Join(work, ".claude", "settings.json"), []byte(sc.settings), 0o600); err != nil {
+				return failedSetup(sc, err)
+			}
+		}
+	}
 	rc := &runCtx{home: home, work: work, root: o.root}
 	env := append(baseEnv(o.base, home, work), o.extraEnv...)
+	env = append(env, sc.env...)
+	bin := o.bin
+	if sc.fault {
+		bin = o.faultBin
+	}
 	procs := sc.procs
 	if procs == 0 {
 		procs = 1
@@ -579,7 +709,7 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 		}
 		outs := make([]oneRun, procs)
 		if procs == 1 {
-			d, c, so, se := spawn(o.bin, args, env, cwd, sc.payload(rc, it, 0))
+			d, c, so, se := spawn(bin, args, env, cwd, sc.payload(rc, it, 0))
 			outs[0] = oneRun{d, c, so, se}
 		} else {
 			var wg sync.WaitGroup
@@ -590,7 +720,7 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 					defer wg.Done()
 					pl := sc.payload(rc, it, p)
 					<-start
-					d, c, so, se := spawn(o.bin, args, env, cwd, pl)
+					d, c, so, se := spawn(bin, args, env, cwd, pl)
 					outs[p] = oneRun{d, c, so, se}
 				}(p)
 			}
@@ -906,6 +1036,7 @@ func loadAvg() string {
 
 type options struct {
 	bin, base, root string
+	faultBin        string // binary built with -tags ballast_fault (scenarios 12-14)
 	n, warm         int
 	only            *regexp.Regexp
 	jsonOut, mdOut  string
@@ -917,6 +1048,7 @@ func main() {
 	var o options
 	var only string
 	flag.StringVar(&o.bin, "bin", "", "path of the ballast binary (required)")
+	flag.StringVar(&o.faultBin, "fault-bin", "", "ballast binary built with -tags ballast_fault (required by scenarios 12-14)")
 	flag.StringVar(&o.base, "base", "", "work directory for all temporary state (required, created if missing)")
 	flag.StringVar(&o.root, "root", ".", "module root (for rules/)")
 	flag.IntVar(&o.n, "n", defaultN, "measured iterations per scenario")
@@ -969,6 +1101,14 @@ func main() {
 	if _, err := os.Stat(o.bin); err != nil {
 		fatal(fmt.Errorf("ballast binary: %w", err))
 	}
+	if o.faultBin != "" {
+		if o.faultBin, err = filepath.Abs(o.faultBin); err != nil {
+			fatal(err)
+		}
+		if _, err := os.Stat(o.faultBin); err != nil {
+			fatal(fmt.Errorf("fault binary: %w", err))
+		}
+	}
 	for _, d := range []string{"work", "homes", "repos", "fakehome", "managed"} {
 		if err := os.MkdirAll(filepath.Join(o.base, d), 0o700); err != nil {
 			fatal(err)
@@ -998,6 +1138,12 @@ func main() {
 	if len(picked) == 0 {
 		fmt.Fprintln(os.Stderr, "bench: -only matched no scenario")
 		os.Exit(2)
+	}
+	for _, sc := range picked {
+		if sc.fault && o.faultBin == "" {
+			fmt.Fprintf(os.Stderr, "bench: scenario %s needs -fault-bin (a ballast built with -tags ballast_fault)\n", sc.id)
+			os.Exit(2)
+		}
 	}
 	needRepos := false
 	for _, sc := range picked {
@@ -1146,6 +1292,12 @@ func coverage(all []scenario, got []result, partial bool) []string {
 		for _, id := range []string{"1", "2", "3", "4", "5", "6a", "6b", "7", "8", "9", "10", "11"} {
 			if !have[id] {
 				problems = append(problems, "缺少 B10 场景 "+id)
+			}
+		}
+		// P2 (docs/p2-design.md §3.6, §5.1).
+		for _, id := range []string{"12", "13", "14a", "14b", "C-configchange"} {
+			if !have[id] {
+				problems = append(problems, "缺少 P2 场景 "+id)
 			}
 		}
 		cover := map[string]bool{}
