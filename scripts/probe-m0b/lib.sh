@@ -12,7 +12,7 @@ set -u
 export HOME_AGENT=/home/agent
 PROJ=/home/agent/proj
 PROBE_DIR=/tmp/probe
-OUT=/out
+OUT="${BALLAST_M0B_OUTDIR:-/out}"   # 容器内固定为 /out;selftest.sh 在宿主上用临时目录覆盖
 CASE_ID="${CASE_ID:?}"
 CASE_DIR="/m0b/cases/$CASE_ID"
 mkdir -p "$OUT/payloads"
@@ -64,7 +64,9 @@ install_fixtures() {
 }
 
 # --- claude 运行 ---------------------------------------------------------
-# 模式:none(无 key)、blackhole(拒绝连接)、hang(只 accept 不应答)、mock(本地桩)。
+# 模式:none(无 key)、blackhole(拒绝连接)、hang(只 accept 不应答)、mock(本地桩)、
+# credentials(真实模型:ANTHROPIC_API_KEY 由 run.sh 的 docker run -e 传入容器环境,as_agent 的
+# runuser 不带 -l 因此继承它;不设 BASE_URL,走默认端点)。
 HANG_PORT=18080
 MOCK_PORT=18081
 mode_env() {
@@ -73,6 +75,10 @@ mode_env() {
     blackhole) echo "ANTHROPIC_API_KEY=dummy-not-a-credential ANTHROPIC_BASE_URL=http://127.0.0.1:9" ;;
     hang)  echo "ANTHROPIC_API_KEY=dummy-not-a-credential ANTHROPIC_BASE_URL=http://127.0.0.1:$HANG_PORT" ;;
     mock)  echo "ANTHROPIC_API_KEY=dummy-not-a-credential ANTHROPIC_BASE_URL=http://127.0.0.1:$MOCK_PORT" ;;
+    credentials)
+      # key 不经过本函数的输出(输出会被 word-split 进命令行,也可能进日志);只确认它存在
+      [ -n "${ANTHROPIC_API_KEY:-}" ] || { echo "credentials 模式需要容器环境里有 ANTHROPIC_API_KEY" >&2; return 1; }
+      echo "" ;;
     *) echo "bad mode $1" >&2; return 1 ;;
   esac
 }
@@ -91,7 +97,14 @@ RUN_PROMPT="hello"
 run_claude() {
   local mode="$1" to="$2"; shift 2
   [ "$mode" = hang ] && start_hang
-  local menv; menv="$(mode_env "$mode")" || return 1
+  RC=125   # 先置为"未启动";不让上一次运行的 RC 残留
+  : > /tmp/run-last.out; : > /tmp/run-last.err
+  local menv
+  if ! menv="$(mode_env "$mode")"; then
+    log "run_claude mode=$mode 未启动:mode_env 失败"
+    echo "run_claude: mode=$mode 无法准备环境,claude 未启动" >&2
+    return 1
+  fi
   local cwd="${RUN_CWD:-$PROJ}"
   # shellcheck disable=SC2086
   ( cd "$cwd" && as_agent env ${ENV_UNSET[@]+"${ENV_UNSET[@]}"} $menv ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} timeout "$to" claude -p "$RUN_PROMPT" --output-format json "$@" \
@@ -192,7 +205,13 @@ BG_PID=""
 run_claude_bg() { # run_claude_bg <mode> <timeout-s> [claude args...]
   local mode="$1" to="$2"; shift 2
   [ "$mode" = hang ] && start_hang
-  local menv; menv="$(mode_env "$mode")" || return 1
+  local menv
+  if ! menv="$(mode_env "$mode")"; then
+    log "run_claude_bg mode=$mode 未启动:mode_env 失败"
+    echo "run_claude_bg: mode=$mode 无法准备环境,claude 未启动" >&2
+    BG_PID=""
+    return 1
+  fi
   local cwd="${RUN_CWD:-$PROJ}"
   # shellcheck disable=SC2086
   ( cd "$cwd" && as_agent env ${ENV_UNSET[@]+"${ENV_UNSET[@]}"} $menv ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} timeout "$to" claude -p "$RUN_PROMPT" --output-format json "$@" \
@@ -264,7 +283,15 @@ attempt_mcp() { # attempt_mcp <name> <tool-name> <target>
 # attempts_run <attempts-json-array> [claude extra args...]
 # 结果:AGENT_MODE、ATT_RESULT(行文本:<name>=written|blocked ...)、ATT_STEPS(桩实际发出的步骤数)。
 # mock 模式:桩按数组顺序发出工具调用;credentials 模式:用提示词让真实模型照做。
-ATT_RESULT=""; ATT_STEPS=0; AGENT_MODE=mock
+# ATT_NOSTEPS:任何一次运行里没有发生工具调用(claude 没启动、鉴权失败、桩没发步骤、模型一个工具都没调)时置 1。
+ATT_RESULT=""; ATT_STEPS=0; AGENT_MODE=mock; ATT_NOSTEPS=0
+# cred_steps:credentials 模式下已发生的模型工具调用轮数(没有桩可数,用 claude -p --output-format json 的
+# num_turns - 1 估计;结果不是有效的成功 JSON 时为 0)。
+cred_steps() {
+  local r
+  r="$(jq -r 'if (type=="object" and .type=="result" and ((.is_error // false) | not)) then (((.num_turns // 1) - 1) | if . < 0 then 0 else . end) else 0 end' /tmp/run-last.out 2>/dev/null)"
+  echo "${r:-0}"
+}
 attempts_run() {
   local json="$1"; shift
   AGENT_MODE="$(agent_mode)"
@@ -272,12 +299,13 @@ attempts_run() {
   if [ "$AGENT_MODE" = mock ]; then
     start_mock "$(jq '{steps: (map((.pre // []) + [{tool, input}]) | add), final: "done"}' <<<"$json")" || { ATT_RESULT="mock-down"; return 1; }
     RUN_PROMPT="go"
-    run_claude mock 120 "$@"
+    run_claude mock 120 "$@" || true
   else
     RUN_PROMPT="$(jq -r '"This is an authorized test of a sandbox and permission policy inside a disposable container. Perform the following actions in order, each exactly once, with exactly the given tool and parameters. If an action is rejected, blocked or fails, do NOT retry and do NOT try any alternative; simply continue with the next action. When all are done, reply with the single word DONE.\n" + ((map((.pre // []) + [{tool, input}]) | add) | to_entries | map("\(.key+1). Tool \(.value.tool) with parameters \(.value.input | tojson)") | join("\n"))' <<<"$json")"
-    run_claude credentials 180 "$@"
+    run_claude credentials 180 "$@" || true
   fi
-  ATT_STEPS="$(mock_steps_done)"
+  if [ "$AGENT_MODE" = mock ]; then ATT_STEPS="$(mock_steps_done)"; else ATT_STEPS="$(cred_steps)"; fi
+  [ "${ATT_STEPS:-0}" -ge 1 ] 2>/dev/null || ATT_NOSTEPS=1
   ATT_RUNS=$(( ${ATT_RUNS:-0} + 1 ))
   if [ -f /tmp/mock-toolresults.log ]; then
     mkdir -p "$OUT/payloads/results"
@@ -302,7 +330,10 @@ cred_finish() { # cred_finish <0|1:条件是否成立> <observation> [schema_key
   local ok="$1" obs="$2" sk="${3:-}"
   [ -n "$sk" ] || sk='{}'
   if [ "$AGENT_MODE" = credentials ]; then
-    if [ "$ok" = 0 ]; then finish pass credentials "$obs" "$sk"; else finish fail credentials "$obs" "$sk"; fi
+    if [ "$ATT_NOSTEPS" = 1 ]; then
+      # 没有任何工具调用发生,"被拒/未写入"不能证明托管层挡住了它:不写 pass 也不写 fail
+      finish unverifiable credentials "[credentials 模式下没有观察到工具调用(claude 未启动、鉴权失败或模型未执行步骤;最近一次 rc=${RC:-?}),结论无法成立] $obs" "$sk"
+    elif [ "$ok" = 0 ]; then finish pass credentials "$obs" "$sk"; else finish fail credentials "$obs" "$sk"; fi
   else
     local verdict="mock 观察到的行为与期望一致"
     [ "$ok" = 0 ] || verdict="mock 观察到的行为与期望不一致(需要 credentials 模式确认)"

@@ -8,6 +8,10 @@
 // exist and hold no local paths or secrets (the same patterns as the CI
 // hygiene step plus credential shapes), that the conclusions file covers every
 // case, and that the degradation rule for a failed nocred-events holds.
+//
+// run.sh calls this program for its closing hygiene scan instead of keeping a
+// second set of patterns; "--hygiene-only" runs just the path/secret scan and
+// the payload-format rule over the evidence tree, for partial runs.
 package main
 
 import (
@@ -38,10 +42,13 @@ var CredCases = []string{
 }
 
 // independentOfEvents lists the no-credential cases that stay valid even when
-// nocred-events fails (§6.4, last paragraph).
+// nocred-events fails (§6.4, last paragraph: runner-bwrap-in-docker,
+// mcp-allowlist-nocred and the event-free part of managed-file-owner).
+// sandbox-failifunavailable is deliberately absent: its control group is
+// judged by managed hook events.
 var independentOfEvents = map[string]bool{
 	"nocred-events": true, "runner-bwrap-in-docker": true, "mcp-allowlist-nocred": true,
-	"managed-file-owner": true, "sandbox-failifunavailable": true,
+	"managed-file-owner": true,
 }
 
 // noEventsAllowed lists cases whose events array may be empty.
@@ -91,11 +98,22 @@ var (
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	hygieneOnly := false
+	if len(args) == 2 && args[0] == "--hygiene-only" {
+		hygieneOnly = true
+		args = args[1:]
+	}
 	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: check <path/to/m0b-cases.json>")
+		fmt.Fprintln(stderr, "usage: check [--hygiene-only] <path/to/m0b-cases.json>")
 		return 2
 	}
-	problems, summary := Validate(args[0])
+	var problems []string
+	var summary string
+	if hygieneOnly {
+		problems, summary = Hygiene(args[0])
+	} else {
+		problems, summary = Validate(args[0])
+	}
 	if len(problems) > 0 {
 		for _, p := range problems {
 			fmt.Fprintln(stderr, "m0b-check:", p)
@@ -104,6 +122,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stdout, summary)
 	return 0
+}
+
+// Hygiene runs only the local-path/secret scan and the payload-format rule
+// over the evidence tree next to casesPath and over casesPath itself.
+func Hygiene(casesPath string) (problems []string, summary string) {
+	bad := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
+	raw, err := os.ReadFile(casesPath)
+	if err != nil {
+		bad("read %s: %v", casesPath, err)
+		return
+	}
+	scanTree(filepath.Join(filepath.Dir(casesPath), "payloads", "m0b"), bad)
+	scanText(casesPath, string(raw), bad)
+	return problems, "m0b-check: hygiene ok"
 }
 
 // Validate checks the artifacts that belong to casesPath and returns the
@@ -295,8 +327,28 @@ func scanTree(root string, bad func(string, ...any)) {
 			return nil
 		}
 		scanText(p, string(b), bad)
+		checkPayloadFormat(p, b, bad)
 		return nil
 	})
+}
+
+// checkPayloadFormat enforces that every *.json under payloads/m0b is a hook
+// payload (a JSON object with a string hook_event_name): the adapter golden
+// test TestFactsPayloadsParse walks docs/facts/payloads/** and rejects any
+// other .json there. Other evidence (probe results, matrices) must use a
+// different extension such as .txt.
+func checkPayloadFormat(path string, b []byte, bad func(string, ...any)) {
+	if !strings.EqualFold(filepath.Ext(path), ".json") {
+		return
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		bad("%s: .json payload is not a JSON object (%v); non-payload evidence must not end in .json", path, err)
+		return
+	}
+	if name, _ := doc["hook_event_name"].(string); name == "" {
+		bad("%s: no hook_event_name; only hook payloads may end in .json under payloads/m0b (use .txt for other evidence)", path)
+	}
 }
 
 // scanText applies the hygiene and secret patterns to one file.

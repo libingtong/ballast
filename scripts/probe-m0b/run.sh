@@ -12,6 +12,7 @@
 #   --cases <a,b,..>    只跑这些 case_id
 #   --rebuild           强制重建镜像
 #   --list              列出全部 case_id 与是否需凭据
+#   --selftest          只跑脚本级自测(不需要 Docker 与凭据),然后退出;其余运行也会先跑它
 # 环境变量:
 #   BALLAST_M0B_OUT           产物根目录(默认 <repo>/docs/facts)
 #   BALLAST_M0B_BUILD_PROXY   构建镜像时使用的 HTTP(S) 代理(只用于 docker build;回环地址会改写成 host.docker.internal)
@@ -26,14 +27,15 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 OUT_ROOT="${BALLAST_M0B_OUT:-$ROOT/docs/facts}"
 CLAUDE_CODE_VERSION="${BALLAST_M0B_CLAUDE_VERSION:-2.1.300}"
 
-with_cred=0; only=""; rebuild=0; list=0
+with_cred=0; only=""; rebuild=0; list=0; selftest_only=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --with-credentials) with_cred=1 ;;
     --cases) shift; only="${1:-}" ;;
     --rebuild) rebuild=1 ;;
     --list) list=1 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    --selftest) selftest_only=1 ;;
+    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
   shift
@@ -48,6 +50,14 @@ if [ "$list" = 1 ]; then
   for c in "${ALL_CASES[@]}"; do printf '%s\tneeds_credentials=%s\n' "$c" "$(needs_cred "$c")"; done
   exit 0
 fi
+
+# --- 脚本级自测(不需要 Docker)-----------------------------------------------
+if command -v jq >/dev/null 2>&1; then
+  bash "$HERE/selftest.sh" || { echo "probe-m0b: 脚本级自测失败" >&2; exit 1; }
+elif [ "$selftest_only" = 1 ]; then
+  echo "probe-m0b: 宿主需要 jq" >&2; exit 1
+fi
+[ "$selftest_only" = 1 ] && exit 0
 
 # --- Docker 可用性 ---------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
@@ -201,11 +211,18 @@ done
 order_json="$(printf '%s\n' "${ALL_CASES[@]}" | jq -R . | jq -s .)"
 jq --argjson order "$order_json" 'sort_by(.case_id as $id | ($order | index($id)) // 999)' "$CASES_JSON" > "$WORK/sorted.json" && mv "$WORK/sorted.json" "$CASES_JSON"
 
-# 卫生:产物里不得有本机路径或秘密
-if grep -rEn '/Users/[a-z]|[~]/NewCode|sk-ant-|Bearer [A-Za-z0-9]' "$OUT_ROOT/payloads/m0b" "$CASES_JSON" >/dev/null 2>&1; then
-  echo "probe-m0b: 产物中发现本机路径或疑似秘密" >&2
-  grep -rEn '/Users/[a-z]|[~]/NewCode|sk-ant-|Bearer [A-Za-z0-9]' "$OUT_ROOT/payloads/m0b" "$CASES_JSON" >&2
+# 卫生与格式:不另维护一套正则,直接调用检查器(scripts/probe-m0b/check)。
+# 默认产物目录下的完整运行做完整校验;子集运行或自定义产物目录只做卫生扫描(--hygiene-only)。
+if ! command -v go >/dev/null 2>&1; then
+  echo "probe-m0b: 宿主没有 go,跳过产物检查;请在有 go 的环境运行: go run ./scripts/probe-m0b/check $CASES_JSON" >&2
   rc_all=1
+else
+  chk=("$CASES_JSON")
+  if [ -n "$only" ] || [ "$OUT_ROOT" != "$ROOT/docs/facts" ]; then chk=(--hygiene-only "$CASES_JSON"); fi
+  if ! (cd "$ROOT" && go run ./scripts/probe-m0b/check "${chk[@]}"); then
+    echo "probe-m0b: 产物检查未通过(见上)" >&2
+    rc_all=1
+  fi
 fi
 echo "probe-m0b: 完成,产物 $CASES_JSON" >&2
 exit "$rc_all"

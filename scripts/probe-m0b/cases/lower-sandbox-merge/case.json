@@ -1,8 +1,11 @@
 {
   "case_id": "lower-sandbox-merge",
-  "events": ["SessionStart", "UserPromptSubmit"],
-  "assertion": "(记录性)托管层按 org render 的 T1 模板,用户层/项目层/本地层分别写 excludedCommands、network.allowUnixSockets、network.allowAllUnixSockets、filesystem.allowWrite、enableWeakerNestedSandbox、network.allowedDomains、permissions.additionalDirectories,以及项目层/本地层写 env、apiKeyHelper、statusLine、awsAuthRefresh、otelHeadersHelper、enabledPlugins、enableAllProjectMcpServers:逐键逐层记录是否生效(用于放宽 tier.WeakenedSandboxKeys 白名单);pass 表示可观测的键全部观测完成且托管 denyWrite 未被低层配置击穿(无法观测的键显式标\"未观测\"并保持保守),fail 表示受保护路径被击穿",
+  "events": [
+    "SessionStart",
+    "UserPromptSubmit"
+  ],
+  "assertion": "(记录性)托管层按 org render 的 T1 模板,用户层/项目层/本地层分别写 excludedCommands、network.allowUnixSockets、network.allowAllUnixSockets、filesystem.allowWrite、enableWeakerNestedSandbox、network.allowedDomains、permissions.additionalDirectories,以及项目层/本地层写 env、apiKeyHelper、statusLine、awsAuthRefresh、otelHeadersHelper、enabledPlugins、enableAllProjectMcpServers:逐键逐层记录是否生效(用于放宽 tier.WeakenedSandboxKeys 白名单);pass 表示可观测的键全部观测完成且托管 denyWrite 未被低层配置击穿(部分观测:enableWeakerNestedSandbox 因指示器无区分度显式标\"未观测\"并保持保守,不据此放宽 tier.WeakenedSandboxKeys),fail 表示受保护路径被击穿,unverifiable 表示某键根本没有观测数据(脚本或桩故障)",
   "needs_credentials": false,
   "sandbox": true,
-  "recheck": "ANTHROPIC_API_KEY=<用户自己提供> scripts/probe-m0b/run.sh --with-credentials --cases lower-sandbox-merge"
+  "not_recheckable": "enableWeakerNestedSandbox 目前没有补测手段:场景脚本没有 credentials 分支,run.sh 也不会给 needs_credentials=false 的用例传 key;待实现"
 }

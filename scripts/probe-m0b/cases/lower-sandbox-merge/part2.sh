@@ -142,14 +142,17 @@ verdict_of() { # verdict_of <variant> <key>
   esac
   if effective "$1" "$2"; then echo 生效; else echo 无效果; fi
 }
-breach=0; unobs=0
+# unobs:某键因脚本/桩故障根本没有数据(RES 为空、桩宕机、桩没发步骤)⇒ 整个用例降为 unverifiable。
+# partial:enableWeakerNestedSandbox 的指示器(/proc 进程数)在本容器里没有区分度,"无效果"不能当作"已观测":
+# 记为"未观测(指示器无区分度)"并保持保守(条件 6 不放宽该键)。这是有意的"部分观测 pass",见 case.json assertion。
+breach=0; unobs=0; partial=0
 rows=""
 for k in "${SB_KEYS[@]}"; do
   cells=""
   for layer in user project local; do
     n="$layer/$k"; v="$(verdict_of "$n" "$k")"
-    [ "$k" = weakerNested ] && [ "$v" = 无效果 ] && v="未观测(指示器无区分度)"
-    [ "$v" = 未观测 ] && unobs=1
+    if [ "$k" = weakerNested ] && [ "$v" = 无效果 ]; then v="未观测(指示器无区分度)"; partial=1; fi
+    case "$v" in 未观测) unobs=1 ;; esac   # 精确匹配:只有"没有数据"才算;带括号说明的已知指示器缺口走 partial
     [ "$(rget "$n" protected)" = yes ] && { breach=1; v="$v(且受保护路径被写入!)"; }
     cells="$cells$layer=$v "
   done
@@ -204,7 +207,10 @@ sk='{"sandbox":["excludedCommands","network.allowUnixSockets","network.allowAllU
 if [ "$breach" = 1 ]; then
   finish fail mock "$obs 【契约影响】托管 denyWrite 保护的路径被低层配置击穿。" "$sk"
 elif [ "$unobs" = 1 ]; then
-  finish needs_credentials mock "部分键无法在模拟模型下观测。$obs" "$sk"
+  # 没有任何补测手段(case.json 无 recheck;场景脚本没有 credentials 分支),所以不写 needs_credentials
+  finish unverifiable mock "部分键没有取得任何观测数据(脚本或桩故障)。$obs" "$sk"
+elif [ "$partial" = 1 ]; then
+  finish pass mock "[部分观测:enableWeakerNestedSandbox 因指示器无区分度记为未观测,tier.WeakenedSandboxKeys 对它保持保守;其余键全部观测] $obs" "$sk"
 else
   finish pass mock "$obs" "$sk"
 fi

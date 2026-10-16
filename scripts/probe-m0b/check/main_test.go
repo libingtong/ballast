@@ -37,7 +37,7 @@ func buildFacts(t *testing.T, mutate func(cases []map[string]any)) string {
 			if err := os.MkdirAll(p, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(p, "01.json"), []byte(`{"cwd":"<repo>"}`), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(p, "01.json"), []byte(`{"hook_event_name":"SessionStart","cwd":"<repo>"}`), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -191,10 +191,59 @@ func TestHygienePatterns(t *testing.T) {
 func TestPayloadHygieneFailsValidation(t *testing.T) {
 	p := buildFacts(t, nil)
 	leak := filepath.Join(filepath.Dir(p), "payloads", "m0b", "nocred-events", "02.json")
-	if err := os.WriteFile(leak, []byte(`{"cwd":"/Users/`+`someone/Documents/x"}`), 0o644); err != nil {
+	if err := os.WriteFile(leak, []byte(`{"hook_event_name":"SessionStart","cwd":"/Users/`+`someone/Documents/x"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	wantProblem(t, p, "local absolute path")
+}
+
+// A non-hook JSON file under payloads/m0b would break the adapter golden test
+// TestFactsPayloadsParse, so the checker must reject it.
+func TestPayloadJSONMustBeHookPayload(t *testing.T) {
+	p := buildFacts(t, nil)
+	dir := filepath.Join(filepath.Dir(p), "payloads", "m0b", "runner-bwrap-in-docker")
+	items := filepath.Join(dir, "items.json")
+	if err := os.WriteFile(items, []byte(`{"builds":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wantProblem(t, p, "no hook_event_name")
+	if err := os.WriteFile(items, []byte(`not json`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wantProblem(t, p, "not a JSON object")
+	if err := os.Remove(items); err != nil {
+		t.Fatal(err)
+	}
+	// the same content under another extension is accepted
+	if err := os.WriteFile(filepath.Join(dir, "items.txt"), []byte(`{"builds":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if problems, _ := Validate(p); len(problems) != 0 {
+		t.Fatalf("items.txt must be accepted: %v", problems)
+	}
+}
+
+func TestHygieneOnlyMode(t *testing.T) {
+	p := buildFacts(t, func(cs []map[string]any) { find(cs, "mcp-write")["result"] = "bogus" })
+	var out, errb bytes.Buffer
+	if rc := run([]string{"--hygiene-only", p}, &out, &errb); rc != 0 {
+		t.Fatalf("hygiene-only must ignore case content, rc=%d %s", rc, errb.String())
+	}
+	leak := filepath.Join(filepath.Dir(p), "payloads", "m0b", "nocred-events", "03.json")
+	if err := os.WriteFile(leak, []byte(`{"hook_event_name":"SessionStart","cwd":"/home/agent/proj"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	errb.Reset()
+	if rc := run([]string{"--hygiene-only", p}, &out, &errb); rc != 1 || !strings.Contains(errb.String(), "container home path") {
+		t.Fatalf("rc=%d stderr=%s", rc, errb.String())
+	}
+}
+
+// sandbox-failifunavailable is judged by managed hook events, so it must
+// degrade with nocred-events (§6.4 last paragraph).
+func TestFailIfUnavailableDependsOnEvents(t *testing.T) {
+	p := buildFacts(t, func(cs []map[string]any) { find(cs, "nocred-events")["result"] = "fail" })
+	wantProblem(t, p, "so sandbox-failifunavailable must be needs_credentials")
 }
 
 func TestConclusionsMustCoverAllCases(t *testing.T) {

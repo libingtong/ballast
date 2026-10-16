@@ -152,6 +152,7 @@
 2. **§3.2 `ManagedForms`**(P2-TIER、P2-INSTALL):org 规则目录、二进制目录、绝对路径 `protected_extra` 的权限条目改为 `//` 形式(共享 golden 同步);`Write(...)`/`NotebookEdit(...)` 条目对 Write 工具冗余,可保留。需要 credentials 模式确认后再改。
 3. **§3.2 denyWrite 的 glob 与 `**/`**(P2-TIER、P2-CLI 文档):Linux 上对 Bash 不生效,不得在 trust-model 里描述为保护;`DefaultWeakenedProject` 保持 `deny`。
 4. **§3.2 条件 6**(P2-TIER):见"对设计的影响 3"的保守建议(项目层/本地层 `sandbox.*` 键在条件 5 满足时无害,依赖 `allowUnsandboxedCommands:false`)。
+5. **§6.4/§6.5 `lower-sandbox-merge`**(架构师):(a) 设计要求"观测不到 ⇒ needs_credentials 且带可运行的 recheck",但本用例只有 `enableWeakerNestedSandbox` 一个键观测不到,其余键已观测;本实现按"部分观测 pass"记录(该键显式未观测、条件 6 对它保持保守)。请确认这个偏离可以接受,或改写 §6.4 为"部分键观测不到不降级,只对未观测键保持保守"。(b) 该用例目前没有 credentials 分支,§6.5 补测段里的 `--cases lower-sandbox-merge` 命令不能产出真实结果:建议从设计中删去,或另开单元实现 credentials 分支后再恢复。(c) §6.4 末段不依赖事件的用例清单不含 `sandbox-failifunavailable`(它的对照组靠托管 hook 事件判定),检查器已按此收紧。
 
 ## 【需凭据】项与补测命令
 
@@ -161,11 +162,9 @@
 ANTHROPIC_API_KEY=<用户自己提供> scripts/probe-m0b/run.sh --with-credentials --cases sandbox-denywrite-bash,permissions-deny-edit,unsandboxed-refused,managed-denywrite-path-forms,managed-denywrite-anydepth,mcp-write
 ```
 
-`lower-sandbox-merge` 的 `enableWeakerNestedSandbox` 在无模型手段下观测不到(`/proc` 指示器无区分度);若需要放宽这个键,另跑:
+`lower-sandbox-merge` 的 `enableWeakerNestedSandbox` 在无模型手段下观测不到(`/proc` 指示器无区分度),该用例按"部分观测"记为 pass(其余键全部观测,该键显式标"未观测"并保持保守)。**这个键目前没有补测命令**:场景脚本没有 credentials 分支,`run.sh` 也不会给 `needs_credentials` 为 false 的用例传 key,所以此前文档里的 `--with-credentials --cases lower-sandbox-merge` 补测无法产出真实结果,已从 `case.json` 与本文移除,状态为**待实现**(见【契约问题】:设计 §6.4/§6.5 里该用例的 recheck 需要同步)。
 
-```sh
-ANTHROPIC_API_KEY=<用户自己提供> scripts/probe-m0b/run.sh --with-credentials --cases lower-sandbox-merge
-```
+补测脚本的自测:`bash scripts/probe-m0b/selftest.sh`(`run.sh` 开始前自动运行),覆盖 credentials 模式环境准备、无工具调用时写 `unverifiable`、以及"带 `--with-credentials` 的 recheck 只能属于 `needs_credentials` 用例"。
 
 ## 仍未核验
 

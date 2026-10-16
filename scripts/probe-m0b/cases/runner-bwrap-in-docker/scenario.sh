@@ -11,7 +11,7 @@ if [ ! -s /tmp/probe.json ]; then
   finish unverifiable none "探测脚本没有产出结果(rc=$prc):$(head -c 300 /tmp/probe.err | tr '\n' ' ')"
   exit 0
 fi
-jq . /tmp/probe.json > "$OUT/payloads/results/items.json"
+jq . /tmp/probe.json > "$OUT/payloads/results/items.txt"
 # --security-opt 矩阵
 mrows=""
 for v in all3 no-seccomp no-apparmor no-systempaths default; do
