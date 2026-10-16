@@ -127,7 +127,12 @@
 //     is non-empty; diag lower_sandbox_weakened {entries} when (claude-code
 //     and) Deps.ProjectSandbox reports entries for the session's project
 //     directories ($CLAUDE_PROJECT_DIR when absolute, else the event cwd and
-//     the repo top level). Nothing is written to the session state.
+//     the repo top level). Nothing is written to the session state. Only
+//     judged when the state was readable: an unreadable state cannot tell a
+//     new session from an old one, so these diags are skipped (and state_
+//     unreadable is audited) instead of repeating on every event. The
+//     entries come from repo-controlled files and are bounded: at most 8
+//     entries of 80 runes each, with the total in entries_total when cut.
 //   - Synthetic deny (claude-code PreToolUse only), merged with the rule
 //     verdict after the capability check: deny is the strictest action, the
 //     synthetic reason comes first, rule reasons follow within BudgetReason;

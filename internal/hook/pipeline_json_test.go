@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,16 @@ import (
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
 )
+
+// skipWithoutPosixPaths skips a test whose T1-only subject needs "/repo"-style
+// absolute paths: T1 exists on darwin and linux only (docs/p2-design.md §3.1),
+// and on Windows filepath.IsAbs("/repo") is false.
+func skipWithoutPosixPaths(t testing.TB) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("T1-only path (darwin/linux); POSIX absolute paths are not absolute on Windows")
+	}
+}
 
 func auditDump(h *harness) string {
 	var b strings.Builder
@@ -27,15 +38,19 @@ type pipelineFile struct {
 }
 
 type pipelineCase struct {
-	Desc      string             `json:"desc"`
-	Client    string             `json:"client"`
-	Native    string             `json:"native"`
-	Stdin     string             `json:"stdin"`
-	StdinRaw  *string            `json:"stdin_raw"`
-	Verdict   *model.Verdict     `json:"verdict"`
-	Injection *model.Injection   `json:"injection"`
-	Commands  *model.CommandList `json:"commands"`
-	State     *struct {
+	Desc string `json:"desc"`
+	// PosixPaths marks a row written with POSIX absolute paths ("/repo") that
+	// the T1-only code (hook-started verify, project-layer checks; darwin and
+	// linux only) must see as absolute; filepath.IsAbs rejects them on Windows.
+	PosixPaths bool               `json:"posix_paths"`
+	Client     string             `json:"client"`
+	Native     string             `json:"native"`
+	Stdin      string             `json:"stdin"`
+	StdinRaw   *string            `json:"stdin_raw"`
+	Verdict    *model.Verdict     `json:"verdict"`
+	Injection  *model.Injection   `json:"injection"`
+	Commands   *model.CommandList `json:"commands"`
+	State      *struct {
 		Evals map[string]model.EvalCount `json:"evals"`
 	} `json:"state"`
 	AuditError       bool `json:"audit_error"`
@@ -111,6 +126,9 @@ func loadPipeline(t *testing.T) []pipelineCase {
 func TestPipelineJSON(t *testing.T) {
 	for _, c := range loadPipeline(t) {
 		t.Run(c.Desc, func(t *testing.T) {
+			if c.PosixPaths {
+				skipWithoutPosixPaths(t)
+			}
 			h := newHarness(t)
 			client := model.ClientClaude
 			if c.Client != "" {

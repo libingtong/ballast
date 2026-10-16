@@ -160,8 +160,10 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 	}
 
 	// First event of a session (the scope has no StartedAt yet): redirect
-	// and project-layer diags (docs/p2-design.md §3.2, §3.3).
-	if _, started := st.StartedAt(); !started {
+	// and project-layer diags (docs/p2-design.md §3.2, §3.3). Only judged on
+	// a readable state: an unreadable one reports no StartedAt on every
+	// event, and the diags would be repeated for the whole session.
+	if _, started := st.StartedAt(); !started && readable {
 		diags = append(diags, inv.firstEventDiags(ev, repo)...)
 	}
 

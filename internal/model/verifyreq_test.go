@@ -1,8 +1,10 @@
 package model_test
 
 import (
+	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -10,6 +12,16 @@ import (
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/psparse"
 )
+
+// abs turns a POSIX-style absolute test path into an absolute path of the
+// host: filepath.IsAbs("/repo") is false on Windows, where ParseHookStartArgv
+// (rightly) demands a volume name.
+func abs(p string) string {
+	if runtime.GOOS == "windows" {
+		return "C:" + filepath.FromSlash(p)
+	}
+	return p
+}
 
 const goodID = "20261016T100000-0a1b2c"
 
@@ -193,14 +205,14 @@ func TestHookStartArgvShape(t *testing.T) {
 
 func TestHookStartArgvRoundTrip(t *testing.T) {
 	reqs := []model.HookStartRequest{
-		{RequestID: goodID, Cwd: "/repo", Client: model.ClientClaude},
-		{RequestID: goodID, Cwd: "/repo", Client: model.ClientClaude, Names: []string{"test"}},
-		{RequestID: goodID, Cwd: "/my repo/with space", Client: model.ClientClaude, Names: []string{"a", "b.c"}, SessionID: "s 1"},
-		{RequestID: goodID, Cwd: "/-leading-dash", Client: model.ClientClaude, SessionID: "-s", AgentID: "--agent", ProjectDir: "/--x"},
-		{RequestID: goodID, Cwd: "/--", Client: model.ClientClaude, SessionID: "--", AgentID: "--", ProjectDir: "/p"},
-		{RequestID: goodID, Cwd: "/r", Client: model.ClientClaude, ProjectDir: "/repo/sub dir"},
-		{RequestID: goodID, Cwd: "/ünï/路径", Client: model.ClientClaude, Names: []string{"x"}},
-		{RequestID: goodID, Cwd: "/r", Client: model.ClientClaude, SessionID: "--hook-start", AgentID: "--cwd"},
+		{RequestID: goodID, Cwd: abs("/repo"), Client: model.ClientClaude},
+		{RequestID: goodID, Cwd: abs("/repo"), Client: model.ClientClaude, Names: []string{"test"}},
+		{RequestID: goodID, Cwd: abs("/my repo/with space"), Client: model.ClientClaude, Names: []string{"a", "b.c"}, SessionID: "s 1"},
+		{RequestID: goodID, Cwd: abs("/-leading-dash"), Client: model.ClientClaude, SessionID: "-s", AgentID: "--agent", ProjectDir: abs("/--x")},
+		{RequestID: goodID, Cwd: abs("/--"), Client: model.ClientClaude, SessionID: "--", AgentID: "--", ProjectDir: abs("/p")},
+		{RequestID: goodID, Cwd: abs("/r"), Client: model.ClientClaude, ProjectDir: abs("/repo/sub dir")},
+		{RequestID: goodID, Cwd: abs("/ünï/路径"), Client: model.ClientClaude, Names: []string{"x"}},
+		{RequestID: goodID, Cwd: abs("/r"), Client: model.ClientClaude, SessionID: "--hook-start", AgentID: "--cwd"},
 	}
 	for _, r := range reqs {
 		argv := model.HookStartArgv("/opt/ballast", r)
@@ -218,7 +230,7 @@ func TestHookStartArgvRoundTrip(t *testing.T) {
 func TestParseHookStartArgvRejects(t *testing.T) {
 	base := func() []string {
 		return model.HookStartArgv("/b", model.HookStartRequest{
-			RequestID: goodID, Cwd: "/r", Client: model.ClientClaude, Names: []string{"test"}})[1:]
+			RequestID: goodID, Cwd: abs("/r"), Client: model.ClientClaude, Names: []string{"test"}})[1:]
 	}
 	if _, err := model.ParseHookStartArgv(base()); err != nil {
 		t.Fatalf("baseline: %v", err)
@@ -242,22 +254,22 @@ func TestParseHookStartArgvRejects(t *testing.T) {
 		"bad id (upper)":    replace(goodID, "20261016T100000-0A1B2C"),
 		"bad id (T)":        replace(goodID, "20261016X100000-0a1b2c"),
 		"bad id (path)":     replace(goodID, "../../etc/passwd-aaaaaa"),
-		"relative cwd":      replace("/r", "r"),
-		"empty cwd":         replace("/r", ""),
+		"relative cwd":      replace(abs("/r"), "r"),
+		"empty cwd":         replace(abs("/r"), ""),
 		"bad name flag":     replace("test", "--status"),
 		"bad name slash":    replace("test", "a/b"),
 		"bad name dollar":   replace("test", "$X"),
 		"bad name empty":    replace("test", ""),
 		"unknown flag":      append([]string{"verify", "--hook-start", "--bogus", "x"}, base()[2:]...),
-		"dup flag":          append(base()[:len(base())-2:len(base())-2], "--cwd", "/z", "--", "test"),
-		"missing request":   {"verify", "--hook-start", "--cwd", "/r", "--client", "claude-code", "--"},
+		"dup flag":          append(base()[:len(base())-2:len(base())-2], "--cwd", abs("/z"), "--", "test"),
+		"missing request":   {"verify", "--hook-start", "--cwd", abs("/r"), "--client", "claude-code", "--"},
 		"missing cwd":       {"verify", "--hook-start", "--request", goodID, "--client", "claude-code", "--"},
-		"missing client":    {"verify", "--hook-start", "--request", goodID, "--cwd", "/r", "--"},
-		"flag without val":  {"verify", "--hook-start", "--request", goodID, "--cwd", "/r", "--client"},
-		"relative projdir":  {"verify", "--hook-start", "--request", goodID, "--cwd", "/r", "--client", "claude-code", "--project-dir", "sub", "--"},
-		"empty projdir":     {"verify", "--hook-start", "--request", goodID, "--cwd", "/r", "--client", "claude-code", "--project-dir", "", "--"},
+		"missing client":    {"verify", "--hook-start", "--request", goodID, "--cwd", abs("/r"), "--"},
+		"flag without val":  {"verify", "--hook-start", "--request", goodID, "--cwd", abs("/r"), "--client"},
+		"relative projdir":  {"verify", "--hook-start", "--request", goodID, "--cwd", abs("/r"), "--client", "claude-code", "--project-dir", "sub", "--"},
+		"empty projdir":     {"verify", "--hook-start", "--request", goodID, "--cwd", abs("/r"), "--client", "claude-code", "--project-dir", "", "--"},
 		"too many names":    append(base()[:len(base())-1:len(base())-1], strings.Fields(strings.Repeat("n ", 17))...),
-		"loose positionals": {"verify", "--hook-start", "--request", goodID, "--cwd", "/r", "--client", "claude-code", "stray"},
+		"loose positionals": {"verify", "--hook-start", "--request", goodID, "--cwd", abs("/r"), "--client", "claude-code", "stray"},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -276,7 +288,7 @@ func TestVerifyRequestToArgvConsistency(t *testing.T) {
 		if !ok {
 			t.Fatalf("%q rejected", src)
 		}
-		hs := model.HookStartRequest{RequestID: goodID, Cwd: "/r", Client: model.ClientClaude, Names: req.Names}
+		hs := model.HookStartRequest{RequestID: goodID, Cwd: abs("/r"), Client: model.ClientClaude, Names: req.Names}
 		got, err := model.ParseHookStartArgv(model.HookStartArgv("/b", hs)[1:])
 		if err != nil || !reflect.DeepEqual(got, hs) {
 			t.Errorf("%q: got %+v err %v, want %+v", src, got, err, hs)
@@ -310,7 +322,7 @@ func FuzzParseVerifyRequest(f *testing.F) {
 				}
 				seen[n] = true
 			}
-			hs := model.HookStartRequest{RequestID: goodID, Cwd: "/r", Client: model.ClientClaude, Names: req.Names}
+			hs := model.HookStartRequest{RequestID: goodID, Cwd: abs("/r"), Client: model.ClientClaude, Names: req.Names}
 			got, err := model.ParseHookStartArgv(model.HookStartArgv("/b", hs)[1:])
 			if err != nil || !reflect.DeepEqual(got, hs) {
 				t.Fatalf("argv round trip failed: %+v err %v", got, err)
@@ -343,8 +355,8 @@ func validName(s string) bool {
 }
 
 func FuzzHookStartArgv(f *testing.F) {
-	f.Add(goodID, "/repo", "claude-code", "s", "a", "/p", "test")
-	f.Add(goodID, "/-x y", "c", "--", "--cwd", "/--", "n")
+	f.Add(goodID, abs("/repo"), "claude-code", "s", "a", abs("/p"), "test")
+	f.Add(goodID, abs("/-x y"), "c", "--", "--cwd", abs("/--"), "n")
 	f.Add("bad", "rel", "", "", "", "rel", "$x")
 	f.Fuzz(func(t *testing.T, id, cwd, client, sid, aid, pdir, name string) {
 		var names []string
@@ -354,8 +366,8 @@ func FuzzHookStartArgv(f *testing.F) {
 		req := model.HookStartRequest{RequestID: id, Cwd: cwd, Names: names, Client: model.ClientID(client), SessionID: sid, AgentID: aid, ProjectDir: pdir}
 		argv := model.HookStartArgv("/opt/ballast", req)
 		got, err := model.ParseHookStartArgv(argv[1:])
-		valid := validRequestID(id) && strings.HasPrefix(cwd, "/") &&
-			(pdir == "" || strings.HasPrefix(pdir, "/")) && (name == "" || validName(name))
+		valid := validRequestID(id) && filepath.IsAbs(cwd) &&
+			(pdir == "" || filepath.IsAbs(pdir)) && (name == "" || validName(name))
 		if valid {
 			if err != nil || !reflect.DeepEqual(got, req) {
 				t.Fatalf("valid request failed round trip: %+v → %q → %+v, %v", req, argv, got, err)
@@ -367,7 +379,7 @@ func FuzzHookStartArgv(f *testing.F) {
 		}
 		if err == nil {
 			// Accepted although my predicate said invalid: only legal when
-			// the predicate is stricter (non-POSIX absolute paths).
+			// the predicate is stricter than the parser.
 			if !validRequestID(got.RequestID) || got.Cwd == "" {
 				t.Fatalf("accepted an invalid request: %+v", got)
 			}

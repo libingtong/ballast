@@ -3,6 +3,7 @@ package hook
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -24,6 +25,7 @@ func canonicalVerify(h *harness) {
 }
 
 func t1Harness(t *testing.T) (*harness, *fakeTier) {
+	skipWithoutPosixPaths(t)
 	h := newHarness(t)
 	canonicalVerify(h)
 	tier := &fakeTier{info: model.TierInfo{Tier: model.TierT1, Declared: model.TierT1}}
@@ -308,6 +310,14 @@ func TestConfigChangeAudit(t *testing.T) {
 		{"both empty", "", "", configDetail{}, nil},
 		{"repo root itself is not under <repo>/", "x", "/repo",
 			configDetail{str("x"), str("repo"), &no}, []string{"file", "protected", "source"}},
+		{"dot-dot out of the repo keeps the basename only", "x", "/repo/../../Users/alice/x",
+			configDetail{str("x"), str("x"), &no}, []string{"file", "protected", "source"}},
+		{"dot-dot inside the repo is cleaned", "project_settings", "/repo/a/../.claude/settings.json",
+			configDetail{str("project_settings"), str("<repo>/.claude/settings.json"), &yes}, []string{"file", "protected", "source"}},
+		{"~ with only dot-dot leaks nothing", "x", "~/../..",
+			configDetail{Source: str("x"), Protected: &no}, []string{"protected", "source"}},
+		{"~ escaping upwards keeps the basename only", "x", "~/.claude/../../etc/passwd",
+			configDetail{str("x"), str("passwd"), &no}, []string{"file", "protected", "source"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -401,5 +411,123 @@ func TestConfigChangeFaultMatrix(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func diagNames(h *harness) []string {
+	var out []string
+	for _, r := range h.audit.all() {
+		if r.Type != model.AuditDiag {
+			continue
+		}
+		var d struct {
+			Diag string `json:"diag"`
+		}
+		_ = json.Unmarshal(r.Detail, &d)
+		out = append(out, d.Diag)
+	}
+	return out
+}
+
+// ---- bounded weakened entries and first-event guard -------------------------
+
+// The keys of a weakened project layer come from repo-controlled files: the
+// deny reason and the audit detail stay bounded however many or long they are.
+func TestWeakenedEntriesAreBounded(t *testing.T) {
+	skipWithoutPosixPaths(t)
+	var entries []string
+	for i := 0; i < 40; i++ {
+		entries = append(entries, fmt.Sprintf("settings.json:k%02d", i))
+	}
+	entries = append(entries, "settings.json:"+strings.Repeat("长", 5000)+"\nsecond line")
+	h := newHarness(t)
+	h.deps.ProjectSandbox = &fakeProject{byDir: map[string][]string{"/repo/proj": entries}}
+	h.deps.WeakenedProject = model.WeakenedProjectDeny
+	h.sb.Vars["CLAUDE_PROJECT_DIR"] = "/repo/proj"
+	h.engine.verdict = &model.Verdict{
+		Action: model.ActionDeny,
+		Reason: "[r] " + strings.Repeat("规", 5000),
+		Hits:   []model.RuleHit{{RuleID: "r", Action: model.ActionDeny, Effective: model.ActionDeny, Message: "x"}},
+	}
+	mustExit0(t, h, h.claude("PreToolUse", preToolBash))
+	var out struct {
+		H struct {
+			Reason string `json:"permissionDecisionReason"`
+		} `json:"hookSpecificOutput"`
+	}
+	if err := json.Unmarshal(h.stdout.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if n := utf8.RuneCountInString(out.H.Reason); n > model.BudgetReason {
+		t.Errorf("reason has %d runes, budget %d", n, model.BudgetReason)
+	}
+	rest := len(entries) - maxWeakenedEntries
+	if want := fmt.Sprintf("…等 %d 项", rest); !strings.Contains(out.H.Reason, want) {
+		t.Errorf("reason does not say %q: %q", want, out.H.Reason)
+	}
+	if !strings.Contains(out.H.Reason, "[r] 规") {
+		t.Errorf("rule reason dropped entirely")
+	}
+	var found bool
+	for _, r := range h.audit.all() {
+		var m struct {
+			Diag    string   `json:"diag"`
+			Entries []string `json:"entries"`
+			Total   int      `json:"entries_total"`
+		}
+		_ = json.Unmarshal(r.Detail, &m)
+		if m.Diag != model.DiagLowerSandboxWeakened {
+			continue
+		}
+		found = true
+		if len(m.Entries) != maxWeakenedEntries || m.Total != len(entries) {
+			t.Errorf("entries = %d, total = %d; want %d / %d", len(m.Entries), m.Total, maxWeakenedEntries, len(entries))
+		}
+		for _, e := range m.Entries {
+			if utf8.RuneCountInString(e) > maxWeakenedEntryRunes || strings.ContainsAny(e, "\r\n") {
+				t.Errorf("entry not bounded to one short line: %q", e)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no lower_sandbox_weakened diag: %v", diagNames(h))
+	}
+}
+
+// Few entries are written exactly as before: no entries_total key.
+func TestWeakenedEntriesUnderTheCapAreUntouched(t *testing.T) {
+	skipWithoutPosixPaths(t)
+	h := newHarness(t)
+	h.deps.ProjectSandbox = &fakeProject{byDir: map[string][]string{"/repo/proj": {"settings.json:env"}}}
+	h.sb.Vars["CLAUDE_PROJECT_DIR"] = "/repo/proj"
+	mustExit0(t, h, h.claude("PreToolUse", preToolBash))
+	for _, r := range h.audit.all() {
+		if strings.Contains(string(r.Detail), model.DiagLowerSandboxWeakened) &&
+			string(r.Detail) != `{"diag":"lower_sandbox_weakened","entries":["settings.json:env"]}` {
+			t.Errorf("detail = %s", r.Detail)
+		}
+	}
+}
+
+// An unreadable session state reports StartedAt() false on every event; the
+// first-event diags must not be repeated for the whole session then.
+func TestFirstEventDiagsSkippedOnUnreadableState(t *testing.T) {
+	skipWithoutPosixPaths(t)
+	h := newHarness(t)
+	h.state.loadErr = errTest
+	h.state.loadInfo = model.StateLoadInfo{Exists: true, Readable: false}
+	h.deps.ProjectSandbox = &fakeProject{byDir: map[string][]string{"/repo/proj": {"settings.json:env"}}}
+	h.deps.RedirectsIgnored = []string{"BALLAST_HOME"}
+	h.sb.Vars["CLAUDE_PROJECT_DIR"] = "/repo/proj"
+	for i := 0; i < 2; i++ {
+		mustExit0(t, h, h.claude("PreToolUse", preToolBash))
+	}
+	for _, n := range diagNames(h) {
+		if n == model.DiagEnvRedirectIgnored || n == model.DiagLowerSandboxWeakened {
+			t.Errorf("first-event diag %q written on an unreadable state: %v", n, diagNames(h))
+		}
+	}
+	if !contains(diagNames(h), "state_unreadable") {
+		t.Errorf("state_unreadable missing: %v", diagNames(h))
 	}
 }

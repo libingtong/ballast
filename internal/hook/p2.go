@@ -28,6 +28,17 @@ const (
 	weakenedDenyFmt = "ballast(T1):本项目的 .claude/settings*.json 含削弱托管沙箱的设置(%s),组织策略禁止在此项目中调用工具。请移除这些设置或联系管理员。"
 )
 
+// Bounds on the weakened-settings entries quoted in the deny reason and the
+// lower_sandbox_weakened audit detail. The keys come from the project's
+// .claude/settings*.json, which the repo (hence an agent or a third party)
+// controls, so neither their number nor their length is trusted.
+const (
+	maxWeakenedEntries    = 8
+	maxWeakenedEntryRunes = 80
+	weakenedMoreFmt       = "…等 %d 项"
+	weakenedTotalKey      = "entries_total"
+)
+
 // maxSpawnErrRunes bounds the spawn error quoted in the deny reason and audit.
 const maxSpawnErrRunes = 200
 
@@ -88,6 +99,23 @@ func (inv *invocation) weakenedEntries(ev *model.Event, repo *model.RepoInfo) []
 	return out
 }
 
+// boundEntries caps the entry list shown to the agent and written to the
+// audit: at most maxWeakenedEntries entries of at most maxWeakenedEntryRunes
+// runes each (single line), plus the total when anything was left out.
+func boundEntries(entries []string) (shown []string, total int) {
+	total = len(entries)
+	n := total
+	if n > maxWeakenedEntries {
+		n = maxWeakenedEntries
+	}
+	shown = make([]string, 0, n)
+	nl := strings.NewReplacer("\r", " ", "\n", " ")
+	for _, e := range entries[:n] {
+		shown = append(shown, clipRunes(nl.Replace(e), maxWeakenedEntryRunes))
+	}
+	return shown, total
+}
+
 // weakenedDenyActive reports whether the org policy denies every PreToolUse
 // of a session whose project layer is weakened.
 func (inv *invocation) weakenedDenyActive(ev *model.Event) bool {
@@ -108,9 +136,12 @@ func (inv *invocation) firstEventDiags(ev *model.Event, repo *model.RepoInfo) []
 	}
 	if d.ProjectSandbox != nil && isClaude(ev) {
 		if entries := inv.weakenedEntries(ev, repo); len(entries) > 0 {
-			out = append(out, diag{name: model.DiagLowerSandboxWeakened, fields: map[string]any{
-				"entries": append([]string(nil), entries...),
-			}})
+			shown, total := boundEntries(entries)
+			fields := map[string]any{"entries": shown}
+			if total > len(shown) {
+				fields[weakenedTotalKey] = total
+			}
+			out = append(out, diag{name: model.DiagLowerSandboxWeakened, fields: fields})
 		}
 	}
 	return out
@@ -134,7 +165,12 @@ func (inv *invocation) syntheticDecision(ev *model.Event, repo *model.RepoInfo, 
 			if ev.Tool != nil {
 				tool = ev.Tool.Name
 			}
-			return &synthetic{reason: fmt.Sprintf(weakenedDenyFmt, strings.Join(entries, ", "))},
+			shown, total := boundEntries(entries)
+			list := strings.Join(shown, ", ")
+			if total > len(shown) {
+				list += ", " + fmt.Sprintf(weakenedMoreFmt, total-len(shown))
+			}
+			return &synthetic{reason: fmt.Sprintf(weakenedDenyFmt, list)},
 				[]diag{{name: model.DiagLowerSandboxDeny, fields: map[string]any{"tool": tool}}}
 		}
 	}
@@ -288,10 +324,12 @@ func (inv *invocation) configChange(ev *model.Event, repo *model.RepoInfo, pc mo
 
 // displayPath rewrites an absolute config path into "<repo>/…" or "~/…"
 // form; a path under neither keeps only its basename (no usernames, no
-// directory layout in the audit trail).
+// directory layout in the audit trail). The path is cleaned first, so a
+// "/repo/../../Users/x" or "~/../.." cannot smuggle the layout past the
+// prefix test.
 func (inv *invocation) displayPath(p string, repo *model.RepoInfo) string {
 	d := inv.deps
-	q := strings.ReplaceAll(p, `\`, "/")
+	q := path.Clean(strings.ReplaceAll(p, `\`, "/"))
 	fold := caseInsensitiveFS(d.Env.GOOS())
 	under := func(root string) (string, bool) {
 		root = strings.TrimRight(strings.ReplaceAll(root, `\`, "/"), "/")
@@ -304,7 +342,11 @@ func (inv *invocation) displayPath(p string, repo *model.RepoInfo) string {
 		}
 		head := q[:len(prefix)]
 		if head == prefix || fold && strings.EqualFold(head, prefix) {
-			return q[len(prefix):], true
+			rel := q[len(prefix):]
+			if rel == ".." || strings.HasPrefix(rel, "../") {
+				return "", false
+			}
+			return rel, true
 		}
 		return "", false
 	}
@@ -322,7 +364,7 @@ func (inv *invocation) displayPath(p string, repo *model.RepoInfo) string {
 		}
 	}
 	base := path.Base(q)
-	if base == "." || base == "/" {
+	if base == "." || base == ".." || base == "/" {
 		return ""
 	}
 	return base
