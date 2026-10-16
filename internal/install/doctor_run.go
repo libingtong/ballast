@@ -50,7 +50,7 @@ func runDoctor(opt DoctorOptions) []Check {
 	}
 	add(rulesLint(opt))
 	managedFiles, _ := readManagedSettings(lay, fsys)
-	add(tierChecks(managedFiles, goos)...)
+	add(tierChecks(opt, fsys, lay, goos, firstNonEmpty(opt.Self, binary))...)
 	add(Check{ID: "ci.final_arbiter", Status: CheckOK,
 		Message: "server-side CI is the final arbiter; in-session rules steer the agent but do not guarantee delivery quality"})
 
@@ -214,50 +214,6 @@ func jget(m map[string]any, keys ...string) any {
 		cur = mm[k]
 	}
 	return cur
-}
-
-// tierChecks reports T0/T1 and the missing T1 components.
-func tierChecks(files []managedFile, goos string) []Check {
-	has := map[string]bool{}
-	for _, f := range files {
-		if managedHasBallast(f.doc, goos) {
-			has["managed hooks"] = true
-		}
-		if b, _ := jget(f.doc, "allowManagedHooksOnly").(bool); b {
-			has["allowManagedHooksOnly"] = true
-		}
-		if b, _ := jget(f.doc, "sandbox", "enabled").(bool); b {
-			has["sandbox"] = true
-		}
-		if d, _ := jget(f.doc, "permissions", "deny").([]any); len(d) > 0 {
-			has["permissions.deny"] = true
-		}
-		if jget(f.doc, "allowedMcpServers") != nil || jget(f.doc, "allowManagedMcpServersOnly") != nil {
-			has["MCP allowlist"] = true
-		}
-	}
-	var missing []string
-	for _, k := range []string{"managed hooks", "allowManagedHooksOnly", "sandbox", "permissions.deny", "MCP allowlist"} {
-		if !has[k] {
-			missing = append(missing, k)
-		}
-	}
-	var out []Check
-	switch {
-	case goos == "windows":
-		out = append(out, Check{ID: "tier.level", Status: CheckOK,
-			Message: "T0 (best effort): tampering is detectable but not preventable on native Windows"})
-		out = append(out, Check{ID: "tier.windows_t0", Status: CheckWarn,
-			Message: "原生 Windows 仅支持 T0;如需 T1 请使用 WSL2"})
-		return out
-	case len(missing) == 0:
-		out = append(out, Check{ID: "tier.level", Status: CheckOK, Message: "T1: managed deployment complete"})
-	default:
-		out = append(out, Check{ID: "tier.level", Status: CheckWarn,
-			Message: "T0 (best effort): tampering is detectable but not preventable; missing T1 components: " + strings.Join(missing, ", "),
-			Fix:     "run: ballast org render (an administrator deploys the output as managed settings)"})
-	}
-	return out
 }
 
 func managedDuplicate(managed bool, m *model.InstallManifest) Check {

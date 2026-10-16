@@ -185,8 +185,11 @@
         "C:\\Program Files\\ClaudeCode\\ballast",
         "~/.ballast",
         "./.ballast",
+        "**/.ballast",
         "C:\\Program Files\\Ballast",
-        "~/.claude/settings*.json"
+        "~/.claude/settings*.json",
+        "./.claude/settings*.json",
+        "**/.claude/settings*.json"
       ]
     }
   },
@@ -195,18 +198,27 @@
       "Edit(C:\\Program Files\\ClaudeCode\\ballast/**)",
       "Edit(~/.ballast/**)",
       "Edit(./.ballast/**)",
+      "Edit(**/.ballast/**)",
       "Edit(C:\\Program Files\\Ballast/**)",
       "Edit(~/.claude/settings*.json)",
+      "Edit(./.claude/settings*.json)",
+      "Edit(**/.claude/settings*.json)",
       "Write(C:\\Program Files\\ClaudeCode\\ballast/**)",
       "Write(~/.ballast/**)",
       "Write(./.ballast/**)",
+      "Write(**/.ballast/**)",
       "Write(C:\\Program Files\\Ballast/**)",
       "Write(~/.claude/settings*.json)",
+      "Write(./.claude/settings*.json)",
+      "Write(**/.claude/settings*.json)",
       "NotebookEdit(C:\\Program Files\\ClaudeCode\\ballast/**)",
       "NotebookEdit(~/.ballast/**)",
       "NotebookEdit(./.ballast/**)",
+      "NotebookEdit(**/.ballast/**)",
       "NotebookEdit(C:\\Program Files\\Ballast/**)",
-      "NotebookEdit(~/.claude/settings*.json)"
+      "NotebookEdit(~/.claude/settings*.json)",
+      "NotebookEdit(./.claude/settings*.json)",
+      "NotebookEdit(**/.claude/settings*.json)"
     ]
   },
   "allowManagedPermissionRulesOnly": true

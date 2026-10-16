@@ -143,17 +143,18 @@ func TestOrgRenderWriteGating(t *testing.T) {
 	e := newTenv(t)
 	defer func(f func() int) { geteuid = f }(geteuid)
 	dst := filepath.Join(e.lay.ManagedDir, "managed-settings.d", "ballast.json")
+	noSudo := sys.MapEnv{Vars: map[string]string{}} // keep the pre-flight independent of the real SUDO_UID
 
 	geteuid = func() int { return 0 }
 	if out, err := OrgRender(e.lay, e.fs, OrgRenderOptions{Write: true}); !errors.Is(err, ErrOrgWriteDenied) || len(out) == 0 {
 		t.Errorf("--write without --i-am-admin: %v", err)
 	}
 	geteuid = func() int { return 1000 }
-	if _, err := OrgRender(e.lay, e.fs, OrgRenderOptions{Write: true, IAmAdmin: true}); !errors.Is(err, ErrOrgWriteDenied) {
+	if _, err := OrgRender(e.lay, e.fs, OrgRenderOptions{Write: true, IAmAdmin: true, Env: noSudo}); !errors.Is(err, ErrOrgWriteDenied) {
 		t.Errorf("--write as non-root: %v", err)
 	}
 	geteuid = func() int { return -1 } // windows
-	if _, err := OrgRender(e.lay, e.fs, OrgRenderOptions{Write: true, IAmAdmin: true}); !errors.Is(err, ErrOrgWriteDenied) {
+	if _, err := OrgRender(e.lay, e.fs, OrgRenderOptions{Write: true, IAmAdmin: true, Env: noSudo}); !errors.Is(err, ErrOrgWriteDenied) {
 		t.Errorf("--write on windows: %v", err)
 	}
 	if e.exists(dst) {
@@ -161,7 +162,7 @@ func TestOrgRenderWriteGating(t *testing.T) {
 	}
 
 	geteuid = func() int { return 0 }
-	out, err := OrgRender(e.lay, e.fs, OrgRenderOptions{Write: true, IAmAdmin: true, MCPAllow: []string{"github"}})
+	out, err := OrgRender(e.lay, e.fs, OrgRenderOptions{Write: true, IAmAdmin: true, MCPAllow: []string{"github"}, Env: noSudo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +186,7 @@ func TestOrgRenderWriteGating(t *testing.T) {
 		t.Errorf("install after org render: %v", err)
 	}
 	// rewriting is atomic and idempotent
-	out2, err := OrgRender(e.lay, e.fs, OrgRenderOptions{Write: true, IAmAdmin: true, MCPAllow: []string{"github"}})
+	out2, err := OrgRender(e.lay, e.fs, OrgRenderOptions{Write: true, IAmAdmin: true, MCPAllow: []string{"github"}, Env: noSudo})
 	if err != nil || string(out2) != string(out) || e.read(dst) != string(out) {
 		t.Errorf("second write: %v", err)
 	}

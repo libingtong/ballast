@@ -81,6 +81,20 @@
 // arg "hook", user-level install for claude-code is refused
 // (model.ErrManagedPresent, exit 1) to avoid double execution (plan A15).
 //
+// P2 (P2-INSTALL, docs/p2-design.md §3.5): imports tier in addition.
+// `org render` prints tier.ManagedForms (shared golden
+// internal/tier/testdata/managed_forms.json) and an org.json section
+// (OrgRenderFull; --home-root, protected_extra, weakened_project =
+// tier.DefaultWeakenedProject); --write puts down managed-settings.d/ballast.json
+// and then org.json, after a home-directory pre-flight for SUDO_UID
+// (sys.LookupHome; ErrNoPasswdEntry without home_root ⇒ ErrUsage, nothing
+// written). Doctor derives tier.level from tier.Detect and adds
+// tier.declared_mismatch, tier.runner_sandbox (probe injected by the CLI via
+// DoctorOptions.SandboxAvailable, install never imports sandbox),
+// tier.redirect_ignored, tier.locked_home (tier.LockedHome, timed),
+// tier.repo_sandbox_weakened (cwd and repository top) and
+// tier.binary_hardening (debug/macho CS_RUNTIME, debug/elf PT_INTERP).
+//
 // Acceptance (U10): scripts/install-e2e.sh per client with
 // BALLAST_HOME/BALLAST_INSTALL_ROOT/CLAUDE_CONFIG_DIR/CODEX_HOME/HERMES_HOME
 // redirected: install→uninstall round-trip diff empty; double install
