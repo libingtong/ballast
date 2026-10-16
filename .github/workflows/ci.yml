@@ -35,7 +35,8 @@ env:
   # 共享 runner 上进程会被随机卡住 100ms 以上(新启动二进制的缺页、CPU 被抢占、杀软扫描),
   # 与钩子本身的耗时无关(同一台 runner 上 p50 约 3ms);bench 与测试要求"零异常",
   # 不放宽就会随机失败。scripts/fault.sh 的 hang 用例会把它置空,照样断言 150ms。
-  BALLAST_TEST_WATCHDOG_MS: "3000"
+  # 15s:托管 Windows runner 上观察到单个钩子进程被整体卡住 4.6s(bench 的 10k 文件场景)。
+  BALLAST_TEST_WATCHDOG_MS: "15000"
 
 defaults:
   run:
