@@ -1,8 +1,8 @@
 {
-  "session_id": "4ddac8c6-1182-4b26-9792-530acdbdaa96",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/4ddac8c6-1182-4b26-9792-530acdbdaa96.jsonl",
+  "session_id": "<session-35>",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/<session-35>.jsonl",
   "cwd": "<probe-root>/work/stop-systemmessage",
-  "prompt_id": "5fce0e8f-b3bd-42d2-8484-567da0e1392f",
+  "prompt_id": "<prompt-30>",
   "hook_event_name": "SessionEnd",
   "reason": "other"
 }

@@ -4,7 +4,8 @@
 # arguments; any failed assertion exits non-zero. Three platforms; the parts
 # that need Docker or a client are an explicit SKIP when the prerequisite is
 # missing and a FAILURE when the matching BALLAST_REQUIRE_* variable is set
-# (CI sets BALLAST_REQUIRE_DOCKER=1 on Linux).
+# (the Linux CI job is to set BALLAST_REQUIRE_DOCKER=1 once impl/ci-fix lands;
+# docs/p2-design.md section 11).
 #
 #   1. go build, go vet (host and GOOS=windows), go test ./internal/archtest,
 #      go test ./...
@@ -12,8 +13,9 @@
 #   3. `ballast report --out` end to end: every exit code, and the file passes
 #      report.Validate with seeded secrets / paths / ids absent
 #   4. scripts/boundary-t0.sh
-#   5. scripts/sandbox-docker.sh ./internal/sandbox ./internal/runner and
-#      scripts/boundary-t1.sh (Docker)
+#   5. scripts/sandbox-docker.sh ./internal/sandbox ./internal/runner, the
+#      root-only TestBwrapPathDirectoryMustBeTrusted (BALLAST_DOCKER_USER=0:0)
+#      and scripts/boundary-t1.sh (Docker)
 #   6. go run ./scripts/probe-m0b/check docs/facts/m0b-cases.json; the Hermes
 #      cases (docs/facts/hermes-cases.json) through the checker's hygiene scan
 #      and the adapter's evidence test (the M0b checker's case list is M0b's)
@@ -108,6 +110,19 @@ else
   else
     ok "scripts/sandbox-docker.sh ./internal/sandbox ./internal/runner"
   fi
+  # The one test that needs root (it creates root-owned files) cannot run in the
+  # uid-1000 pass above: run it once as root and require that it really ran.
+  out_root="$(mktmp sandbox-docker-root)"
+  rc=0
+  BALLAST_DOCKER_USER=0:0 bash "$LIB_DIR/sandbox-docker.sh" ./internal/sandbox -run 'TestBwrapPathDirectoryMustBeTrusted' -v >"$out_root" 2>&1 || rc=$?
+  tail -n 3 "$out_root"
+  if grep -q 'SKIP: Docker is not available' "$out_root"; then
+    skip "sandbox-docker.sh as root: TestBwrapPathDirectoryMustBeTrusted" "Docker is not available (BALLAST_REQUIRE_DOCKER=1 makes this a failure)"
+  elif [ "$rc" = 0 ] && grep -q -- '--- PASS: TestBwrapPathDirectoryMustBeTrusted' "$out_root"; then
+    ok "sandbox-docker.sh as root: TestBwrapPathDirectoryMustBeTrusted ran and passed (not skipped)"
+  else
+    bad "sandbox-docker.sh as root: TestBwrapPathDirectoryMustBeTrusted ran and passed" "exit $rc; $(grep -E -- '--- (SKIP|FAIL)' "$out_root" | head -n 2 | tr '\n' ' ')"
+  fi
   run_child "boundary-t1.sh" boundary-t1.sh
 fi
 
@@ -133,6 +148,8 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   check_eq "no local absolute paths" "$paths_hit" ""
   uid_hit="$(git grep --untracked -nIE '[~]/NewCode|claude-[0-9]+-' -- . ':!.github/workflows/ci.yml' ':!scripts/accept-p2.sh' || true)"
   check_eq "no local directory layout or uid fragments" "$uid_hit" ""
+  sid_hit="$(git grep --untracked -nIE '"(session_id|prompt_id)" *: *"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"|/[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\.jsonl' -- docs/facts || true)"
+  check_eq "no real client session ids in the evidence samples (session_id / prompt_id are <session-N> / <prompt-N>)" "$sid_hit" ""
   secret_hit="$(git grep --untracked -nIE 'sk-ant-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[abprs]-[A-Za-z0-9-]{10,}' -- . ':!internal/redact' ':!internal/audit' ':!internal/report' ':!internal/hook' ':!internal/*_test.go' ':!scripts/boundary-t0.sh' ':!scripts/accept-p2.sh' ':!scripts/probe-m0b' ':!docs/facts' ':!schema/examples' || true)"
   check_eq "no credentials or secrets outside the redaction fixtures" "$secret_hit" ""
 else

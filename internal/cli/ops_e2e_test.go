@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libingtong/ballast/internal/model"
 )
 
 // shadowHits fires the log-only e2e-shadow rule n times in separate tool calls.
@@ -367,6 +369,59 @@ func TestReplay(t *testing.T) {
 	s.mustExit(2, "", "", "replay", tr, "--client", "nobody")
 	s.mustExit(2, "", "", "replay", tr, "--initial-state", writeTemp(t, s, `{"exists":["a"]}`))
 	s.mustExit(5, "", "", "replay", filepath.Join(s.sb.Root, "absent.jsonl"))
+}
+
+// replay loads project.json with the same strict loader as the hook's
+// evidence provider: a file with an unknown field is project_invalid, not
+// approximated from the lenient decoding (audit r1).
+func TestReplayProjectJSONIsStrict(t *testing.T) {
+	s := newSandbox(t)
+	rulesPath := installE2ERules(t, s)
+	repo := s.newRepo("replayrepo")
+	tr := filepath.Join(s.sb.Root, "commit.jsonl")
+	writeFile(t, tr, strings.Join([]string{
+		fmt.Sprintf(`{"type":"user","uuid":"u1","timestamp":"2026-10-10T09:00:00Z","sessionId":"rp1","cwd":%q,"message":{"role":"user","content":"commit it"}}`, repo),
+		fmt.Sprintf(`{"type":"assistant","uuid":"a1","timestamp":"2026-10-10T09:00:01Z","sessionId":"rp1","cwd":%q,"message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git commit -m x"}}]}}`, repo),
+	}, "\n")+"\n")
+	// One trusted record of the session, so the project.json judgement is
+	// reached (without evidence the cause is always no_trusted_evidence).
+	evFile := filepath.Join(s.sb.Root, "replay-evidence.json")
+	rec := model.VerifyRecord{V: 1, JobID: "j1", Name: "test", RepoInst: "ri", Tier: model.TierT0, SStart: "T", SEnd: "T",
+		TStart: time.Date(2026, 10, 10, 9, 0, 0, 0, time.UTC), TEnd: time.Date(2026, 10, 10, 9, 0, 0, 500, time.UTC),
+		Outcome: model.OutcomePass, SessionID: "rp1"}
+	recJSON, err := json.Marshal([]model.VerifyRecord{rec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, evFile, string(recJSON))
+	causeOf := func(project string) string {
+		writeFile(t, filepath.Join(repo, ".ballast", "project.json"), project)
+		r := s.mustExit(0, "", "", "replay", tr, "--format", "json", "--rules", rulesPath, "--evidence", evFile)
+		var rep struct {
+			Samples []struct {
+				RuleID       string `json:"rule_id"`
+				Class        string `json:"class"`
+				UnknownCause string `json:"unknown_cause"`
+			} `json:"samples"`
+		}
+		if err := json.Unmarshal([]byte(r.stdout), &rep); err != nil {
+			t.Fatalf("replay json: %v\n%s", err, r.stdout)
+		}
+		for _, smp := range rep.Samples {
+			if smp.RuleID == "evidence-before-commit" {
+				return smp.Class + "/" + smp.UnknownCause
+			}
+		}
+		return "no sample" // fresh pass: the rule does not fire
+	}
+	valid := `{"version":1,"verify":[{"name":"test","argv":["go","test","./..."],"required":true}]}`
+	invalid := `{"version":1,"bogus_field":1,"verify":[{"name":"test","argv":["go","test","./..."],"required":true}]}`
+	if got := causeOf(valid); got != "no sample" {
+		t.Errorf("valid project.json: %s, want a fresh pass (no sample)", got)
+	}
+	if got := causeOf(invalid); !strings.Contains(got, "project_invalid") {
+		t.Errorf("project.json with an unknown field: %s, want project_invalid", got)
+	}
 }
 
 func writeTemp(t *testing.T, s *sandbox, content string) string {

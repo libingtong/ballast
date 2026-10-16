@@ -645,7 +645,7 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 | **客户端取证** | Hermes:在隔离环境(Docker 或临时 venv,不碰真实 `~/.hermes`)中用 `hermes hooks test` 离线验证安装后的调用链(载荷、stdout 协议、阻断语义),写 `docs/facts/hermes-cases.json`,据此修正 adapter/hermes(`patch` 工具、`pre_verify` 续跑映射等);Codex、Cursor 不碰凭据无法取证,写补测命令 | `bash scripts/probe-clients/hermes.sh`;`go test ./internal/adapter/...` |
 | **其他增强** | psparse 写入目标补全(Tee-Object、-LiteralPath、Rename-Item、`[IO.File]::Write*` 等);请求文件 GC。cache GC 已在 v0.4.1 完成 | `go test ./internal/psparse ./internal/runner` |
 
-集成验收:`scripts/accept-p2.sh`(设计文档 §10),三平台 CI 执行,容器与真实客户端部分缺前提时显式 SKIP。
+集成验收:`scripts/accept-p2.sh`(设计文档 §10),计划三平台 CI 执行(CI 步骤待 `impl/ci-fix` 合入后接入,见设计文档 §11;目前 `ci.yml` 不含它),容器与真实客户端部分缺前提时显式 SKIP。
 
 ### 2. 已定事项(本版裁决)
 

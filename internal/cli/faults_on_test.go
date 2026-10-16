@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/libingtong/ballast/internal/model"
 )
@@ -54,5 +55,19 @@ func TestFaultBuildFakeTier(t *testing.T) {
 	other, _ := wireHook(agentEnv(map[string]string{}), wireSeams{FS: lockedFS(""), Owner: wireOwner})
 	if info := other.Tier.Probe(); info.Tier == model.TierT1 {
 		t.Errorf("without the switch the real (T0 here) probe must answer: %+v", info)
+	}
+}
+
+// TestFaultBuildWatchdogOverride: the e2e tests relax the 150 ms watchdog
+// through BALLAST_TEST_WATCHDOG; an unset or invalid value keeps the default.
+func TestFaultBuildWatchdogOverride(t *testing.T) {
+	for v, want := range map[string]time.Duration{"5s": 5 * time.Second, "250ms": 250 * time.Millisecond, "": 0, "x": 0, "-1s": 0, "0": 0} {
+		deps, err := wireHook(agentEnv(map[string]string{"BALLAST_TEST_WATCHDOG": v}), wireSeams{FS: lockedFS(""), Owner: wireOwner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if deps.Watchdog != want {
+			t.Errorf("BALLAST_TEST_WATCHDOG=%q: Watchdog = %v, want %v", v, deps.Watchdog, want)
+		}
 	}
 }

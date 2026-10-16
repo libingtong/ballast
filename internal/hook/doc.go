@@ -23,6 +23,11 @@
 // Audit common fields: RepoInst = repo.Inst (or the norepo scope),
 // RepoRemoteHash = repo.RemoteHash (filled by RepoLocator.Locate; the hook
 // never parses .git/config itself), Generation, Tier, BallastVersion.
+// Tier (audit r1) is the verdict of Deps.Tier.Probe() and is present only on
+// the lines of an event that probed (a canonical `ballast verify`: T0 or T1);
+// every other line omits it, because the hook does not evaluate the tier on
+// the hot path and must not claim T0 for a host it never looked at.
+// `ballast report` counts the omitted ones as "undetermined".
 //
 // eval_summary (frozen, v1.6): on Stop/SubagentStop/SessionEnd the delta
 // carries FlushEvals + FlushedEvals = the counts read lock-free PLUS this

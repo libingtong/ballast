@@ -20,6 +20,10 @@ import (
 // The offending value itself is never printed.
 const other = "other"
 
+// TierUndetermined is the Tiers key of the audit lines that carry no tier
+// (the hook only probes the tier for a canonical `ballast verify`).
+const TierUndetermined = "undetermined"
+
 // latencyBoundsMS are the finite upper bounds of the latency histogram.
 // LatencyAgg.Counts has one more entry than LatencyAgg.BucketsMS: the last
 // counts everything above the final bound (+Inf is not representable in
@@ -36,9 +40,13 @@ var (
 	sandboxSet = []string{"sandbox-exec", "bwrap", "none", other}
 	originSet  = []string{string(model.OriginCLI), string(model.OriginHook), other}
 	tierSet    = []string{string(model.TierT0), string(model.TierT1), other}
-	layerSet   = []string{"", string(model.LayerOrg), string(model.LayerRepo), string(model.LayerUser), string(model.LayerFile)}
-	actionSet  = []string{"", string(model.ActionLog), string(model.ActionWarn), string(model.ActionAsk), string(model.ActionDeny)}
-	kindSet    = []string{
+	// auditTierSet is tierSet plus TierUndetermined: the audit lines of an
+	// event on which the hook did not probe the tier carry no tier at all
+	// (hook/doc.go), and are counted apart instead of being claimed as T0.
+	auditTierSet = append(append([]string(nil), tierSet...), TierUndetermined)
+	layerSet     = []string{"", string(model.LayerOrg), string(model.LayerRepo), string(model.LayerUser), string(model.LayerFile)}
+	actionSet    = []string{"", string(model.ActionLog), string(model.ActionWarn), string(model.ActionAsk), string(model.ActionDeny)}
+	kindSet      = []string{
 		string(redact.KindPrivateKey), string(redact.KindURLPassword), string(redact.KindAuthHeader),
 		string(redact.KindBearer), string(redact.KindKeyValue), string(redact.KindFlag),
 		string(redact.KindAWS), string(redact.KindVendorToken), string(redact.KindJWT),
@@ -163,7 +171,9 @@ func Build(opt Options) (*Report, error) {
 		if tier == "" && rec.Verify != nil {
 			tier = rec.Verify.Tier
 		}
-		if tier != "" {
+		if tier == "" {
+			r.Tiers[model.Tier(TierUndetermined)]++
+		} else {
 			r.Tiers[model.Tier(bucket(tierSet, string(tier)))]++
 		}
 		if rec.LatencyUS > 0 {

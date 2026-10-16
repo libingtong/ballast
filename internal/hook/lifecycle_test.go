@@ -117,8 +117,8 @@ func TestAuditRecordFields(t *testing.T) {
 		ToolUseID: "tu9", TranscriptRef: "~/.claude/p/t.jsonl", RepoInst: "0123456789abcdef", RepoRemoteHash: "fedcba9876543210",
 		Event: model.EventPreToolUse, NativeEvent: "PreToolUse", Tool: "Bash", RuleID: "r", RuleLayer: model.LayerUser,
 		Generation: "gen1", Action: model.ActionDeny, Target: model.ActionDeny, Decision: "deny", Matched: "bash node 0: git status",
-		Context: []model.EventSummary{{Seq: 2, Text: "Bash: ls"}, {Seq: 3, Text: "Edit: a.go"}},
-		Tier:    model.TierT0, BallastVersion: "9.9.9-test",
+		Context:        []model.EventSummary{{Seq: 2, Text: "Bash: ls"}, {Seq: 3, Text: "Edit: a.go"}},
+		BallastVersion: "9.9.9-test",
 	}
 	if !reflect.DeepEqual(r, want) {
 		t.Errorf("record =\n%+v\nwant\n%+v", r, want)

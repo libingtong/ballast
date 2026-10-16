@@ -77,7 +77,7 @@ type Report struct {
 	Repos    int `json:"repos"`    // distinct repo_inst (count only)
 
 	Clients map[model.ClientID]int `json:"clients"` // records per client
-	Tiers   map[model.Tier]int     `json:"tiers"`   // records per tier
+	Tiers   map[model.Tier]int     `json:"tiers"`   // records per tier; audit lines without a tier (the hook probes it only for a canonical verify) count as TierUndetermined
 	Rules   []RuleAgg              `json:"rules"`
 	// Diags maps detail.diag → count. Keys are only names from the frozen
 	// closed enumeration model.DiagNames; any other value (including a

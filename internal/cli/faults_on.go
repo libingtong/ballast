@@ -4,6 +4,7 @@ package cli
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/ports"
@@ -24,7 +25,26 @@ const (
 	// EnvTestTier=T1 makes the tier probe report a healthy T1 host (bench
 	// scenario 12: the canonical-verify deny path).
 	EnvTestTier = "BALLAST_TEST_TIER"
+	// EnvTestWatchdog (a Go duration, for example "5s") replaces the hook's
+	// 150 ms watchdog. Only the e2e tests use it: they run the real binary
+	// under `go test -race ./...` on loaded machines, where 150 ms of wall
+	// clock is not a stable assertion. The production default and the 30 ms
+	// predicate margin are not touched; production builds ignore the variable.
+	EnvTestWatchdog = "BALLAST_TEST_WATCHDOG"
 )
+
+// testWatchdog returns the overridden watchdog, 0 when unset or invalid.
+func testWatchdog(env sys.Env) time.Duration {
+	v, ok := env.Getenv(EnvTestWatchdog)
+	if !ok {
+		return 0
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return 0
+	}
+	return d
+}
 
 func testLock(env sys.Env) (tier.OrgConfig, bool) {
 	if v, ok := env.Getenv(EnvTestLocked); !ok || v != "1" {

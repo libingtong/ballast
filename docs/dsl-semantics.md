@@ -68,11 +68,11 @@ RuleFile := {
 | `UserPromptSubmit` | UserPromptSubmit | UserPromptSubmit | beforeSubmitPrompt | pre_llm_call |
 | `PostToolUse` | PostToolUse | PostToolUse | postToolUse | post_tool_call |
 | `PostToolUseFailure` | PostToolUseFailure | —(不存在) | — | — |
-| `Stop` | Stop | Stop | stop | —(on_session_end 归一为 SessionEnd,不能干预) |
+| `Stop` | Stop | Stop | stop | pre_verify(**语义为续跑**;on_session_end 归一为 SessionEnd,不能干预) |
 | `SubagentStop` | SubagentStop | — | subagentStop | — |
 
 - 事件在某客户端不存在时,该规则在该客户端上永不触发;lint 给 `event-unavailable` 警告。
-- 动作能否在某客户端的某事件上执行,见 `docs/architecture.md` §4.1;lint 对矩阵外组合报 `action-unsupported`(错误),对未核验组合报 `action-unverified`(警告);Cursor 的 Stop/SubagentStop `deny` 报 `cursor-stop-followup`(警告,语义为续跑)。
+- 动作能否在某客户端的某事件上执行,见 `docs/architecture.md` §4.1;lint 对矩阵外组合报 `action-unsupported`(错误),对未核验组合报 `action-unverified`(警告);Cursor 的 Stop/SubagentStop `deny` 报 `cursor-stop-followup`(警告,语义为续跑);Hermes 的 Stop(`pre_verify`)`deny` 报 `hermes-stop-continue`(警告,语义同为续跑)。
 - Claude 压缩用内部 agent 触发的 SubagentStop(`agent_type` 存在且为空字符串)不参与规则求值。
 - SessionStart、PostToolBatch、SessionEnd 等事件只用于注入与记账,不能写在规则里。
 
@@ -327,6 +327,7 @@ evalRule(r, in):
 | `target-unsupported` | 警告 | target 不被某客户端支持(promote 时会失败) |
 | `event-unavailable` | 警告 | 事件在某客户端不存在 |
 | `cursor-stop-followup` | 警告 | Cursor Stop 的 deny 语义为续跑 |
+| `hermes-stop-continue` | 警告 | Hermes Stop(`pre_verify`)的 deny 语义为续跑 |
 | `field-not-applicable` | 错误 | 字段与事件/工具不适用(§5.8) |
 | `input-field-unknown` | 错误 | `input_regex` 键不在登记表(实现可同时报 `field-not-applicable`,两者都是错误,退出码相同) |
 | `text-source-mismatch` | 错误 | `text.source` 与事件不符 |

@@ -82,6 +82,9 @@ var (
 	reLocalPath = regexp.MustCompile(`(^|[^A-Za-z:}])/Users/[a-z][A-Za-z0-9._-]*/(NewCode|Documents|Desktop|Library|\.claude|\.ballast)`)
 	reLocalTree = regexp.MustCompile(`[~]/NewCode|claude-[0-9]+-`)
 	reLinuxHome = regexp.MustCompile(`/home/agent\b|-home-agent-`)
+	// A real client session: session_id / prompt_id as a UUID value, or a
+	// <uuid>.jsonl transcript name. Samples use <session-N> / <prompt-N>.
+	reSessionID = regexp.MustCompile(`"(session_id|prompt_id)"\s*:\s*"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"|/[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\.jsonl`)
 	secretRes   = []*regexp.Regexp{
 		regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{8,}`),
 		regexp.MustCompile(`\bsk-[A-Za-z0-9]{20,}`),
@@ -366,6 +369,9 @@ func scanText(name, text string, bad func(string, ...any)) {
 	}
 	if m := reLocalTree.FindString(text); m != "" {
 		bad("%s: local directory structure or uid fragment %q (use <repo>, claude-<uid>)", name, m)
+	}
+	if m := reSessionID.FindString(text); m != "" {
+		bad("%s: real client session id %q (use <session-N> / <prompt-N>)", name, strings.TrimSpace(m))
 	}
 	if m := reLinuxHome.FindString(text); m != "" {
 		bad("%s: container home path %q was not normalized to <home>/<repo>", name, strings.TrimSpace(m))

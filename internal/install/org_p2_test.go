@@ -441,3 +441,35 @@ func TestOrgRenderRejectsDocumentTierRefuses(t *testing.T) {
 		}
 	}
 }
+
+// --binary must be a clean absolute path of the target OS (audit r1).
+func TestOrgRenderBinaryMustBeAbsolute(t *testing.T) {
+	for _, tc := range []struct {
+		goos, bin string
+		ok        bool
+	}{
+		{"linux", "/usr/local/libexec/ballast/ballast", true},
+		{"linux", "ballast", false},
+		{"linux", "relative/ballast", false},
+		{"linux", "./ballast", false},
+		{"linux", "/usr/../bin/ballast", false},
+		{"linux", "/usr//bin/ballast", false},
+		{"linux", "/usr/bin/", false},
+		{"linux", "/usr/bin/ba\nllast", false},
+		{"linux", `C:\ballast.exe`, false},
+		{"windows", `C:\Program Files\Ballast\ballast.exe`, true},
+		{"windows", `C:/Program Files/Ballast/ballast.exe`, true},
+		{"windows", `ballast.exe`, false},
+		{"windows", `\Program Files\ballast.exe`, false},
+		{"windows", `C:\Program Files\..\ballast.exe`, false},
+		{"windows", "/usr/bin/ballast", false},
+	} {
+		_, err := OrgRenderFull(orgLayout(t, tc.goos), sys.OSFS{}, OrgRenderOptions{GOOS: tc.goos, Binary: tc.bin})
+		if tc.ok && err != nil {
+			t.Errorf("%s %q: %v", tc.goos, tc.bin, err)
+		}
+		if !tc.ok && !errors.Is(err, ErrUsage) {
+			t.Errorf("%s %q: err = %v, want ErrUsage", tc.goos, tc.bin, err)
+		}
+	}
+}

@@ -1,0 +1,7 @@
+//go:build !unix
+
+package tier
+
+import "time"
+
+func processCPU() (time.Duration, bool) { return 0, false }

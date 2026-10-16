@@ -450,6 +450,14 @@ func TestOrgRenderHomeRoot(t *testing.T) {
 	if strings.Join(doc.HomeRoot, ",") != "/home,/home/corp.example" || strings.Join(doc.ProtectedExtra, ",") != "/opt/secret" {
 		t.Errorf("home_root=%v protected_extra=%v", doc.HomeRoot, doc.ProtectedExtra)
 	}
+	// --binary must be a clean absolute path: a bare name would resolve through
+	// PATH in every managed hook and turn the binary-directory deny entries
+	// into "." (audit r1).
+	for _, bad := range []string{"ballast", "relative/ballast", "./ballast", "/usr/local/../bin/ballast", "/usr/local/bin/"} {
+		if r := s.run("", "", "org", "render", "--binary", bad); r.code != 2 || r.stdout != "" {
+			t.Errorf("--binary %q: exit %d stdout %q, want exit 2 and no output\n%s", bad, r.code, r.stdout, r.stderr)
+		}
+	}
 	for _, bad := range []string{"relative/dir", "/", "~/x", "/home/*"} {
 		if r := s.run("", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast", "--home-root", bad); r.code != 2 {
 			t.Errorf("--home-root %q: exit %d, want 2\n%s", bad, r.code, r.stderr)

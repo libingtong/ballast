@@ -8,6 +8,8 @@ network variants). Runs inside the runner's sandbox and prints one
   unix        connect to a unix socket under /run
   env         which of SSH_AUTH_SOCK / DOCKER_HOST / DBUS_*_BUS_ADDRESS exist
   external    HTTP GET of $T1_EXTERNAL_URL (skip when unset)
+  bridge      HTTP GET of $T1_BRIDGE_URL, a listener on the container's own
+              non-loopback address started outside the sandbox (skip when unset)
 """
 import os
 import socket
@@ -40,8 +42,13 @@ def external():
     urllib.request.urlopen(os.environ["T1_EXTERNAL_URL"], timeout=5).read(16)
 
 
+def bridge():
+    urllib.request.urlopen(os.environ["T1_BRIDGE_URL"], timeout=3).read(16)
+
+
 print("tcp_local=" + run(tcp))
 print("unix=" + run(unix))
 present = [v for v in ("SSH_AUTH_SOCK", "DOCKER_HOST", "DBUS_SESSION_BUS_ADDRESS", "DBUS_SYSTEM_BUS_ADDRESS") if os.environ.get(v)]
 print("env=" + (",".join(present) if present else "none"))
 print("external=" + (run(external) if os.environ.get("T1_EXTERNAL_URL") else "skip"))
+print("bridge=" + (run(bridge) if os.environ.get("T1_BRIDGE_URL") else "skip"))

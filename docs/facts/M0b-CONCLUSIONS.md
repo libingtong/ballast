@@ -149,6 +149,7 @@
 ## 【契约问题】汇总(最小建议)
 
 1. **§3.4 Linux 行**(P2-SANDBOX):祖先挂载改 `--ro-bind` 且先于 W 的 `--bind`;`--tmpfs /var/run` 只在 `/var/run` 不是符号链接时添加。
+   **裁决与落地(P2 集成,`docs/p2-design.md` v1.5.5 记入 §3.4 Linux 行与 §13)**:`/var/run` 由 `sandbox.socketDirArgs` 按真实路径屏蔽(符号链接换成解析后的路径,已屏蔽即丢弃);祖先挂载由 `sandbox.AncestorPins` 限定为位于 W 根之内的真实祖先目录,W 之外的祖先(家目录等)从不挂载为可写,所以按字面 `--bind A A` 让家目录整体可写的情形不再出现。`runner-bwrap-in-docker` 保持记 fail(它记录的是"设计按字面不成立"这一事实),不改写取证结果。
 2. **§3.2 `ManagedForms`**(P2-TIER、P2-INSTALL):org 规则目录、二进制目录、绝对路径 `protected_extra` 的权限条目改为 `//` 形式(共享 golden 同步);`Write(...)`/`NotebookEdit(...)` 条目对 Write 工具冗余,可保留。需要 credentials 模式确认后再改。
    **裁决与落地(P2 集成,`docs/p2-design.md` v1.5.3)**:项目负责人裁决不等 credentials 模式——绝对路径一律改 `//` 形式;Claude 2.1.300 会把 `Write(...)`/`NotebookEdit(...)` 的路径条目警告为无效,所以不再输出,只保留 `Edit(...)`(`Edit` 规则覆盖 Edit 与 Write 工具,本文第 4 节的 mock 观察与此一致)。`tier.ManagedForms`、共享 golden、`org render` golden 与 `tier.Detect` 条件 5 的测试已同步。
 3. **§3.2 denyWrite 的 glob 与 `**/`**(P2-TIER、P2-CLI 文档):Linux 上对 Bash 不生效,不得在 trust-model 里描述为保护;`DefaultWeakenedProject` 保持 `deny`。

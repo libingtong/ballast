@@ -108,7 +108,7 @@ func (r rebaseFS) RemoveAll(n string) error                  { return os.RemoveA
 // chain), with ownership faked as root (an unprivileged test cannot create
 // root-owned files). Returns the Options for Detect, the FS, the virtual
 // managed dir and the owner func.
-func realFixture(b *testing.B) (Options, sys.FS, string, ownerFunc) {
+func realFixture(b testing.TB) (Options, sys.FS, string, ownerFunc) {
 	b.Helper()
 	root, err := filepath.EvalSymlinks(b.TempDir())
 	if err != nil {
@@ -273,4 +273,90 @@ func BenchmarkLockedHome(b *testing.B) {
 		}
 		b.ReportMetric(float64((b.Elapsed()/time.Duration(b.N)).Nanoseconds())/1000, "us/op")
 	})
+}
+
+// bestPerOp is the per-call cost of fn as the best of several short rounds:
+// the figure the tier budgets are stated for (a warm page cache; one scheduler
+// hiccup on a busy runner must not fail it while a genuinely slower
+// implementation still does). A round is measured in process CPU time (user +
+// system) when the platform offers it and in wall time otherwise: on a warm
+// page cache the calls never block, so CPU time is the cost of the code, and
+// unlike wall time it does not grow when the test shares the machine with the
+// other packages of `go test ./...` (the budget is not relaxed).
+func bestPerOp(fn func(), budget time.Duration) time.Duration {
+	for i := 0; i < 20; i++ { // warm up
+		fn()
+	}
+	// Rounds run until one meets the budget (then the best is already good
+	// enough) or the time is up.
+	const iters = 300
+	best := time.Duration(1 << 62)
+	deadline := time.Now().Add(20 * time.Second)
+	for r := 0; r < 15 || (best > budget && time.Now().Before(deadline)); r++ {
+		wall0 := time.Now()
+		cpu0, cpuOK := processCPU()
+		for i := 0; i < iters; i++ {
+			fn()
+		}
+		per := time.Since(wall0) / iters
+		if cpu1, ok := processCPU(); cpuOK && ok {
+			per = (cpu1 - cpu0) / iters
+		}
+		if per < best {
+			best = per
+		}
+		if best <= budget && r >= 2 {
+			break
+		}
+	}
+	return best
+}
+
+func skipBudget(t *testing.T) {
+	t.Helper()
+	if raceEnabled || testing.Short() {
+		t.Skip("timing budget is not meaningful under -race / -short")
+	}
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("T1 detection is darwin/linux only")
+	}
+}
+
+// TestProbeBudget enforces docs/p2-design.md section 3.6 "P2-TIER" as a plain
+// test, so every acceptance channel that runs `go test` executes it (the
+// benchmarks' guard only runs with -bench): one full Detect on the production
+// path depth is within 200 us (best of rounds, warm page cache).
+func TestProbeBudget(t *testing.T) {
+	skipBudget(t)
+	opt, _, _, _ := realFixture(t)
+	if got := Detect(opt); got.Tier != model.TierT1 {
+		t.Fatalf("fixture is %s: %v", got.Tier, got.Missing)
+	}
+	best := bestPerOp(func() { Detect(opt) }, 200*time.Microsecond)
+	t.Logf("Detect (real fs, faked root) best of rounds (CPU time): %v", best)
+	if best > 200*time.Microsecond {
+		t.Errorf("Detect took %v per call, budget 200us", best)
+	}
+}
+
+// TestLockedBudget: the redirect-lock check every hook invocation pays is
+// within 30 us, both when no org.json exists (one Lstat of the managed dir)
+// and when a root-owned org.json locks the host.
+func TestLockedBudget(t *testing.T) {
+	skipBudget(t)
+	goos := runtime.GOOS
+	absent := bestPerOp(func() { Locked(sys.OSFS{}, goos, nil) }, 30*time.Microsecond)
+	t.Logf("Locked (absent, real fs) best of rounds: %v", absent)
+	if absent > 30*time.Microsecond {
+		t.Errorf("Locked (no org.json) took %v per call, budget 30us", absent)
+	}
+	_, fsys, managed, owner := realFixture(t)
+	if st := readOrg(fsys, owner, managed); !lockedFrom(st) {
+		t.Fatalf("fixture not locked: file trusted %v, chain ok %v, tier %s", st.fileTrusted, st.chainOK, st.org.Tier)
+	}
+	locked := bestPerOp(func() { lockedFrom(readOrg(fsys, owner, managed)) }, 30*time.Microsecond)
+	t.Logf("Locked (org.json, real fs) best of rounds: %v", locked)
+	if locked > 30*time.Microsecond {
+		t.Errorf("Locked (org.json) took %v per call, budget 30us", locked)
+	}
 }

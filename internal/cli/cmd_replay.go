@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/libingtong/ballast/internal/bashparse"
+	"github.com/libingtong/ballast/internal/project"
 	"github.com/libingtong/ballast/internal/psparse"
 	"github.com/libingtong/ballast/internal/replay"
 )
@@ -63,6 +64,10 @@ func runReplay(a *app, c *command, args []string) int {
 		EvidenceDir: a.lay.EvidenceDir,
 		LabelsDir:   a.lay.LabelsDir,
 		Home:        home,
+		// The strict loader the hook's evidence provider uses, so offline
+		// classification matches the real hook (unknown fields, bad names,
+		// invalid inputs_untracked globs are project_invalid).
+		Project: &project.Loader{FS: a.fs},
 	})
 	if err != nil {
 		if errors.Is(err, replay.ErrUsage) {

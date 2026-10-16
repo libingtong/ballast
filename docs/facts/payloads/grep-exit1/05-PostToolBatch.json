@@ -1,8 +1,8 @@
 {
-  "session_id": "94f782f6-aa8e-4d8b-b41b-a756009e0b46",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/94f782f6-aa8e-4d8b-b41b-a756009e0b46.jsonl",
+  "session_id": "<session-6>",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/<session-6>.jsonl",
   "cwd": "<probe-root>/work/grep-exit1",
-  "prompt_id": "554e7d85-c489-4328-a483-4a968a872546",
+  "prompt_id": "<prompt-6>",
   "permission_mode": "default",
   "effort": {
     "level": "medium"

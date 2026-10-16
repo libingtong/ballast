@@ -292,7 +292,7 @@
    "secrets": [
     "p4ssw0rd"
    ],
-   "want": "https://user:***@example.com/x"
+   "want": "https://***@example.com/x"
   },
   {
    "name": "url postgres",
@@ -301,7 +301,7 @@
    "secrets": [
     "s3cretpw"
    ],
-   "want": "postgres://admin:***@db:5432/app"
+   "want": "postgres://***@db:5432/app"
   },
   {
    "name": "url git remote with token",
@@ -310,7 +310,7 @@
    "secrets": [
     "{{GHS}}"
    ],
-   "want": "git clone https://x-access-token:***@github.com/o/r"
+   "want": "git clone https://***@github.com/o/r"
   },
   {
    "name": "url redis empty user",
@@ -319,7 +319,7 @@
    "secrets": [
     "Zx9Kq2Lm8Nv4"
    ],
-   "want": "REDIS=redis://:***@cache:6379/0"
+   "want": "REDIS=redis://***@cache:6379/0"
   },
   {
    "name": "url in json",
@@ -328,7 +328,7 @@
    "secrets": [
     "Hq7Lm2Wc9Xr"
    ],
-   "want": "{\"remote\": \"https://ci:***@git.example.com/a.git\", \"n\": 1}"
+   "want": "{\"remote\": \"https://***@git.example.com/a.git\", \"n\": 1}"
   },
   {
    "name": "url non-ascii context",
@@ -337,7 +337,7 @@
    "secrets": [
     "Wc9Xr2Hq7"
    ],
-   "want": "连接 mysql://root:***@127.0.0.1/db 失败"
+   "want": "连接 mysql://***@127.0.0.1/db 失败"
   },
   {
    "name": "url multiline",
@@ -346,7 +346,7 @@
    "secrets": [
     "Hq7Lm2Wc9Xr"
    ],
-   "want": "a\nftp://u:***@h/f\nb"
+   "want": "a\nftp://***@h/f\nb"
   },
   {
    "name": "auth bearer",
@@ -1412,7 +1412,7 @@
    "secrets": [
     "pw"
    ],
-   "want": "git clone https://user:***@github.com/x/y.git"
+   "want": "git clone https://***@github.com/x/y.git"
   },
   {
    "name": "sk eight chars",

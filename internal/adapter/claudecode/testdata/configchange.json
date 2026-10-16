@@ -8,7 +8,7 @@
     "event": "ConfigChange",
     "native": "ConfigChange",
     "client": "claude-code",
-    "session_id": "829d2d6f-c8c2-46f6-81cf-f27959d3c18b",
+    "session_id": "<session-7>",
     "cwd": "<repo>",
     "source": "user_settings",
     "config_file": "<home>/.claude/settings.json"

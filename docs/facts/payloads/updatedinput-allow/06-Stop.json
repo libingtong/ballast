@@ -1,8 +1,8 @@
 {
-  "session_id": "71479d82-2fdf-4f0e-9e94-61d68a13cece",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/71479d82-2fdf-4f0e-9e94-61d68a13cece.jsonl",
+  "session_id": "<session-37>",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/<session-37>.jsonl",
   "cwd": "<probe-root>/work/updatedinput-allow",
-  "prompt_id": "8103a41b-c023-4c7d-b758-062076e1ba7f",
+  "prompt_id": "<prompt-33>",
   "permission_mode": "default",
   "effort": {
     "level": "medium"

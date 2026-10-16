@@ -68,7 +68,6 @@
       "target": "deny",
       "decision": "would_deny",
       "matched": "bash node 0: git status",
-      "tier": "T0",
       "ballast_version": "9.9.9-test"
     },
     {
@@ -85,7 +84,6 @@
       "native_event": "PreToolUse",
       "tool": "Bash",
       "generation": "gen1",
-      "tier": "T0",
       "ballast_version": "9.9.9-test",
       "detail": {
         "cause": "verify_fresh:no_project",

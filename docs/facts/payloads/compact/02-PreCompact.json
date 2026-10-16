@@ -1,8 +1,8 @@
 {
-  "session_id": "9ea44634-b4c0-4890-b35e-cfa9fd6251c2",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/9ea44634-b4c0-4890-b35e-cfa9fd6251c2.jsonl",
+  "session_id": "<session-4>",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/<session-4>.jsonl",
   "cwd": "<probe-root>/work/compact",
-  "prompt_id": "daa1a19b-ae63-4f0b-8e5b-5445558f5be1",
+  "prompt_id": "<prompt-4>",
   "hook_event_name": "PreCompact",
   "trigger": "manual",
   "custom_instructions": null

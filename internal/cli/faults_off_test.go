@@ -13,7 +13,7 @@ import (
 func TestProductionIgnoresTestSwitches(t *testing.T) {
 	var calls atomic.Int64
 	env := agentEnv(map[string]string{
-		"BALLAST_TEST_LOCKED": "1", "BALLAST_TEST_WEAKENED": "audit", "BALLAST_TEST_TIER": "T1",
+		"BALLAST_TEST_LOCKED": "1", "BALLAST_TEST_WEAKENED": "audit", "BALLAST_TEST_TIER": "T1", "BALLAST_TEST_WATCHDOG": "5s",
 		"BALLAST_HOME": "/redirected/home",
 	})
 	deps, err := wireHook(env, wireSeams{
@@ -28,6 +28,9 @@ func TestProductionIgnoresTestSwitches(t *testing.T) {
 	}
 	if deps.Layout.Home != "/redirected/home" {
 		t.Errorf("Layout.Home = %q", deps.Layout.Home)
+	}
+	if deps.Watchdog != 0 {
+		t.Errorf("Watchdog = %v: a production build must keep hook.DefaultWatchdog", deps.Watchdog)
 	}
 	if testTier(env) != nil {
 		t.Error("testTier must be nil in a production build")

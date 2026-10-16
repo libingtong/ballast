@@ -15,7 +15,7 @@
 | **T1 托管强制** | macOS / Linux / WSL2,**且**组织部署了托管设置 | 设计目标:agent **不可写**规则、状态、证据和二进制。托管层的合并与强制行为已在 Linux 容器里取证(M0b);沙箱与文件工具屏障对真实模型调用的效果仍为【需凭据】 |
 | **T0 尽力而为** | 个人安装、没有托管部署,或原生 Windows | 篡改**可检测、不可防** |
 
-`ballast doctor` 的第一行就是当前层级;处于 T0 时会列出缺失的 T1 组件(托管 hook、`allowManagedHooksOnly`、sandbox、`permissions.deny`、MCP 白名单)。
+`ballast doctor` 的第一行就是当前层级;处于 T0 时会列出缺失的 T1 组件(托管 hook、`allowManagedHooksOnly`、sandbox、`permissions.deny` 等,完整清单见 §2.2 的六个条件与 `model.TierMissing*`)。**层级判定与 doctor 不检查 MCP 白名单**:没有 MCP 白名单的主机照样判为 T1("managed deployment complete"),白名单需要管理员按 §4.2 第 3 步手工补充并自行核对。
 
 ### 2.1 T0:为什么只能检测
 
@@ -53,7 +53,7 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 2. **`allowManagedHooksOnly: true`**:只运行托管层的 hook,阻止用户层、项目层、本地层和插件 hook(托管设置强制启用的插件 hook 例外)。文档称低层的 `disableAllHooks` 不能关闭托管 hook。
 3. **sandbox**(`failIfUnavailable: true` 已核验:没有 bwrap/socat 时客户端启动阶段拒绝运行;其余键对真实 Bash 调用的效果为【需凭据】):`enabled: true`、`allowUnsandboxedCommands: false`、`failIfUnavailable: true`、`excludedCommands: []`,并在 `filesystem.denyWrite` 里列出受保护路径。托管层写空列表**挡不住低层追加**(数组设置一般跨层合并,见 §2.3),所以 P2 的层级判定还要求用户层没有削弱沙箱的键,项目层与本地层则只能按会话检查(见 §2.3 的全机前提)。
 4. **`permissions.deny`**:对受保护路径给出 `Edit(...)` 条目(绝对路径用 `//` 开头的形式;`Edit` 规则同时覆盖 Edit 与 Write 工具,不再输出会被客户端警告为无效的 `Write(...)`、`NotebookEdit(...)` 条目),并设 `allowManagedPermissionRulesOnly: true` 使低层不能放宽。
-5. **MCP 白名单**:见下文"残余风险"。
+5. **MCP 白名单**:T1 的部署要求之一,但**不属于层级判定的条件**(`tier.Detect` 与 doctor 都不读 `allowedMcpServers`,缺失时不会降为 T0,也不会提示);见下文"残余风险"与 §4.2 第 3 步。
 
 **受保护路径**(`org render` 默认包含前四项):
 
@@ -89,7 +89,7 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 - **托管 hook 进程的环境(P2 设计)**:项目层 `env` 会进入托管 hook 本身。未启用 hardened runtime 的 macOS 构建会加载 `DYLD_INSERT_LIBRARIES`,动态链接的 Linux 构建(例如管理员自建的 cgo 构建)会加载 `LD_PRELOAD`。macOS 发布构建须以 `codesign -o runtime` 签名(doctor `tier.binary_hardening` 检查);Linux 发布构建是静态链接,不受影响。runner 在沙箱外启动的 git 使用去掉 `GIT_*`、`LD_*`、`DYLD_*` 的环境。
 - **`runner_allow_write`(P2 设计)**:org.json 中的每一项都等价于把该目录交给 agent 可以改写的测试代码。hook 代起的沙箱测试可以写它,写入在 job 结束后仍然存在,而且不在内容快照 `C` 里;如果它是共享的构建缓存(例如家目录下的 Go 构建缓存),之后在沙箱外运行的人工构建会复用被投毒的条目,形成一条跨越边界、能持久存在的通道。默认建议保持为空:runner 会把常见缓存变量(`GOCACHE`、`XDG_CACHE_HOME`、npm/yarn/pip 缓存)指向每个 job 的临时目录;确需持久缓存时优先用仓库内被忽略的目录,并把这一项当作残余风险评估。
 
-- **v1.5.4 补充登记**(各条的原因与处置见 `docs/p2-design.md` §11):① 用户层 `settings*.json` 或 `~/.claude` 是指向 `~/.claude` 之外的符号链接时(dotfiles 仓库),条件 6 跟随链接读目标,内容无害就判 T1,但托管 `denyWrite` 的字面形式未必盖住链接目标,待项目负责人裁决;② `RepoMandatoryDeny` 追加的 shell/工具启动文件名(`.bashrc`、`.zshrc`、`.gitconfig` 等)在仓库任意深度都是只读,dotfiles 仓库与相关夹具里的 verify 会可见地失败;③ macOS 上沙箱内的后代进程可以 `setsid` 脱离进程组,躲过收尾时的 `killpg`,在 `PostCheck`、`Quarantine` 与 `S_end` 之后继续写入沙箱允许的范围,仍写不了受保护路径(origin=hook 时副本随后删除,origin=cli 时只会让结果事后过期),所以包注释不再宣称"S_end 之后没有沙箱进程";④ 大小写不敏感的 macOS 卷上 `.CLAUDE`、`.Git` 这类变体的保护来自 sandbox-exec 自己的路径匹配,不是 Ballast 的匹配器,有测试钉住;⑤ 实体化与 `git add -u` 读副本里测试可写的 `.gitattributes`,配合用户全局的 git-lfs 之类过滤器会在沙箱外处理测试控制的内容,驱动程序仍只来自 agent 写不了的配置;⑥ `ballast verify` 的前缀赋值写法(`X=1 ballast verify test`)被当作规范形式,赋值被悄悄丢弃,不影响安全;⑦ `ballast report` 的 `Validate` 不知道内置规则 id,"自定义 id 必须哈希"只由生成端保证;⑧ macOS 的 hardened runtime 检查只看 `CS_RUNTIME`,不看允许 `DYLD_*` 的 entitlement。
+- **v1.5.4 补充登记**(各条的原因与处置见 `docs/p2-design.md` §11):① 用户层 `settings*.json` 或 `~/.claude` 是指向 `~/.claude` 之外的符号链接时(dotfiles 仓库),条件 6 跟随链接读目标,内容无害就判 T1,但托管 `denyWrite` 的字面形式未必盖住链接目标,待项目负责人裁决;② `RepoMandatoryDeny` 追加的 shell/工具启动文件名(`.bashrc`、`.zshrc`、`.gitconfig` 等)在仓库任意深度都是只读,dotfiles 仓库与相关夹具里的 verify 会可见地失败;③ macOS 上沙箱内的后代进程可以 `setsid` 脱离进程组,躲过收尾时的 `killpg`,在 `PostCheck`、`Quarantine` 与 `S_end` 之后继续写入沙箱允许的范围,仍写不了受保护路径(origin=hook 时副本随后删除,origin=cli 时只会让结果事后过期),所以包注释不再宣称"S_end 之后没有沙箱进程";④ 大小写不敏感的 macOS 卷上 `.CLAUDE`、`.Git` 这类变体的保护来自 sandbox-exec 自己的路径匹配,不是 Ballast 的匹配器,有测试钉住;⑤ 实体化与 `git add -u` 在沙箱外运行 git。(a) 副本里测试可写的 `.gitattributes`,配合**用户或系统级**配置里的 git-lfs 之类过滤器,会在沙箱外处理测试控制的内容;(b) 仓库自己的 git 配置(`<common dir>/config`、`config.worktree`)若定义了 `filter.<name>.clean/smudge/process`,过滤器命令就会在沙箱外执行,所以 runner 在每次沙箱外 git 调用的批次前用 `git config --list --show-scope` 检查(含 include 展开;git 2.26 之前没有 `--show-scope`,退回按文件列出,此时仓库配置里的任何 include 都视为不安全),发现即 infra `git_config_unsafe`、不执行任何命令(只报键名,不报命令内容;因此仓库本地配置了 git-lfs 过滤器的仓库在 hook 代起时会记 infra,请改用全局配置);用户与系统级配置仍被信任。**这道防线依赖一个没有被 Ballast 验证的前提:agent 写不了 `<repo>/.git/config`。**Bash 的写入由沙箱挡住(该文件在两个沙箱的危险文件清单里);agent 的**文件工具**(Edit/Write)能否写它取决于 Claude Code 自己的内置行为,`tier.ManagedForms` 没有这一项(加条目要 M0b 取证,【需凭据】),所以不能说"驱动只来自 agent 写不了的配置"。此外检查与随后的 git 子进程不是原子的,检查通过后、git 读取配置前被改写的窗口看不见。这两点是**【未闭合】**的残余风险(`docs/p2-design.md` §11);利用前提是 agent 先能写 `.git/config`,代码执行发生在沙箱外、hook 代起 verify 期间。快照 fallback 的 git(热路径)同样不做这项检查;⑥ `ballast verify` 的前缀赋值写法(`X=1 ballast verify test`)被当作规范形式,赋值被悄悄丢弃,不影响安全;⑦ `ballast report` 的 `Validate` 不知道内置规则 id,"自定义 id 必须哈希"只由生成端保证;⑧ macOS 的 hardened runtime 检查只看 `CS_RUNTIME`,不看允许 `DYLD_*` 的 entitlement。
 
 ### 2.4 T1 设计中的两条特权链路(P2 设计,`docs/p2-design.md` §3)
 
@@ -104,7 +104,7 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 
 - `ballast verify` 一律**后台**运行:detached 的 runner 执行 `project.json` 里的命令,写下 `VerifyRecord`(退出码、起止快照 `S_start`/`S_end`,并 fsync);证据标注 `tier:"T0"`。
 - T0 下 agent 自己也能运行 `ballast verify`,所以 agent 理论上可以让测试命令"恰好通过"。Ballast 防不住这一点;`project.json` 里的命令应当是项目真正的测试命令,最终由 CI 复核。
-- T1 下是这样工作的:agent 在沙箱里运行的 `ballast verify` 写不了证据,由 hook 在沙箱外代为发起 runner(`ballast verify --hook-start …` 子进程;agent 看到的是 deny,理由里有 job id,之后用 `ballast verify --status <job id>` 查询,这个 id 在没有同名 job 时回退读取请求文件,多个 job 取最差结果),runner 把 `S_start` 的树实体化成私有副本,并把测试命令放进默认拒写的 OS 沙箱(Linux bwrap、macOS sandbox-exec)、在副本里执行(§2.3、§2.4)。这堵住了"放一个未跟踪的测试文件让测试恰好通过"与"取快照后临时换掉测试再换回"两种伪造(`scripts/boundary-t1.sh` 的伪造用例逐个验证);白名单输入与人工运行的 verify 仍是残余风险(§2.3)。证据标 `tier:"T1"` 当且仅当 runner 自己判定为 T1 且沙箱真的用上了;后端不可用时 hook 代起的 job 不执行测试(infra `sandbox_unavailable`),不产生任何 pass 证据。
+- T1 下是这样工作的:agent 在沙箱里运行的 `ballast verify` 写不了证据,由 hook 在沙箱外代为发起 runner(`ballast verify --hook-start …` 子进程;agent 看到的是 deny,理由里有 job id,之后用 `ballast verify --status <job id>` 查询,`verify --status <id>` 先看这个 id 是否是一个含多个 job 的请求(hook 代起时 request id 就是第一个 job 的 id,同名 job 总是存在,所以多 job 的请求文件要先于同名 job 查找),是则聚合最差结果;只有一个 job 或 id 不是请求时按 job 查找;都找不到退出 11),runner 把 `S_start` 的树实体化成私有副本,并把测试命令放进默认拒写的 OS 沙箱(Linux bwrap、macOS sandbox-exec)、在副本里执行(§2.3、§2.4)。这堵住了"放一个未跟踪的测试文件让测试恰好通过"与"取快照后临时换掉测试再换回"两种伪造(`scripts/boundary-t1.sh` 的伪造用例逐个验证);白名单输入与人工运行的 verify 仍是残余风险(§2.3)。证据标 `tier:"T1"` 当且仅当 runner 自己判定为 T1 且沙箱真的用上了;后端不可用时 hook 代起的 job 不执行测试(infra `sandbox_unavailable`),不产生任何 pass 证据。
 - 新鲜度判断:`S_end == C`(验证结束时的内容快照等于将要提交的内容),并要求所有 required 的验证最新一条记录有效通过。工作区之后任何变化都会让它自动失效,不依赖编辑 hook。
 
 ## 4. org 部署指南(托管层行为已由 M0b 取证;【需凭据】项见 §2.2)
@@ -179,7 +179,7 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 | 脚本 | 内容 |
 |---|---|
 | `bash scripts/boundary-t0.sh` | 三平台。T0 能检测什么、检测不了什么:`scripts/boundary/t0-cases.json` 逐行喂给真实的 `ballast hook`(识别的写入必须命中 `no-tamper`,§2.1 的七类缺口必须**不**命中,缺口一旦被检测到脚本即失败);伪造 pass 记录(任意 `S_end` 判过期,先算出真实 `C` 的伪造者骗得过,记为缺口);ConfigChange 审计 |
-| `BALLAST_REQUIRE_DOCKER=1 bash scripts/boundary-t1.sh` | 需要 Docker(Linux CI 必跑)。在 Debian 12 容器里以 root 安装 ballast、`org render --write --i-am-admin`,之后全部以普通用户 `agent` 运行:t1-doctor、t1-runner-sandbox(bwrap 内的逃逸脚本,hook 代起与人工运行两种来源,submodule/worktree 夹具,五个伪造用例)、t1-tty(`TIOCSTI` 注入)、t1-lower-sandbox、t1-config-dir、t1-forged-binary、t1-orgjson、t1-env-override(重定向锁)、t1-passwd-missing、t1-sandbox-missing、t1-hooks-outside-sandbox 与 t1-lower-hooks(Claude Code 2.1.300,假 key + 黑洞端点) |
+| `BALLAST_REQUIRE_DOCKER=1 bash scripts/boundary-t1.sh` | 需要 Docker(**计划**由 Linux CI 必跑:CI 步骤待 `impl/ci-fix` 合入后接入,见 `docs/p2-design.md` §11;此前只在本机与集成验收里运行)。在 Debian 12 容器里以 root 安装 ballast、`org render --write --i-am-admin`,之后全部以普通用户 `agent` 运行:t1-doctor、t1-runner-sandbox(bwrap 内的逃逸脚本,hook 代起与人工运行两种来源,submodule/worktree 夹具,五个伪造用例)、t1-tty(`TIOCSTI` 注入)、t1-lower-sandbox、t1-config-dir、t1-forged-binary、t1-orgjson、t1-env-override(重定向锁:agent 目录里放一份真实的 pass 记录,锁定主机上不被采信,未锁定时才被采信的对照)、t1-passwd-missing、t1-sandbox-missing、t1-hooks-outside-sandbox 与 t1-lower-hooks(Claude Code 2.1.300,假 key + 黑洞端点) |
 | `BALLAST_REQUIRE_DOCKER=1 bash scripts/sandbox-docker.sh ./internal/sandbox ./internal/runner` | 沙箱与 runner 的 Go 集成测试在真实 bwrap 下运行 |
 
 需要真实模型调用的部分(**【需凭据】**,没有用户明确提供凭据就不做;下表的"T1 期望"是设计目标,尚未用真实 agent 证明):
@@ -193,6 +193,8 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 | agent 通过 MCP 写受保护路径 | 只能靠白名单收口(残余风险) | 不适用 |
 | 在项目层带 `excludedCommands:["npm"]` 的仓库里 `npm run` 写证据 | **能写入**(这正是条件 6 与全机前提要说明的风险);Ballast 把该仓库的证据判为 T0 | 不适用 |
 | 在子目录写 `a/b/.claude/settings.json`、`a/.ballast/x`(任意深度形式) | 决定 `weakened_project` 缺省值的取证;mock 观察是 Bash 写入成功 | 不适用 |
+
+`scripts/boundary-t1.sh --with-credentials` 覆盖前四行与 `npm run` 一行(含"伪造 `ballast` 放进 `PATH`":伪造品记录 argv,断言托管 hook 从未调用它);后两行(任意深度写入、MCP 白名单内写入)由 M0b 的 `managed-denywrite-anydepth`、`mcp-write` 覆盖,boundary-t1 不测它们。
 
 补测命令(密钥只从调用者的环境读,以 `docker run -e ANTHROPIC_API_KEY`(只传变量名)传入,不写入镜像、文件或日志,不读 keychain 与 `~/.claude*`):
 

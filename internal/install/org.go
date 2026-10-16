@@ -134,6 +134,28 @@ func validateOrgJSON(b []byte, orgPath string) error {
 	return nil
 }
 
+// validateOrgBinary requires --binary to be a clean absolute path for the
+// target OS (a drive-letter path on windows). A relative path or a bare name
+// would make every managed hook command resolve through PATH (hijackable)
+// and turn the binary-directory entries of denyWrite / permissions.deny into
+// relative paths (a bare name becomes "." and denies the whole session
+// directory), while org.json would still lock the host. Same rule as
+// `ballast install --binary`, plus cleanliness since the strings are used
+// verbatim by tier.ManagedForms.
+func validateOrgBinary(binary, goos string) error {
+	if !isAbsPath(binary, goos) || strings.ContainsAny(binary, "\x00\r\n") {
+		return fmt.Errorf("%w: --binary must be an absolute path, got %q", ErrUsage, binary)
+	}
+	norm := binary
+	if goos == "windows" {
+		norm = strings.ReplaceAll(binary, `\`, "/")
+	}
+	if path.Clean(norm) != norm {
+		return fmt.Errorf("%w: --binary %q must be a clean path (no ., .. or repeated or trailing separators)", ErrUsage, binary)
+	}
+	return nil
+}
+
 // validateOrgInputs checks the flag values. home_root uses path (not
 // filepath) and the same character set as tier.LoadOrgConfig, so the result
 // does not depend on the host OS (org.json is always a POSIX document).
@@ -266,6 +288,9 @@ func OrgRenderFull(lay layout.Layout, fsys sys.FS, opt OrgRenderOptions) (*OrgRe
 		} else {
 			binary = "/usr/local/libexec/ballast/ballast"
 		}
+	}
+	if err := validateOrgBinary(binary, goos); err != nil {
+		return nil, err
 	}
 	extra := dedupe(opt.Protected)
 	homeRoot := dedupe(opt.HomeRoot)

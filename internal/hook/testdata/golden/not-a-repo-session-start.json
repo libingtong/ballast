@@ -39,7 +39,6 @@
       "event": "SessionStart",
       "native_event": "SessionStart",
       "generation": "gen1",
-      "tier": "T0",
       "ballast_version": "9.9.9-test",
       "detail": {
         "diag": "not_a_repo"

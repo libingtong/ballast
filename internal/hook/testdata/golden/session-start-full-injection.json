@@ -43,7 +43,6 @@
       "native_event": "SessionStart",
       "rule_layer": "repo",
       "generation": "gen1",
-      "tier": "T0",
       "ballast_version": "9.9.9-test",
       "detail": {
         "message": "invalid JSON; using last-known-good",

@@ -1,6 +1,6 @@
-# Ballast P2 设计与契约增补(冻结版 v1.5.3)
+# Ballast P2 设计与契约增补(冻结版 v1.5.5)
 
-> 状态:**已冻结**(2026-10-16;v1.1、v1.2、v1.3、v1.4、v1.5 分别为第 1、2、3、4、5 轮独立审核修订,v1.5.1、v1.5.2 分别为第 6、7 轮独立审核修订,v1.5.3 为集成阶段按项目负责人裁决处理 M0b 与 P2-CLI 报告的契约问题,变更清单见 §13)。本文是 `docs/architecture.md` **v2.0**(当前 v2.0.8)的配套文档,与计划 `docs/ballast-plan.md` 末尾的 "v0.5 P2 计划" 一起,构成 P2 各实现单元唯一可依赖的契约。
+> 状态:**已冻结**(2026-10-16;v1.1、v1.2、v1.3、v1.4、v1.5 分别为第 1、2、3、4、5 轮独立审核修订,v1.5.1、v1.5.2 分别为第 6、7 轮独立审核修订,v1.5.3 为集成阶段按项目负责人裁决处理 M0b 与 P2-CLI 报告的契约问题,v1.5.4 为各单元审核遗留 minor 的统一处理,v1.5.5 为集成后第 1 轮系统审计的修订,变更清单见 §13)。本文是 `docs/architecture.md` **v2.0**(当前 v2.0.9)的配套文档,与计划 `docs/ballast-plan.md` 末尾的 "v0.5 P2 计划" 一起,构成 P2 各实现单元唯一可依赖的契约。
 >
 > 依据:计划 v0.4 及 v0.4.1–v0.4.3 修订;`docs/architecture.md` v1.8;`docs/dsl-semantics.md`;`docs/trust-model.md`;`docs/clients.md`;`docs/facts/`(M0a、M0c);`docs/research/pinrule-install-and-clients.md`;现有代码 `internal/*`、`cmd/ballast`、`scripts/*`。
 >
@@ -23,7 +23,7 @@
 4. 个人偏好不进默认规则。
 5. **绝不修改真实用户配置**:`~/.claude*`、`~/.codex`、`~/.cursor`、`~/.hermes`、`~/.ballast`、系统托管路径。所有脚本与测试一律重定向到临时目录或一次性容器;托管路径只在容器里写。
 6. 不把任何凭据(OAuth token、API key、keychain 内容)复制进容器、镜像层、仓库或日志。
-7. 公开仓库不得出现本机绝对路径或隐私内容;取证样本入库前规范化(`<repo>`、`<home>`、`claude-<uid>`),CI 卫生检查已覆盖这些模式。
+7. 公开仓库不得出现本机绝对路径或隐私内容;取证样本入库前规范化(`<repo>`、`<home>`、`claude-<uid>`,v1.5.5 起还有会话标识:`session_id`、`prompt_id` 的 UUID 与 transcript 文件名一律写成 `<session-N>`、`<prompt-N>`,同一取证用例内相同的 id 取相同的编号),CI 卫生检查与 `accept-p2.sh` 第 8 项、`probe-m0b/check` 已覆盖这些模式。样本里的 `tool_use_id`(`toolu_…`)与子 agent 的 `agent_id` 是一次性探针会话里的调用标识,不是会话 id,按原样保留(适配器测试用它们配对事件)。
 
 ---
 
@@ -99,7 +99,7 @@ archtest 的变化(`internal/archtest/archtest_test.go`):
 | `adapter/claudecode`(v1.5) | `configChangeFileKey`、`fillConfigChange`(映射占位,当前为 no-op;M0b 取得 payload 后由 P2-CC 填实) | §5.1 |
 | `model/evidence.go`(v1.5) | `VerifySpec.InputsUntracked`(project.json `verify[].inputs_untracked`,默认空);`VerifyRecord.Workspace`(`WorkspaceWorktree`/`WorkspaceCopy`)、`VerifyRecord.InputsHash` | §3.4"job 私有树" |
 | `layout/layout.go`(v1.5) | `WorkDir`(`~/.ballast/work/<job_id>/`) | §3.4"job 私有树" |
-| `runner/tree.go`(v1.5,新) | `Materialize`、`TreeSEnd`、`CleanupTree`、`Tree`、`ErrTreeSubmodule`、`ErrInputsTooLarge`、`ErrMaterialize`、`ErrTreeUnsafePath`/`ErrInputsConflict`(v1.5.1)、`MaxUntrackedInputFiles`/`MaxUntrackedInputBytes`;v1.5.2:`PinnedEntry`(`Materialize` 改为接收它)、`ErrProjectJSONChanged`/`ErrProjectJSONUntracked`、`MaxIndexBytes`/`MaxProjectJSONBytes` | §3.4"job 私有树""收尾顺序" |
+| `runner/tree.go`(v1.5,新) | `Materialize`、`TreeSEnd`、`CleanupTree`、`Tree`、`ErrTreeSubmodule`、`ErrInputsTooLarge`、`ErrMaterialize`、`ErrTreeUnsafePath`/`ErrInputsConflict`(v1.5.1)、`MaxUntrackedInputFiles`/`MaxUntrackedInputBytes`;v1.5.2:`PinnedEntry`(`Materialize` 改为接收它)、`ErrProjectJSONChanged`/`ErrProjectJSONUntracked`、`MaxIndexBytes`/`MaxProjectJSONBytes`;v1.5.5:`ErrGitConfigUnsafe`(infra `git_config_unsafe`) | §3.4"job 私有树""收尾顺序" |
 | `sandbox`(v1.5) | `Spec.Tree`、`Spec.WorkRoot`(副本是 W 在 `~/.ballast` 内唯一的例外);`DarwinMachAllow`、`DarwinMachForbidden`;`DarwinEscapeDenials` 改为 IPC 默认拒绝片段(签名不变);darwin profile 增加 `network-bind`/`network-inbound` 规则;包注释冻结收尾顺序 | §3.4 |
 | `tier`(v1.5) | `ManagedForms` 增加 `**/` 任意深度形式(共享 golden 同步);`DefaultWeakenedProject`(条件契约)、`EffectiveWeakenedProject`;条件 5 增加 `CLAUDE_CONFIG_DIR` 检查 | §3.2 |
 | `internal/{redact,tier,sandbox,report}` | 见各包 `doc` 注释(契约段即验收要点) | — |
@@ -329,7 +329,7 @@ origin=cli 时 git 的索引、对象与引用仍可写(测试里的 `git add`/`
 **job 私有树(【决定】,v1.5,P2-RUNNER 实现;算法冻结在 `runner.Materialize` 注释)**:origin=hook 的 job 不在真实工作树上执行测试——审核实测思路:真实工作树 agent 可以同时改写,而 `S`、`C` 只看已跟踪文件,未跟踪的 `zz_test.go`、`conftest.py` 或取 `S_start` 后的 A-B-A 换入换出都能产生有效的 T1 pass。冻结做法:
 
 1. **位置**:`<layout.WorkDir>/<job_id>/`(`~/.ballast/work/`,0700)下有两个临时索引与 `tree/`。它在 `~/.ballast` 之内,所以 agent 在 Claude 沙箱里写不了(托管 denyWrite 与 permissions.deny 已覆盖 `~/.ballast`,不需要改 `ManagedForms`);对 runner 沙箱,`Spec.Tree` 是 `W` 在受保护目录内**唯一**的例外(`ValidateSpec` 要求它恰好是 `<WorkRoot>/<单级>/tree`,路径上没有符号链接)。副本的祖先 `~/.ballast/work/<job_id>` 在 `W` 之外,测试改不了名。
-2. **方法(冻结一种)**:`GIT_INDEX_FILE` 临时索引 + `read-tree` + `checkout-index --prefix`,不用 `git archive`。先 `sandbox.ResolveGitDirs` 校验仓库 git dir 来源(与沙箱 Spec 同一规则);把真实索引复制成 `index`,`git add -u` 刷新、`write-tree` 得到 `T_full`,再 `git rm --cached` 去掉 exempt、`write-tree` 得到 `S_start`——这正是快照 fallback 的算法,所以 `S_start` 与 `snapshot.TreeS` 对同一时刻的工作树逐位相等,`S_end == C` 的含义不变;检出之前先对 `T_full` 的条目做**路径布局预检**(v1.5.1,纯函数,与 gitlink 检查同一次扫描):某个符号链接条目(mode 120000)的路径逐级按 `strings.EqualFold` 比较是另一条目路径的真前缀,或任一路径分量为空、`.`、`..`、按 EqualFold 等于 `.git` ⇒ 不执行测试,infra、error `tree_unsafe_path`(索引是 agent 可塑造的:`skip-worktree`/`assume-unchanged` 条目不会被 `git add -u` 刷新,大小写不敏感的文件系统上 `A` 链接与 `a/x` 会让检出"穿过"链接写出去;非符号链接条目之间的单纯大小写冲突不拒绝——只会在副本**之内**互相覆盖,`S_end` 随之不等于 `S_start`,可见而非逃逸);然后在第二个索引 `index.tree` 上 `read-tree T_full`,`git -c core.protectHFS=true -c core.protectNTFS=true checkout-index -a -f --prefix=<tree>/`。**检出在沙箱外运行**,处理 agent 可影响的索引内容、写入 `~/.ballast/work/` 之下,不写出副本依赖 git 自身的前导路径(符号链接)防护;预检收窄了这一依赖,Unicode 规范化(APFS/HFS+ 上 NFC 与 NFD)造成的前缀碰撞不在预检内,登记为残余风险(§11;把检出放进 `W=[Tree]` 的沙箱留作以后的契约追加)。工作树只被 `git add -u` 读一次,副本与 `S_start` 描述的是同一组字节,无论 agent 同时做什么。**真实索引的读取**(v1.5.2):索引 agent 可写,复制时以 `O_RDONLY|O_NOFOLLOW|O_NONBLOCK` 打开、fstat 必须是普通文件且不超过 `runner.MaxIndexBytes`(1 GiB),只从该 fd 读、最多读上限加一字节,否则 infra `materialize_failed`(换成 FIFO、符号链接或 `/dev/zero` 不会让 job 挂起或读满上限);缺失时按快照 fallback 的既有语义视为空索引。**执行的条目出自同一次读取(【决定】,v1.5.2,第 1b 步)**:`StartRequest` 在 `--hook-start` 子进程里从真实工作树读 project.json,`RunJob` 稍后在 `--run-job` 子进程里实体化,两次读取之间 agent 可以换入换出 project.json(攻击面表"对 `project.json` 做同类的换入换出")。所以 sidecar 里的条目只是钉选值(`runner.PinnedEntry`):在检出之前,`git ls-tree <S_start> -- .ballast/project.json` 必须是模式 100644/100755 的 blob,否则 infra `project_json_untracked`(未跟踪、被忽略、不在索引里、是符号链接,或被 exempt 去掉——exempt 掉的 project.json 不在 `S`/`C` 里,agent 可以提交另一份而通过仍然新鲜);再 `git cat-file blob`(超过 `MaxProjectJSONBytes` 即拒绝),sha256 必须等于 sidecar 的 `project_json_hash`,且 `project.Decode` 解码出的同名条目与 exempt 列表的 JSON 编码与钉选值逐字相等,否则 infra `project_json_changed`,不执行测试。**不改为记 T0**:新鲜度不按 tier 过滤(§3.3),换入的命令得到的 T0 pass 照样有效。代价:clean filter 或换行转换使 blob 与工作树字节不同的仓库,每个 hook 代起的 job 都会是 `project_json_changed`(可见的失败;修复是对该文件设 `-text` 或按规范化形式提交),origin=cli 不受影响。git 子进程一律用 `sandbox.HostEnv` 清洗过的环境、显式 `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` 与 `-c core.fsmonitor=false`。
+2. **方法(冻结一种)**:`GIT_INDEX_FILE` 临时索引 + `read-tree` + `checkout-index --prefix`,不用 `git archive`。先 `sandbox.ResolveGitDirs` 校验仓库 git dir 来源(与沙箱 Spec 同一规则);把真实索引复制成 `index`,**(v1.5.5)** 在第一次沙箱外 git 调用、检出之前和 `TreeSEnd` 的 `git add -u` 之前各检查一次仓库自己的 git 配置:`git config --list --show-scope -z` 在 `local`/`worktree` 范围里出现 `filter.<name>.clean|smudge|process` ⇒ 不执行测试,infra、error `git_config_unsafe: repository config (<scope> scope) sets <key>`(只含键名;残余与前提见 §11 的 git filter 一行,【未闭合】),`git add -u` 刷新、`write-tree` 得到 `T_full`,再 `git rm --cached` 去掉 exempt、`write-tree` 得到 `S_start`——这正是快照 fallback 的算法,所以 `S_start` 与 `snapshot.TreeS` 对同一时刻的工作树逐位相等,`S_end == C` 的含义不变;检出之前先对 `T_full` 的条目做**路径布局预检**(v1.5.1,纯函数,与 gitlink 检查同一次扫描):某个符号链接条目(mode 120000)的路径逐级按 `strings.EqualFold` 比较是另一条目路径的真前缀,或任一路径分量为空、`.`、`..`、按 EqualFold 等于 `.git` ⇒ 不执行测试,infra、error `tree_unsafe_path`(索引是 agent 可塑造的:`skip-worktree`/`assume-unchanged` 条目不会被 `git add -u` 刷新,大小写不敏感的文件系统上 `A` 链接与 `a/x` 会让检出"穿过"链接写出去;非符号链接条目之间的单纯大小写冲突不拒绝——只会在副本**之内**互相覆盖,`S_end` 随之不等于 `S_start`,可见而非逃逸);然后在第二个索引 `index.tree` 上 `read-tree T_full`,`git -c core.protectHFS=true -c core.protectNTFS=true checkout-index -a -f --prefix=<tree>/`。**检出在沙箱外运行**,处理 agent 可影响的索引内容、写入 `~/.ballast/work/` 之下,不写出副本依赖 git 自身的前导路径(符号链接)防护;预检收窄了这一依赖,Unicode 规范化(APFS/HFS+ 上 NFC 与 NFD)造成的前缀碰撞不在预检内,登记为残余风险(§11;把检出放进 `W=[Tree]` 的沙箱留作以后的契约追加)。工作树只被 `git add -u` 读一次,副本与 `S_start` 描述的是同一组字节,无论 agent 同时做什么。**真实索引的读取**(v1.5.2):索引 agent 可写,复制时以 `O_RDONLY|O_NOFOLLOW|O_NONBLOCK` 打开、fstat 必须是普通文件且不超过 `runner.MaxIndexBytes`(1 GiB),只从该 fd 读、最多读上限加一字节,否则 infra `materialize_failed`(换成 FIFO、符号链接或 `/dev/zero` 不会让 job 挂起或读满上限);缺失时按快照 fallback 的既有语义视为空索引。**执行的条目出自同一次读取(【决定】,v1.5.2,第 1b 步)**:`StartRequest` 在 `--hook-start` 子进程里从真实工作树读 project.json,`RunJob` 稍后在 `--run-job` 子进程里实体化,两次读取之间 agent 可以换入换出 project.json(攻击面表"对 `project.json` 做同类的换入换出")。所以 sidecar 里的条目只是钉选值(`runner.PinnedEntry`):在检出之前,`git ls-tree <S_start> -- .ballast/project.json` 必须是模式 100644/100755 的 blob,否则 infra `project_json_untracked`(未跟踪、被忽略、不在索引里、是符号链接,或被 exempt 去掉——exempt 掉的 project.json 不在 `S`/`C` 里,agent 可以提交另一份而通过仍然新鲜);再 `git cat-file blob`(超过 `MaxProjectJSONBytes` 即拒绝),sha256 必须等于 sidecar 的 `project_json_hash`,且 `project.Decode` 解码出的同名条目与 exempt 列表的 JSON 编码与钉选值逐字相等,否则 infra `project_json_changed`,不执行测试。**不改为记 T0**:新鲜度不按 tier 过滤(§3.3),换入的命令得到的 T0 pass 照样有效。代价:clean filter 或换行转换使 blob 与工作树字节不同的仓库,每个 hook 代起的 job 都会是 `project_json_changed`(可见的失败;修复是对该文件设 `-text` 或按规范化形式提交),origin=cli 不受影响。git 子进程一律用 `sandbox.HostEnv` 清洗过的环境、显式 `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` 与 `-c core.fsmonitor=false`。
 3. **内容**:副本含 `T_full`(exempt 路径也在内,测试可能读它们;exempt 本来就是项目声明"与结论无关"的路径),**不含 `.git`**;`Wrapped.Env` 设 `GIT_CEILING_DIRECTORIES=<dir(tree)>`,测试里的 git 不会找到副本之上的仓库(例如家目录里的 dotfiles 仓库)。需要 git 元数据的测试会可见地失败(登记;私有 git dir 加 alternates 留作以后的契约追加)。
 4. **未跟踪输入**:project.json `verify[].inputs_untracked`(doublestar glob,校验同 exempt,**默认空**)。runner 遍历真实工作树(Lstat,不跟随符号链接,不进入真实 `.git`),把命中任一 glob、且不是 `T_full` 条目的文件或符号链接按相对路径复制进副本(普通文件复制内容与可执行位,边复制边哈希;符号链接按链接复制,哈希目标字节);**不得**用硬链接(经硬链接的写入会落到真实文件)。**源侧读取(【决定】,v1.5.2)**:遍历的 `Lstat` 与随后的打开之间 agent 可以换掉源文件,所以普通文件以 `O_RDONLY|O_NOFOLLOW|O_NONBLOCK` 打开(可用时相对已遍历的目录 fd),fstat 必须仍是普通文件、且 dev/ino 与遍历时的 `Lstat` 一致,否则 infra `inputs_path_conflict`(换成 FIFO、符号链接、设备或另一个文件都不会让 job 挂起、也读不到 `/dev/zero`);字节只从该 fd 读,边读边计入 `MaxUntrackedInputBytes`,复制期间增长的文件在上限处以 `inputs_too_large` 停止;符号链接对遍历到的条目 `Readlink`,不打开。**放置规则(【决定】,v1.5.1)**:这一步同样在沙箱外、以能写 `~/.ballast` 的 runner 身份执行,而第 2 步检出的副本里可能已有符号链接(包括 `git add -u` 不会刷新的条目),所以写入位置必须由构造保证落在副本之内,不能信任索引或工作树:(a) 所有写入都经一个在副本根上打开的 `os.Root`(`os.OpenRoot`,其 `Mkdir`/`OpenFile`/`Symlink`/`Lstat`),任何路径——经 `..`、绝对或相对符号链接——都解析不到副本之外,即使下面某条实现错了;(b) 输入路径的任一真前缀是 `T_full` 的条目(文件、符号链接或 gitlink,即非目录)⇒ 拒绝;(c) 从副本根向下逐级 `Lstat`(不跟随):不存在则 `Mkdir`,是真实目录(不是符号链接)则继续,其他任何类型(符号链接、文件等)⇒ 拒绝;第 2 步到测试启动之间没有别的写者(agent 写不了 `~/.ballast`,测试尚未启动),所以先 `Lstat` 再操作不构成竞态,实现也可以逐级 `openat(O_NOFOLLOW|O_DIRECTORY)`,接受与拒绝的集合必须相同;(d) 叶子独占且不跟随地创建:普通文件 `O_CREATE|O_EXCL|O_WRONLY`(可用时加 `O_NOFOLLOW`),符号链接用 `Root.Symlink`;已存在(例如大小写不敏感的文件系统上未跟踪的 `Foo` 与已跟踪的 `foo`)⇒ 拒绝。写时复制克隆只允许相对已校验的父目录 fd、以不跟随语义进行(`clonefileat(…, CLONE_NOFOLLOW)`,或对按 (d) 刚创建的文件用 FICLONE),否则逐字节复制。任何拒绝 ⇒ 整个 job 不执行测试,infra、error `inputs_path_conflict`(失败可见,**不**跳过:跳过会悄悄改变测试看到的输入)。被忽略的文件只有被白名单命中才复制。超过 `runner.MaxUntrackedInputFiles`(50 万)或 `MaxUntrackedInputBytes`(8 GiB)⇒ infra `inputs_too_large`。内容摘要记入 `VerifyRecord.InputsHash`(对按路径排序的 `"<mode> <sha256> <path>\n"` 行取 sha256),白名单本身随 `project_json_hash` 记录。**残余风险**:白名单输入可以被 agent 改写,而它们不在 `S`/`C` 里;摘要只让它们可审计(§11)。
 5. **子模块**:`checkout-index` 不展开子模块内容。`T_full` 含 gitlink(mode 160000)⇒ 不执行测试,infra、error `tree_has_submodule`,登记在 §11(递归实体化留作以后的契约追加)。
@@ -358,7 +358,7 @@ origin=cli 时 git 的索引、对象与引用仍可写(测试里的 `git add`/`
 | 平台 | 后端 | 方式 |
 |---|---|---|
 | macOS | `/usr/bin/sandbox-exec` | `sandbox-exec -p <DarwinProfile(spec)> -- argv`。profile 按此顺序(SBPL 最后匹配的规则生效):`(version 1)(allow default)`;`(deny file-write*)`;`(allow file-write* <W 中除 Spec.Tree 外的 subpath>、<设备的 literal/regex>)`;`(deny file-write* <D 中不在 Spec.Tree 内的 subpath/literal/regex>)`;**v1.5** `(allow file-write* (subpath <Spec.Tree>))`(只在 origin=hook 时出现,受保护的 `~/.ballast` 内唯一的放行);`(deny file-write* <D 中位于 W 根内的条目;强制条目用以 W 根锚定、按任意深度匹配的 regex>)`;`(deny file-write* <每个祖先的 literal>)`;**恒定** `(deny network-outbound)`;IP 按策略:deny 不放行任何 IP(**不含回环**,v1.4),loopback 放行 `(remote ip "localhost:*")`,allow 放行 `(remote ip "*:*")` 并为域名解析放行 `(remote unix-socket (path-literal "/private/var/run/mDNSResponder"))`;**恒定** `(allow network-outbound (remote unix-socket (subpath <每个 W>)))`;**v1.5 恒定** `(deny network-bind)(deny network-inbound)` 与 `(allow network-bind (local unix-socket (subpath <每个 W>)))`,loopback/allow 另放行 `(allow network-bind (local ip "localhost:*"))(allow network-inbound (local ip "localhost:*"))`;最后是 `DarwinEscapeDenials()`(v1.5:IPC **默认拒绝**,见下文"macOS 的非文件逃逸通道")。文件读仍然允许。SBPL 按路径匹配,对尚不存在的路径同样生效 |
-| Linux | bubblewrap | `bwrap --die-with-parent --new-session --unshare-pid [--unshare-net,allow 之外] --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --tmpfs /run --tmpfs /var/run`(v1.4:两个 socket 目录在任何策略下都屏蔽),然后对每个已存在的 `W` 条目(`Spec.Tree` 除外)`--bind A A`,对每个已存在、不在 `Spec.Tree` 内的 `D` 条目 `--ro-bind P P`,**v1.5** 再 `--bind <Spec.Tree> <Spec.Tree>`(只读的 `~/.ballast` 里唯一的可写挂载,只在 origin=hook 时出现),对每个已存在的祖先 `--bind A A`(变成挂载点),对每个已存在、位于 `W` 根内的 `D` 条目 `--ro-bind P P`(glob 在包装时展开;glob 所在目录位于 `W` 内时整个目录 ro-bind),对 `Wrapped.Baseline` 的每一项(包装前 `sandbox.ScanMandatory` 完整遍历工作树与 git dir 找到的、已存在的强制匹配项,含被忽略的目录)`--ro-bind P P`,最后 `--chdir <cwd> --setenv TMPDIR /tmp`、每个 `Spec.LoaderEnv` 条目一个 `--setenv K V`、`-- argv`。后面的挂载覆盖前面的。匹配项超过 `MaxMandatoryMatches`(4096)⇒ infra、`sandbox_spec_invalid`(失败可见,不带着未绑定的匹配项运行)。`W` 内尚不存在的受保护路径无法 bind(会在宿主上建挂载点):显式的列入 `Wrapped.MissingProtected`;运行后 `sandbox.PostCheck(fsys, spec, w)` 检查它们,并**递归重扫**全部强制匹配项,找出不在 `Baseline` 里的新匹配项。发现任何一项 ⇒ `sandbox.Quarantine` 把它移到 `~/.ballast/quarantine/<job_id>/`(保留相对路径;跨文件系统时复制后删除,复制不跟随符号链接;都失败时就地删除),结果记 infra、error `protected_path_created`,审计 `diag: sandbox_quarantine`(detail 只有相对路径);仍删不掉的再加 error `protected_path_residue`。这样攻击不会留在磁盘上继续生效 |
+| Linux | bubblewrap | `bwrap --die-with-parent --new-session --unshare-pid [--unshare-net,allow 之外] --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --tmpfs /run --tmpfs /var/run`(v1.4:两个 socket 目录在任何策略下都屏蔽),然后对每个已存在的 `W` 条目(`Spec.Tree` 除外)`--bind A A`,对每个已存在、不在 `Spec.Tree` 内的 `D` 条目 `--ro-bind P P`,**v1.5** 再 `--bind <Spec.Tree> <Spec.Tree>`(只读的 `~/.ballast` 里唯一的可写挂载,只在 origin=hook 时出现),对每个已存在的祖先 `--bind A A`(变成挂载点),对每个已存在、位于 `W` 根内的 `D` 条目 `--ro-bind P P`(glob 在包装时展开;glob 所在目录位于 `W` 内时整个目录 ro-bind),对 `Wrapped.Baseline` 的每一项(包装前 `sandbox.ScanMandatory` 完整遍历工作树与 git dir 找到的、已存在的强制匹配项,含被忽略的目录)`--ro-bind P P`,最后 `--chdir <cwd> --setenv TMPDIR /tmp`、每个 `Spec.LoaderEnv` 条目一个 `--setenv K V`、`-- argv`。后面的挂载覆盖前面的。**(v1.5.5 登记 M0b【契约问题】1 的裁决与落地,代码在 `sandbox.socketDirArgs` 与 `sandbox.AncestorPins`:)** ① 按字面 `--tmpfs /var/run` 在 `/var/run` 是指向 `/run` 的符号链接时(Debian 12)使 bwrap 无法启动;`socketDirArgs` 按真实路径屏蔽一次(符号链接换成解析后的路径,已被屏蔽就丢弃,不存在就丢弃),`/run` 与 `/var/run` 的屏蔽语义不变;② 祖先挂载:M0b 观测到按字面 `--bind A A`(A 为 W 之外的家目录等祖先)会让家目录整体可写,所以 `AncestorPins` 只取**位于 W 根之内**、且是受保护路径或顶层强制匹配项的真实祖先目录(这些目录的改名会让子进程换掉受保护路径),W 之外的祖先从不挂载为可写;依据 `docs/facts/M0b-CONCLUSIONS.md` §7。匹配项超过 `MaxMandatoryMatches`(4096)⇒ infra、`sandbox_spec_invalid`(失败可见,不带着未绑定的匹配项运行)。`W` 内尚不存在的受保护路径无法 bind(会在宿主上建挂载点):显式的列入 `Wrapped.MissingProtected`;运行后 `sandbox.PostCheck(fsys, spec, w)` 检查它们,并**递归重扫**全部强制匹配项,找出不在 `Baseline` 里的新匹配项。发现任何一项 ⇒ `sandbox.Quarantine` 把它移到 `~/.ballast/quarantine/<job_id>/`(保留相对路径;跨文件系统时复制后删除,复制不跟随符号链接;都失败时就地删除),结果记 infra、error `protected_path_created`,审计 `diag: sandbox_quarantine`(detail 只有相对路径);仍删不掉的再加 error `protected_path_residue`。这样攻击不会留在磁盘上继续生效 |
 | 原生 Windows 及其他 | 无 | 永远 T0 |
 
 **设计期实测**(本机 macOS 26 的 `sandbox-exec`,以及 Debian 12 容器里的 bubblewrap 0.8.0;均为临时目录,未写入仓库;正式用例由 P2-SANDBOX 的集成测试与 boundary-t1 固化):
@@ -462,7 +462,7 @@ origin=cli 时 git 的索引、对象与引用仍可写(测试里的 `git add`/`
 | Kind | 覆盖 | 来源 |
 |---|---|---|
 | `private_key` | PEM 私钥块(被截断的块到文本末尾为止) | audit |
-| `url_password` | `scheme://user:PASSWORD@host`(含 git 远程地址) | 两者 |
+| `url_password` | `scheme://user:PASSWORD@host`(含 git 远程地址);**整个 userinfo(用户名与密码)一并遮蔽**,输出 `scheme://***@host`(v1.5.5 恢复旧 hook 脱敏器的行为:§4.3 要求迁入的用例"只能更严",且用户名不得进入报告) | 两者 |
 | `auth_header` | `Authorization:` / `Proxy-Authorization:` 任意方案 | audit + 新增 Proxy |
 | `bearer` | 头部之外的 `Bearer`/`Basic` 值 | 两者 |
 | `key_value` | 键名含 password、passwd、passphrase、secret、token、api_key/apikey/api-key、access_key、private_key、credential、client_secret,或整键等于 pwd、pass、auth 的 `=`、`:`、`"k": "v"` 形式(含 `export K=V`、Azure 连接串的 `AccountKey=`) | 两者 + 新增 |
@@ -489,7 +489,7 @@ origin=cli 时 git 的索引、对象与引用仍可写(测试里的 `git add`/`
 ### 4.4 `ballast report --out <file>`(本地文件)
 
 - **默认关闭**:只有用户显式运行该命令才产生文件;不在热路径;不联网。
-- 输入只有审计日志(`ports.AuditSource`);输出结构见 `internal/report.Report`:窗口、版本、GOOS、会话数与仓库数(只计数)、各客户端与各 tier 的记录数、按规则聚合(与 `ballast stats` 同语义)、诊断计数(名称是闭合枚举 `model.DiagNames`,§3.3"诊断名清单";其他值记入 `other`)、verify 结果按 outcome/tier/sandbox/origin 计数、hook 延迟直方图与 p95、按 Kind 的脱敏命中计数、损坏行数。
+- 输入只有审计日志(`ports.AuditSource`);输出结构见 `internal/report.Report`:窗口、版本、GOOS、会话数与仓库数(只计数)、各客户端与各 tier 的记录数(v1.5.5:hook 只在规范 `ballast verify` 的事件上探测 tier 并把结果写进该事件的审计行,其余行不带 `tier`,报告把它们单独计为 `undetermined`,不再记为 T0)、按规则聚合(与 `ballast stats` 同语义)、诊断计数(名称是闭合枚举 `model.DiagNames`,§3.3"诊断名清单";其他值记入 `other`)、verify 结果按 outcome/tier/sandbox/origin 计数、hook 延迟直方图与 p95、按 Kind 的脱敏命中计数、损坏行数。
 - **隐私契约**(冻结,写在包注释里):绝不输出 session/agent/tool_use id、repo_inst、remote hash、transcript 引用、路径、matched 文本、上下文摘要、reason、message、prompt、主机名、用户名;非内置规则的 id 输出为 `h:` + sha256 前 12 位;时间截断到小时/天。
 - 命令与退出码(P2-CLI 接线,architecture §7 追加):`report --out <file> [--since 30d] [--force]`。0 已写入;1 隐私自检失败(什么都不写,这是 bug);2 用法错误(缺 `--out`、`--since` 非法);4 目标文件已存在且未给 `--force`;5 读审计或写文件失败。
 - 验收:`go test ./internal/report`——夹具审计目录到 golden 报告;`Validate` 表驱动(植入路径、id、秘密均被拒);性质测试(随机审计记录里植入秘密与路径,序列化后的报告都不含);CLI e2e 覆盖全部退出码。
@@ -525,7 +525,7 @@ origin=cli 时 git 的索引、对象与引用仍可写(测试里的 `git add`/`
   - **gap**:§2.1 "未覆盖的写法" 1–7 类每类至少 2 例(`python -c`、`node -e`、`./fix.sh`、`curl … | sh`、`patch`、`git apply`、`git reset --hard`、`mv <受保护文件> /tmp/x` 的源、`rm -r ~/.ballast`、`eval "$CMD"`、MCP 工具)。
 - 每行把合成 payload 喂给真实 `ballast hook`,断言:detected ⇒ 审计中有 `rule_id:"no-tamper"` 的 hit 或 `would_*` 行,且 hook 退出码 0;gap ⇒ 没有该行。**gap 行若被检测到,脚本以非 0 退出并提示"覆盖面变了,请同步更新 trust-model §2.1"**,使脚本同时是缺口登记表。
 - 额外两项:手写一条伪造的 pass 记录(`S_end` 随意填)后 `ballast verify --check` 仍判过期(返回 10),因为新鲜要求 `S_end == C`;伪造者若先算出真实 `C` 再填进去则能骗过,这正是 T0"可检测、不可防"的边界,脚本把它记为 gap 行;ConfigChange 安装后,喂合成 ConfigChange payload(字段取自 M0b 样本)⇒ 审计有 `config_change` 行且 `protected:true`。
-- `accept-p2.sh` 调用它;三平台 CI 执行。
+- `accept-p2.sh` 调用它;计划三平台 CI 执行(CI 步骤待 `impl/ci-fix` 合入后接入,见 §11)。
 
 ### 5.3 `scripts/boundary-t1.sh`(Linux 容器)
 
@@ -794,16 +794,17 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 
 ## 10. 集成验收:`scripts/accept-p2.sh`
 
-由 P2-CLI 编写,参数固定,任何断言失败即非 0;三平台 CI 执行(容器与真实客户端部分在缺少前提时显式 SKIP,`CI=true` 加对应 `BALLAST_REQUIRE_*` 时失败):
+由 P2-CLI 编写,参数固定,任何断言失败即非 0;**计划**三平台 CI 执行(**v1.5.5 更正:`.github/workflows/ci.yml` 目前不含 `accept-p2.sh`、`sandbox-docker.sh`、`boundary-t0/t1.sh`,也没有任何 `BALLAST_REQUIRE_*`;接入归 `impl/ci-fix` 合入之后,见 §11 最后几行**)。容器与真实客户端部分在缺少前提时显式 SKIP,`CI=true` 加对应 `BALLAST_REQUIRE_*` 时失败:
 
 1. `go build ./...`、`go vet ./...`、`GOOS=windows go vet ./...`、`go test ./internal/archtest`、`go test ./...`。
 2. `go test ./internal/redact -run '^$' -fuzz FuzzString -fuzztime 60s`。
 3. `ballast report --out` 的 e2e(全部退出码,输出文件过 `Validate`)。
 4. `scripts/boundary-t0.sh`。
-5. `scripts/sandbox-docker.sh ./internal/sandbox ./internal/runner`(v1.5,需要 Docker;Linux CI 必跑)与 `scripts/boundary-t1.sh`(需要 Docker;Linux CI 必跑)。
+5. `scripts/sandbox-docker.sh ./internal/sandbox ./internal/runner`(v1.5,需要 Docker;计划由 Linux CI 必跑,待接入)、仅 root 可跑的 `TestBwrapPathDirectoryMustBeTrusted`(v1.5.5:`BALLAST_DOCKER_USER=0:0 bash scripts/sandbox-docker.sh ./internal/sandbox -run TestBwrapPathDirectoryMustBeTrusted -v`,`accept-p2.sh` 要求输出里有 `--- PASS`,不接受 SKIP)与 `scripts/boundary-t1.sh`(需要 Docker;计划由 Linux CI 必跑,待接入)。
 6. `go run ./scripts/probe-m0b/check docs/facts/m0b-cases.json`;`hermes-cases.json` 同一检查器。
 7. bench:新增场景 `12`(假 T1 规范 verify)与 ConfigChange 场景,p95 ≤ 30ms。
-8. 卫生检查:新增产物里没有本机绝对路径、uid、秘密(复用 CI 的模式表)。
+8. 卫生检查:新增产物里没有本机绝对路径、uid、秘密(复用 CI 的模式表),`docs/facts` 里没有真实的 `session_id`/`prompt_id`(v1.5.5)。
+9. (v1.5.5)层级与锁的耗时门槛(`BenchmarkProbe` ≤ 200µs、`BenchmarkLocked` ≤ 30µs)由普通测试 `TestProbeBudget`、`TestLockedBudget` 在 `go test ./...` 中执行(取多轮最好值,`-race`/`-short` 跳过),不再只在 `-bench` 的 guard 里。
 
 ---
 
@@ -811,13 +812,13 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 
 | 项 | 状态 | 由谁 / 怎样消除 |
 |---|---|---|
-| 无凭据时 SessionStart/UserPromptSubmit 是否触发 | 未核验 | P2-M0B `nocred-events` |
-| `allowManagedHooksOnly`、低层 `disableAllHooks`、hook 合并、`managed-settings.d` 合并、托管 hook 路径要求 | 未核验(文档依据) | P2-M0B,无需凭据 |
-| ConfigChange payload 字段 | 未核验 | P2-M0B `configchange-payload`(`hang` 模式) |
-| hook 在沙箱外运行(A20,T1 地基) | 未核验 | P2-M0B `hooks-run-outside-sandbox`,无需凭据(前提 `nocred-events` 通过,否则降为需凭据) |
+| 无凭据时 SessionStart/UserPromptSubmit 是否触发 | **已核验(M0b `nocred-events`,pass:none/blackhole/hang 三种模式均触发)** | `docs/facts/M0b-CONCLUSIONS.md` |
+| `allowManagedHooksOnly`、低层 `disableAllHooks`、hook 合并、`managed-settings.d` 合并、托管 hook 路径要求 | **已核验(M0b `managed-only-blocks-lower`、`hooks-merge-all-layers`、`lower-disableallhooks-vs-managed`、`managed-disableallhooks`、`managed-d-merge-hooks`、`managed-d-merge-scalar`、`managed-hook-path-forms`、`managed-file-owner`,均 pass)** | `docs/facts/M0b-CONCLUSIONS.md` |
+| ConfigChange payload 字段 | **已核验(M0b `configchange-payload`,`hang` 模式 pass)**;托管目录新增 `managed-settings.d/` 文件与 `~/.claude.json` 不触发 ConfigChange | `docs/facts/M0b-CONCLUSIONS.md` §8 |
+| hook 在沙箱外运行(A20,T1 地基) | **已核验(M0b `hooks-run-outside-sandbox` pass)** | `docs/facts/M0b-CONCLUSIONS.md` |
 | denyWrite 对 Bash 的效果、permissions.deny 对 Edit 的效果、`allowUnsandboxedCommands`、denyWrite 路径写法、MCP 写入 | 【需凭据】 | 用户提供凭据后 `scripts/probe-m0b/run.sh --with-credentials …`;可选 §6.6 模拟模型 |
-| MCP 白名单键名 | 未核验 | P2-M0B `mcp-allowlist-nocred` |
-| bwrap 在 Docker 中可用所需的设置 | 设计期已实测(Debian 12:seccomp、apparmor、systempaths 三项 unconfined) | P2-M0B `runner-bwrap-in-docker` 固化为用例 |
+| MCP 白名单键名 | **已核验(M0b `mcp-allowlist-nocred` pass:`allowedMcpServers`(条目 `{"serverName":…}`)、`deniedMcpServers`、`allowManagedMcpServersOnly`)**;白名单内 MCP server 写受保护路径仍是【需凭据】的 `mcp-write`。层级判定与 doctor **不检查**白名单(v1.5.5 更正 trust-model:此前写成 doctor 会提示缺失) | `docs/facts/M0b-CONCLUSIONS.md` |
+| bwrap 在 Docker 中可用所需的设置 | 已实测(M0b `runner-bwrap-in-docker`:Docker Desktop 无 AppArmor 时只需 `seccomp=unconfined` 与 `systempaths=unconfined`,启用 AppArmor 的宿主是否仍需 `apparmor=unconfined` 未核验,按设计保留三项);该用例记 fail 的原因是 §3.4 Linux 行按字面不成立,裁决见 §3.4(v1.5.5 登记) | `docs/facts/M0b-CONCLUSIONS.md` §7 |
 | bwrap 在 Ubuntu 24.04 CI(user namespace 受 AppArmor 限制)中可用所需的设置 | 未核验 | P2-SANDBOX、P2-CLI(CI) |
 | macOS 非文件逃逸通道(LaunchServices、AppleEvents、`launchctl submit`、cfprefsd 代写偏好、WindowServer 注入、剪贴板)能否被 v1.5 的 IPC 默认拒绝关闭 | 片段可被 sandbox-exec 接受、工具链可用、`launchctl` 副本提交被拒已在设计期实测;cfprefsd 是否尊重 `user-preference-write`、ctypes 通道未核验 | P2-SANDBOX 集成测试(命名偏好域,CI 必跑);v1.5.2:P2-SANDBOX 交付时附 macOS 本机 `CI=true BALLAST_REQUIRE_SANDBOX_EXEC=1 go test ./internal/sandbox` 的输出,没有则在 P2-CLI 接入 macOS CI 首次通过前一直算未通过;关不住就改为 `(deny default)` 加白名单;cfprefsd 不尊重时把两个 cfprefsd 名字移出白名单 |
 | `DarwinMachAllow` 是否够 go/node/python/java/dotnet 的测试使用、是否与 sandbox-runtime 的白名单一致 | 【静态依据待核】;设计期在本机验证了 go、node、python 的基本用法 | P2-SANDBOX 对照源码并按运行时各跑一个最小工程,缺的服务登记依据后追加 |
@@ -826,7 +827,7 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 | `RepoMandatoryDeny` 与 Claude sandbox-runtime "危险文件"清单是否一致 | 【静态依据待核】 | P2-SANDBOX 对照源码,只能追加 |
 | Linux 上自定义位置的 unix socket(家目录下的 docker.sock 等)仍可从沙箱内连接 | 残余风险(已登记) | 部署指南提示管理员;任何网络策略下都只屏蔽 `/run`、`/var/run` 与四个环境变量(v1.4 起与网络策略无关) |
 | **T1 证据的全机前提**:任何一个 Claude 会话的项目层(`<CLAUDE_PROJECT_DIR>/.claude/settings*.json`)削弱了沙箱,该会话就能绕过 runner 直接写全局 `~/.ballast/evidence`,tier、sandbox、origin 任意填写;runner 的降级只影响诚实记录 | **残余风险(已登记,v1.4)** | 会话首个事件审计 `lower_sandbox_weakened`;org.json `weakened_project:"deny"` 拒绝这类会话的全部工具调用;doctor `tier.repo_sandbox_weakened`;trust-model §2.3、§4 写明部署要求;在 Claude 启动时、工具调用之外执行的项目层设置(若生效)挡不住 |
-| 项目层顶层键 `env`、`apiKeyHelper`、`statusLine`、`awsAuthRefresh`、`awsCredentialExport`、`otelHeadersHelper`、`enabledPlugins`、`enableAllProjectMcpServers` 是否在项目层生效、是否受工作区信任确认约束;在子目录或父目录启动时加载哪个目录的项目层 | 未核验(按"会生效"保守处理:`LayerRepo` 一律报告) | P2-M0B `lower-sandbox-merge` 追加观测(§6.4) |
+| 项目层顶层键 `env`、`apiKeyHelper`、`statusLine`、`awsAuthRefresh`、`awsCredentialExport`、`otelHeadersHelper`、`enabledPlugins`、`enableAllProjectMcpServers` 是否在项目层生效、是否受工作区信任确认约束;在子目录或父目录启动时加载哪个目录的项目层 | **部分已核验(M0b `lower-sandbox-merge`,`-p` 模式、未经信任确认)**:这些顶层键在项目层与本地层实测仍然有效,所以 `LayerRepo` 一律报告成立;只加载启动目录自己的项目层(不向上找 git 根),不需要追加父目录链。交互模式下的信任确认是否改变结论【需凭据】 | `docs/facts/M0b-CONCLUSIONS.md` §3、§6 |
 | 托管 hook 进程自身继承 Claude Code 的环境:项目层 `env` 中的 `DYLD_INSERT_LIBRARIES`(未启用 hardened runtime 的 darwin 构建)或 `LD_PRELOAD`(动态链接的 Linux 构建,例如自建 cgo 构建)会被加载 | 残余风险(已登记,v1.4) | darwin 发布构建 `codesign -o runtime`,doctor `tier.binary_hardening`(T1 主机 fail);Linux 发布构建静态链接;cgo 构建落在全机前提里 |
 | `runner_network:"loopback"`:macOS 上的测试可以连接主机回环上的任何服务(IDE 扩展服务、开发代理、容器守护进程的 TCP 端口) | **残余风险(已登记,管理员显式选择,v1.4)** | 默认 deny 不放行回环;`org render` 注释、trust-model §2.3 |
 | `runner_network:"allow"`:Linux 上共享主机网络命名空间,主机的抽象命名空间 unix socket 仍可达 | **残余风险(已登记,管理员显式选择,v1.4)** | 文件形式的 socket 照常屏蔽;`org render` 注释、trust-model §2.3 |
@@ -835,13 +836,13 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 | macOS 上 passwd 查询家目录的延迟(已锁定主机每次 hook 调用一次) | 本地账户已实测(冷进程 p50 ≈ 0.9ms、p95 ≈ 1.3ms,`CGO_ENABLED=0`);目录账户(AD/LDAP 绑定、未缓存)【未核验】 | P2-TIER `BenchmarkLockedHome` + P2-CLI bench 场景 `13`;超出 B10 预算时另议(契约变更) |
 | Linux 静态构建对 sssd/LDAP 用户查不到 passwd | 已知(标准库行为) | 由 `home_root` 规则(推荐)或 cgo 构建解决;doctor `tier.locked_home`、`org render --write` 预检、boundary-t1 `t1-passwd-missing` 把关 |
 | cgo/NSS 构建下 passwd 查询是否联网或阻塞 | 已知风险(取决于 NSS 配置) | 只在 NSS 由本地缓存(sssd 本地缓存、nscd)提供时可用;`nss_ldap` 或未缓存的 sssd 违反热路径不联网;doctor `tier.locked_home` 在 cgo 构建下提示;推荐顺序 `home_root` 优先 |
-| 低层 `sandbox.*` 数组键与削弱型布尔键是否并入托管沙箱;`permissions.additionalDirectories` 是否受 `allowManagedPermissionRulesOnly` 约束;`~/.claude.json` 能否承载 `sandbox` 键 | 未核验(按"会合并"保守处理:条件 6 + runner 仓库层检查) | P2-M0B `lower-sandbox-merge`(无模型手段观测不到时【需凭据】);若 `~/.claude.json` 能承载,`Detect` 追加检查(契约变更) |
+| 低层 `sandbox.*` 数组键与削弱型布尔键是否并入托管沙箱;`permissions.additionalDirectories` 是否受 `allowManagedPermissionRulesOnly` 约束;`~/.claude.json` 能否承载 `sandbox` 键 | **已观测(M0b `lower-sandbox-merge` 记 pass,`enableWeakerNestedSandbox` 一个键观测不到)**:`~/.claude.json` 承载的 `sandbox` 键无效果(`Detect` 无需追加检查);托管 `allowUnsandboxedCommands:false` 存在时项目层与本地层的 `sandbox.*` 键被压制(见下面 M0b 契约问题 5 一行),其余按"会合并"保守处理 | `docs/facts/M0b-CONCLUSIONS.md` §3 |
 | TTY 注入:新会话 + `/dev/null` stdin + 管道输出能否挡住 `/dev/tty` 与 TIOCSTI | macOS 26 设计期已实测(同会话可注入;新会话后 ENXIO/ENOTTY);Linux 为【静态依据】(TIOCSTI 要求控制终端;bwrap `--new-session`) | P2-SANDBOX、P2-RUNNER 集成测试;boundary-t1 `t1-tty` |
 | 任意深度的 git 元数据拒写 | macOS 设计期已实测(SBPL regex 拒绝嵌套 `.git` 新建与改写,`git add` 不受影响);Linux 的 `Baseline` ro-bind + `PostCheck` 隔离未实测 | P2-SANDBOX 集成测试;boundary-t1 `t1-runner-sandbox` |
 | `runner_allow_write` 中的每一项(尤其共享构建缓存) | **残余风险(已登记)** | 等价于把该目录交给 agent 可改写的代码,写入跨 job 持久、不进入内容快照 `C`,可被沙箱外的构建复用;默认为空,runner 用 `sandbox.CacheEnv` 把缓存指向 job 临时目录;trust-model §2.3 同步 |
 | go 在只读 `GOMODCACHE` 下能否正常构建与测试 | 未核验 | P2-SANDBOX 集成测试 |
 | macOS `sandbox-exec` 的长期可用性(Apple 已标记弃用) | 风险 | P2-SANDBOX 探测失败即按 §3.4 退化 |
-| Hermes 协议(载荷、输出解析、阻断语义) | 【静态依据】 | P2-HERMES 离线 `hooks test` |
+| Hermes 协议(载荷、输出解析、阻断语义) | **离线核验**(`hermes hooks test`,`docs/facts/hermes-cases.json`、`HERMES-CONCLUSIONS.md`) | 触发时机仍未核验,见下一行 |
 | Hermes 真实会话中的触发时机 | 【需凭据】 | 用户自行补测 |
 | Codex、Cursor 全部单元格 | 【需凭据】 | §7.2、§7.3 的补测命令 |
 | boundary-t1 中 agent 实际尝试的各项 | 【需凭据】 | `scripts/boundary-t1.sh --with-credentials` |
@@ -852,14 +853,14 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 | 测试读取副本之外的文件(文件读允许;已跟踪的符号链接指向仓库外) | 残余风险(已登记,v1.5) | 依赖本身是已跟踪内容、进入提交;与"改测试代码让它恰好通过"同类,由 CI 与评审把关 |
 | origin=cli(人在 T1 主机上的 `--foreground`、T0)仍在真实工作树执行:未跟踪文件与并发修改(v1.5.2:含 `Start` 与 `RunJob` 之间换入换出 `project.json`;origin=cli 不做第 1b 步核对)可影响结果;其 `W` 含仓库与 common dir,比会话在子目录或 linked worktree 时 Claude 沙箱的可写范围大 | 残余风险(已登记,v1.5 维持现状) | 人主动运行、人可见;需要更强保证时让 hook 代起 |
 | 含子模块的仓库 | 已知限制(v1.5) | origin=hook 记 infra `tree_has_submodule`,不执行;递归实体化留作以后的契约追加 |
-| 实体化与快照 fallback 会在沙箱外运行人配置的 git filter 驱动(如 git-lfs),处理的是 agent 可控的内容 | 残余风险(已登记,v1.5;快照 fallback 原本就如此) | 驱动只来自 agent 写不了的配置文件(仓库 config 在 runner 沙箱与 Claude 沙箱的危险文件中【静态依据待核】、全局配置在家目录);`core.fsmonitor=false` |
+| 实体化与快照 fallback 会在沙箱外运行人配置的 git filter 驱动(如 git-lfs),处理的是 agent 可控的内容;仓库自己的 git 配置若定义了驱动,命令也在沙箱外执行 | 残余风险(已登记,v1.5;快照 fallback 原本就如此)。**v1.5.5 收窄,仍有【未闭合】部分** | 用户与系统级配置里的驱动被信任。仓库本地配置:`runner` 在每批沙箱外 git 调用(`Materialize` 第 1 步前、检出前、`TreeSEnd`)前用 `git config --list --show-scope -z` 检查,local/worktree 范围定义了 `filter.<name>.clean/smudge/process` ⇒ infra `git_config_unsafe`(只报键名)。**【未闭合】**:① 这道防线依赖"agent 写不了 `<repo>/.git/config`",Bash 由沙箱保证,文件工具(Edit/Write)取决于 Claude Code 自身行为,`ManagedForms` 无此项(加条目需要 M0b 取证,【需凭据】,且是契约变更);② 检查与 git 子进程之间不原子;③ 快照 fallback(热路径,hook 进程)不做此检查。`core.fsmonitor=false` 仍是唯一显式覆盖的键 |
 | 实体化的 `checkout-index` 在沙箱外处理 agent 可影响的索引与树内容、写入 `~/.ballast/work/` 之下,不写出副本依赖 git 自身的前导路径(符号链接)防护(例如大小写或 Unicode 规范化不敏感的文件系统上的碰撞;历史上出过此类 CVE) | **残余风险(已登记,v1.5.1)** | 收窄:`runner.Materialize` 第 1a 步路径布局预检(符号链接条目按 EqualFold 是其他条目前缀、`.`/`..`/`.git` 分量 ⇒ infra `tree_unsafe_path`,检出之前)、显式 `core.protectHFS`/`core.protectNTFS`;Unicode 规范化前缀不在预检内;部署指南要求 git 保持安全更新;把检出放进 `W=[Tree]` 沙箱(只读对象库、只写副本)留作以后的契约追加 |
 | `inputs_untracked` 复制的写入位置 | **已处理(v1.5.1)**,不属于残余风险 | 放置规则冻结在 `runner.Materialize` 第 3 步:写入只经副本根上的 `os.Root`,前缀是 `T_full` 非目录条目即拒绝,逐级只接受真实目录,叶子 `O_EXCL` 且不跟随;违反 ⇒ infra `inputs_path_conflict`;P2-RUNNER 单测覆盖 |
 | 实体化的性能代价(全树检出、白名单复制、冷构建缓存) | 已登记,不设门槛(v1.5) | runner 不在热路径;hook 的 30ms 门槛不变 |
 | 需要 git 元数据的测试在副本里失败(副本无 `.git`) | 已知限制(v1.5) | 可见的失败;私有 git dir 加 alternates 留作以后的契约追加 |
 | macOS 上用 `setsid` 脱离进程组的沙箱后代在收尾后继续运行 | 残余风险(已登记,v1.5) | 仍在沙箱内,只能写 `W`(origin=hook 时是随后删除的副本、临时目录与 `runner_allow_write`) |
 | `ManagedForms` 的 `**/` 任意深度形式在托管 denyWrite 与 permissions.deny 中是否生效、锚点是什么 | 未核验【需凭据】 | M0b `managed-denywrite-anydepth`;未证明前 T1 下 `weakened_project` 缺省 `deny`(§3.2 条件契约) |
-| permissions.deny 中单斜杠开头的路径是否按绝对路径解释(Claude 文档区分 `//`) | 【静态依据待核】【需凭据】 | M0b `managed-denywrite-path-forms`;不按 ⇒ `ManagedForms` 改 `//` 形式 |
+| permissions.deny 中单斜杠开头的路径是否按绝对路径解释(Claude 文档区分 `//`) | **已处理(v1.5.3)**:M0b 观察到单斜杠绝对路径不生效,`ManagedForms` 已改 `//` 形式(项目负责人裁决不等 credentials 模式);`managed-denywrite-path-forms` 的真实模型确认仍是【需凭据】 | `docs/facts/M0b-CONCLUSIONS.md` 契约问题 2 |
 | macOS 目录账户的 passwd 查询经 opendirectoryd 可能联网或阻塞 | 已知风险(v1.5 登记,与 NSS-LDAP 同类) | 50ms 时限兜底;部署选项 ④;doctor `tier.locked_home` 在 darwin 上慢查询时提示 |
 | 用户层 `~/.claude/settings*.json`(或整个 `~/.claude`)是符号链接且目标不在 `~/.claude` 内(dotfiles 仓库常见) | **设计缺口,已登记(v1.5.4)**:条件 6 跟随链接读目标,内容无害就判 T1,但托管 `denyWrite`/`Edit` 的字面形式未必盖住链接目标,agent 可直接改写目标来削弱用户层(与 `CLAUDE_CONFIG_DIR` 重定向同类) | 需要项目负责人裁决:要么此情形判 `sandbox_deny_write`,要么等 M0b `managed-denywrite-path-forms` 证明 denyWrite 作用于链接目标后放行;裁决前保持现状,`detect.json` 的 `user-settings-symlink-to-harmless-file-ok` 一行如实记录现状。未改代码的原因:改变判定会让使用 dotfiles 管理的用户全部落到 T0,属于产品取舍,不是实现缺陷 |
 | `tier` 读取设置文件的 `Stat` 与 `ReadFile` 之间的竞争(换成 FIFO) | 残余(v1.5.4 收窄) | 已加:`Stat`(跟随链接)必须是普通文件且 ≤ 1 MiB,否则按 unreadable(保守一侧),挡住 `/dev/zero`、既有 FIFO、巨型文件;窗口内被换成 FIFO 的竞争仍在,要关闭它需要 `sys.FS` 提供 `O_NONBLOCK` 打开,牵动所有 FS 假实现与注入测试,成本高;利用前提是 agent 能写用户层或项目层设置目录,T1 下会话目录的 `.claude/settings*.json` 在 denyWrite 中,且超时由看门狗按 B7 放行 |
@@ -871,11 +872,19 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 | `RepoMandatoryDeny` 追加了 `.gitconfig`、`.bashrc`、`.bash_profile`、`.zshrc`、`.zprofile`、`.profile`、`.ripgreprc`(对齐 sandbox-runtime DANGEROUS_FILES,只能追加) | **兼容性代价,已登记(v1.5.4)** | 仓库任意深度出现这些文件名(dotfiles 仓库、测试夹具)的 job 里它们变成只读;Linux 上新建这类文件会被判为 infra `protected_path_created`。行为可见,不静默;D 清单见 §3.4 |
 | macOS 大小写不敏感卷上 `.CLAUDE`、`.Git`、`.MCP.json` 等变体 | 依赖 SBPL 匹配行为(v1.5.4 钉住) | 匹配器(`MatchMandatory`、`PostCheck`)区分大小写,保护靠 sandbox-exec 自己的路径匹配;`TestDarwinCaseVariantsAreDenied` 在大小写不敏感卷上断言这些变体写入失败,卷区分大小写时跳过 |
 | 前缀赋值 `X=1 ballast verify test`、`BALLAST_HOME=/tmp ballast verify`、`! ballast verify test`、`{ ballast verify test; }` 被识别为规范形式 | 已知语义(v1.5.4 钉住) | `bashparse` 的 `CommandNode` 没有前缀赋值字段;hook 代起时用的是自己的 `Self` 与环境,agent 写的赋值被悄悄丢弃,不影响安全;`env X=1 …` 仍不规范。`verifyreq_test` 已固定;若要拒绝,需要 `bashparse` 暴露前缀赋值(契约变更) |
-| 实体化与 `TreeSEnd` 的 `git add -u` 会读副本里测试可写的 `.gitattributes`:测试可给已跟踪路径加 `filter=lfs` 之类的属性,用户全局配置里定义了该过滤器(git-lfs)时,clean 命令在沙箱外处理测试控制的内容并写入真实 `GIT_DIR` | 残余风险(v1.5.4 登记,补充上面的 git filter 一行) | 驱动程序只来自 agent 写不了的配置,所以不是逃逸;缓解办法是 git ≥ 2.40 的 `GIT_ATTR_SOURCE=<T_full>`,但要把树 id 贯穿 `runGit`、`Materialize` 与快照 fallback,并重做所有 git 调用的 golden,留作以后的契约追加 |
+| 实体化与 `TreeSEnd` 的 `git add -u` 会读副本里测试可写的 `.gitattributes`:测试可给已跟踪路径加 `filter=lfs` 之类的属性,用户全局配置里定义了该过滤器(git-lfs)时,clean 命令在沙箱外处理测试控制的内容并写入真实 `GIT_DIR` | 残余风险(v1.5.4 登记,补充上面的 git filter 一行) | 驱动程序来自用户/系统级配置(仓库本地的驱动被上一行的检查拦下,其前提见上一行【未闭合】),所以不是逃逸;缓解办法是 git ≥ 2.40 的 `GIT_ATTR_SOURCE=<T_full>`,但要把树 id 贯穿 `runGit`、`Materialize` 与快照 fallback,并重做所有 git 调用的 golden,留作以后的契约追加 |
 | M0b 契约问题 5:`lower-sandbox-merge` 中 `enableWeakerNestedSandbox` 在无模型手段下观测不到,按"部分观测"记 pass,没有补测命令 | **裁决(v1.5.4,集成者按保守原则)**:接受"部分观测不降级",§6.4/§6.5 里该用例的 recheck 已删除;该键在条件 6 中保持保守 | `tier.WeakenedSandboxKeys` 不得放宽该键,直到有人实现 `lower-sandbox-merge` 的 credentials 分支并拿到 `credentials` 模式结论(待实现) |
 | `tier.binary_hardening` 在 T1 主机上无法解析签名/ELF 时只报 warn `not evaluated`;macOS 只检查 `CS_RUNTIME`,不检查 `com.apple.security.cs.allow-dyld-environment-variables`、`disable-library-validation` 两个 entitlement(带它们时 hardened runtime 下 `DYLD_INSERT_LIBRARIES` 仍生效) | 已知限制(v1.5.4) | §3.5 只冻结了 `CS_RUNTIME`;解析失败改为 fail 会让包装脚本类部署出现误报(golden `linux not an elf` 如实记录现状);读取 entitlements blob(slot 5,magic `0xfade7171`)留作增强 |
+| `tier.Detect` 与 doctor 不检查 MCP 白名单(`allowedMcpServers` 等) | 已知限制(v1.5.5 登记;此前 trust-model 写成 doctor 会提示) | 没有 MCP 白名单的主机照样判 T1;管理员按 trust-model §4.2 第 3 步手工补充并核对。要让 `Detect`/doctor 检查它需要新增 `TierMissing*` 常量(契约变更),留待以后 |
+| Claude Code 的若干能力单元格没有 M0a 取证用例:PreToolUse `ask`、UserPromptSubmit `deny`/`warn`(`additionalContext`)、PostToolUse `warn`、SubagentStop `deny` | **v1.5.5 改为未核验(`Verified:false`)**:`clients.md` 标 ✓?,`ballast lint` 对这些组合给 `action-unverified` 警告;已有取证的只有 PreToolUse `deny`/`warn`、Stop `deny`/`warn` | 补 M0a 风格的取证用例(`cases.json` + `payloads/`,需要真实模型会话,【需凭据】)后再改回 `Verified:true`(architecture §12 契约变更);`lint_cases.json` 对应行同步 |
+| 已锁定主机上 hook 的路径上下文(规则里的 `~`、`no-tamper` 的 `~/.ballast/**`)与 runner 的 `ValidateSpec` 真实家目录曾取自 `$HOME` | **已处理(v1.5.5)** | `cli.newCoreWith` 在锁定时用 `layout.WithHome(env, lay.InstallRoot)` 包装 Env(只替换 `HomeDir`,重定向变量仍可见,doctor 与审计按名字报告),填入 `hook.Deps.Env`、runner/install/tier 的 Env;`TestWireHookLocked`、`TestPathContextHomeFollowsTheLockedEnv` 钉住 |
+| 审计行的 `tier` 曾被 hook 写死为 `T0` | **已处理(v1.5.5)** | 只在探测过 tier 的事件(规范 verify:`verify_hook_start`、`verify_spawn_failed`、`tier_mismatch`)上写探测结果,其余行省略(`omitempty`);`report` 把省略的计为 `undetermined`(`report.TierUndetermined`,仅 `tiers` 一栏;`verify.by_tier` 的记录总有 tier) |
+| `ballast org render --binary` 曾接受相对路径与裸名 | **已处理(v1.5.5)** | 要求干净的绝对路径(按目标 OS;Windows 要求盘符),否则退出 2 且什么都不输出;`install --binary` 本来就是这样 |
+| `ballast replay` 曾对 `project.json` 用宽松解码 | **已处理(v1.5.5)** | `cmd_replay.go` 注入 `project.Loader`,未知字段等 ⇒ `project_invalid`,与真实 hook 一致(`TestReplayProjectJSONIsStrict`) |
+| 层级与锁的耗时门槛只在 `-bench` 的 guard 里 | **已处理(v1.5.5)** | `TestProbeBudget`、`TestLockedBudget`(多轮取最好值,`-race`/`-short` 跳过,不放宽门槛);仅 root 可跑的 `TestBwrapPathDirectoryMustBeTrusted` 由 `accept-p2.sh` 在 `BALLAST_DOCKER_USER=0:0` 下另跑一次并要求 PASS |
+| boundary-t1 的外网对照在无外网的容器里降为 SKIP | **已处理(v1.5.5)** | `runner_network` 的 deny/allow 改为对容器自己桥接地址(非回环)上的 HTTP 监听断言,不依赖外网;真实外网探测只作为有连通性时的额外项(stderr 记一行,不计 SKIP) |
 | P2 的 CI 步骤(`BALLAST_REQUIRE_DOCKER=1` 的 sandbox-docker/boundary-t1、macOS 上 `CI=true` 的 sandbox-exec IPC 用例、bench 12–14)尚未接入 CI | **待办**(`.github/workflows/**` 归 `impl/ci-fix`) | `impl/ci-fix` 合入后在其结果上追加这些步骤(`accept-p2.sh` 的 SKIP 开关已备好);P2-SANDBOX 的 macOS 取证条件(§11 IPC 行)在此之前仍算未通过 |
-| 高负载机器上 `accept-p2.sh` 第 1 项偶发 `watchdog expired after 150ms`(`TestAuditLint` 的 `shadow hit`),以及 `psparse` 对抗预算用例(19–22ms 对 20ms)偶发超时 | 已知抖动,**门槛不放宽** | 150ms 看门狗与 `psparse` 的预算都是有意的;`impl/ci-fix` 正在处理看门狗在负载下的抖动。失败时先单独重跑(`go test -count=1 -run … ./internal/psparse`),不要靠放宽预算过关 |
+| 高负载机器上 `accept-p2.sh` 第 1 项偶发 `watchdog expired after 150ms`(`TestAuditLint` 的 `shadow hit`),以及 `psparse` 对抗预算用例(19–22ms 对 20ms)偶发超时 | 已知抖动,**门槛不放宽**。v1.5.5:`internal/cli` 的 e2e(真实二进制子进程)不再依赖 150ms 墙钟 | e2e 测试用 `-tags ballast_fault` 构建二进制,经只在该构建里生效的 `BALLAST_TEST_WATCHDOG`(Go duration,e2e 用 `5s`)放宽看门狗;生产默认 `hook.DefaultWatchdog=150ms` 与 30ms 谓词余量不变,生产构建忽略该变量(`TestProductionIgnoresTestSwitches`)。150ms 与 `psparse` 的预算都是有意的;`scripts/fault.sh`、`accept-m*.sh`、bench 仍跑生产二进制。`psparse` 失败时先单独重跑,不要靠放宽预算过关 |
 
 ## 12. 风险
 
@@ -897,6 +906,26 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 11. **任意深度扫描的成本**:Linux 上每个 job 包装前和结束后各完整遍历一次工作树与 git dir(含 `node_modules` 等被忽略的目录);runner 不在热路径,代价是 job 启动与收尾变慢,大仓库可达秒级。匹配项超过 4096 个时 job 直接 infra(可见),不静默降级。
 
 ## 13. 修订记录
+
+### v1.5.5(2026-10-16,集成后第 1 轮系统审计)
+
+逐条核实后处理;下表只列改变契约或登记残余风险的项,纯测试/脚本的补强见各自提交。全部对 P2 新增面的修改或追加,未改动 v1.x 已实现的导出签名(`layout.WithHome`、`report.TierUndetermined`、`runner.ErrGitConfigUnsafe` 是追加)。
+
+| 项 | 级别 | 处理 | 涉及 |
+|---|---|---|---|
+| runner 在沙箱外的 `git add -u`/`checkout-index` 会执行仓库本地配置里定义的 filter 驱动;`.git/config` 对文件工具是否可写取决于 Claude Code 自身,Ballast 既不检查也不文档 | major | 每批沙箱外 git 调用前检查本地/worktree 范围的 `filter.*.clean/smudge/process`,命中 ⇒ infra `git_config_unsafe`(只报键名)。**【未闭合】**:依赖"agent 写不了 `.git/config`"的前提(文件工具不在 `ManagedForms` 内,加条目需要 M0b 取证,【需凭据】),检查与 git 子进程不原子,快照 fallback 不检查。trust-model §2.3 残余 ⑤ 重写并写明前提;§11 对应行改写 | `internal/runner/tree.go`、`docs/trust-model.md`、§11 |
+| 已锁定主机上 hook 路径上下文与 runner `ValidateSpec` 的真实家目录取自 `$HOME` 而不是 passwd/home_root(含 `sudo -E`、被注入环境) | minor ×2 | `layout.WithHome`;`cli.newCoreWith` 锁定时包装 Env,hook/runner/install/tier 共用 | `internal/layout/resolvewith.go`、`internal/cli/wire.go` |
+| `org render --binary` 接受相对路径与裸名(托管 hook 经 `PATH` 解析、denyWrite 出现 `.`) | minor | 要求干净的绝对路径,否则退出 2;architecture §7 同步 | `internal/install/org.go` |
+| `replay` 未注入 `project.Loader` | minor | 注入;`project_invalid` 与 hook 一致 | `internal/cli/cmd_replay.go` |
+| hook 把每行审计的 `tier` 写死为 `T0` | minor | 见 §11;`hook/doc.go` 写明字段语义;`report` 增加 `undetermined` 桶(`tiers` 的闭合枚举追加一个值) | `internal/hook`、`internal/report` |
+| 脱敏器不再遮蔽 URL 用户名,而 §4.3 要求迁入用例"只能更严" | minor | 恢复:`url_password` 遮蔽整个 userinfo;样本与 hook/audit 的期望值同步(§4.2 表更新) | `internal/redact/rules.go`、`internal/redact/testdata/samples.json` |
+| Claude Code 的五个能力单元格被标为已核验却无 M0a 用例 | major | `Verified:false`(architecture §12 契约变更);clients.md、README、architecture §4.1 同步;`lint_cases.json` 对应行更新 | `internal/model/capability.go`、`docs/clients.md`、`README.md` |
+| 取证样本里的真实会话 UUID(`session_id`、`prompt_id`、transcript 文件名) | minor | 全部换成 `<session-N>`、`<prompt-N>`;§0 第 7 条补规则;`probe-m0b/run.sh` 的 `normalize`、`check` 与 `accept-p2.sh` 卫生项补充 | `docs/facts/payloads/**`、`scripts/probe-m0b/**` |
+| 文档与代码/clients.md 不一致:Hermes `pre_verify→Stop`、Hermes 工具表 `patch`/`execute_code`、ConfigChange 已实现、§5.1 事件数、§5.5 "待 M0b"、`verify --status` 查找顺序、`hermes-stop-continue`、MCP 白名单被说成 doctor 会提示 | major/minor | architecture §4.1、§4.3、§4.4、§5.1、§5.5、§7、§13、§14(v2.0.9),dsl-semantics §3/§11,adapter 包注释,trust-model §2、§3 同步;M0b 契约问题 1 的裁决记入 §3.4 Linux 行与 M0b-CONCLUSIONS | 各文档 |
+| 文档把 CI 写成已经在跑 P2 验收 | minor | 改为"计划/待接入"(§10、§5.2、trust-model、scripts/README、脚本注释);CI 接入仍是 §11 的待办 | 同左 |
+| §11 登记表未回填 M0b 与 Hermes 取证结论 | minor | 逐行回填(已核验/部分已核验/已处理),见 §11 | §11 |
+| boundary-t1 的 t1-env-override 没有伪造证据断言;否定断言只看 stdout 为空;`Missing` 用包含判断;git 包装脚本无正向对照;外网对照 SKIP;需凭据行指向不测它们的命令 | major ×2、minor ×3 | 见 `scripts/boundary/t1-container.sh`:真实 pass 记录移入 agent 目录(锁定时不被采信、未锁定时被采信的对照)、`assert_no_job`(退出码 + 无 `verify_hook_start` + 无新请求文件)、`Missing` 用审计里的 `missing` 数组精确比较、包装脚本无条件记调用、桥接地址 HTTP 监听代替外网、cred 模式补 `npm run`(excludedCommands)与 PATH 伪造并让其余两行指向 M0b 的 `managed-denywrite-anydepth`、`mcp-write` | `scripts/boundary/**` |
+| `internal/cli` 的 e2e 在高负载/`-race` 下被 150ms 看门狗误伤 | minor ×2 | `ballast_fault` 构建的 `BALLAST_TEST_WATCHDOG`(e2e 设 5s);生产默认与 30ms 余量不变 | `internal/cli` |
 
 ### v1.5.4(2026-10-16,集成阶段:各单元独立审核遗留 minor 的统一处理)
 

@@ -53,7 +53,12 @@ func runMain(m *testing.M) int {
 	} else if rt := filepath.Join(runtime.GOROOT(), "bin", "go"); fileExists(rt) || fileExists(rt+".exe") {
 		goTool = rt
 	}
-	build := exec.Command(goTool, "build", "-o", ballastBin, "./cmd/ballast")
+	// The binary carries the ballast_fault switches so the e2e tests can relax
+	// the hook's 150 ms watchdog (BALLAST_TEST_WATCHDOG): under -race and a
+	// loaded machine the production wall clock is not a stable assertion.
+	// Production builds ignore every switch (faults_off_test.go; scripts/
+	// fault.sh and accept-m*.sh exercise the production binary).
+	build := exec.Command(goTool, "build", "-tags", "ballast_fault", "-o", ballastBin, "./cmd/ballast")
 	build.Dir = repoRoot
 	// Never reach the network (the module has no dependencies to fetch).
 	build.Env = append(filterEnv(os.Environ(), "GOPROXY"), "GOPROXY=off")
@@ -109,7 +114,7 @@ func newSandbox(t *testing.T) *sandbox {
 			s.env = append(s.env, k+"="+v)
 		}
 	}
-	s.env = append(s.env, "GOPROXY=off", "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
+	s.env = append(s.env, "GOPROXY=off", "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0", "BALLAST_TEST_WATCHDOG=5s")
 	// A fresh gc.stamp keeps SessionStart from spawning the detached
 	// `ballast gc`, which would otherwise race the removal of the sandbox.
 	// The tests of that mechanism remove the stamp themselves.

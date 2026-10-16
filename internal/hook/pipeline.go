@@ -37,6 +37,11 @@ type invocation struct {
 	start time.Time
 	wd    time.Duration
 
+	// tier is the verdict of Deps.Tier.Probe() when this invocation asked for
+	// it (a canonical `ballast verify` only); "" otherwise. The audit lines
+	// of the event carry it; the hook never guesses a tier it did not probe.
+	tier model.Tier
+
 	// weakenedEntries memo (p2.go).
 	weakDone    bool
 	weakEntries []string
@@ -303,7 +308,7 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 	// Audit.
 	ab := &auditBuilder{
 		deps: d, ev: ev, rs: rs, repo: repo, key: key, caps: caps, st: st, readable: readable,
-		cinfo: cinfo, inj: inj, start: inv.start,
+		cinfo: cinfo, inj: inj, start: inv.start, tier: inv.tier,
 	}
 	recs := ab.records(adj, diags, delta)
 	if err := inv.fault(FaultAuditWrite); err != nil {

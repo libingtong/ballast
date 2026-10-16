@@ -64,6 +64,21 @@ func ResolveWith(env sys.Env, o Options) (Layout, error) {
 	return Resolve(lockedEnv{Env: env, home: home})
 }
 
+// WithHome returns env with HomeDir replaced by home and everything else
+// (including the redirect variables, which doctor reports by name) passed
+// through. The CLI hands it to every collaborator of a locked host so that
+// rule `~` expansion, the protected-path context and the runner's sandbox
+// spec use the passwd / home_root directory ResolveWith used and never $HOME
+// (docs/p2-design.md section 3.2).
+func WithHome(env sys.Env, home string) sys.Env { return homeEnv{Env: env, home: home} }
+
+type homeEnv struct {
+	sys.Env
+	home string
+}
+
+func (e homeEnv) HomeDir() (string, error) { return e.home, nil }
+
 // lockedEnv hides the three Ballast redirection variables and replaces the
 // home directory; everything else (CLAUDE_CONFIG_DIR, CODEX_HOME,
 // HERMES_HOME, GOOS) is passed through.

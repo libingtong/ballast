@@ -21,20 +21,22 @@
 
 ## 2. 规则事件 × 动作 能力矩阵
 
+Claude Code 一列里只有 PreToolUse deny/warn(`exit1-json-deny`、`warn-additionalcontext`)与 Stop deny/warn(`stop-cap`、`stop-systemmessage`)有 M0a 取证;标 ✓? 的单元格协议依据来自文档,补取证用例(需要真实模型会话,【需凭据】)后再改回 ✓(v2.0.9 更正,此前误标为已核验)。
+
 符号:**✓** 支持且已核验;**✓?** 支持但未核验(`lint` 给警告);**✗** 不支持(`lint` 报错 `action-unsupported`);**—** 该事件在此客户端不存在。`log` 在事件存在时恒可用,stdout 为空。
 
 | 规则事件 | 动作 | Claude Code | Codex | Cursor | Hermes |
 |---|---|---|---|---|---|
 | PreToolUse | deny | ✓ | ✓? | ✓? | ✓(离线核验,触发时机未核验) |
-| | ask | ✓(`-p` 非交互下可能被直接拒绝) | ✗(Codex 解析但不执行,fail open) | ✓? | ✗ |
+| | ask | ✓?(`-p` 非交互下可能被直接拒绝;M0a 无对应用例) | ✗(Codex 解析但不执行,fail open) | ✓? | ✗ |
 | | warn | ✓(仅 `additionalContext`,不输出决策) | ✗ | ✗ | ✗ |
-| UserPromptSubmit | deny | ✓ | ✗ | ✗ | ✗ |
-| | warn | ✓ | ✓? | ✓?(嵌套格式沿用 pinrule) | ✓(仅 `pre_llm_call`;离线核验,触发时机未核验) |
-| PostToolUse | warn | ✓ | ✓? | ✓? | ✗(只能 log) |
+| UserPromptSubmit | deny | ✓?(M0a 无对应用例) | ✗ | ✗ | ✗ |
+| | warn | ✓?(`additionalContext`;M0a 无对应用例) | ✓? | ✓?(嵌套格式沿用 pinrule) | ✓(仅 `pre_llm_call`;离线核验,触发时机未核验) |
+| PostToolUse | warn | ✓?(M0a 无对应用例) | ✓? | ✓? | ✗(只能 log) |
 | PostToolUseFailure | warn | ✓?(文档列出,未单独取证) | — | — | — |
 | Stop | deny | ✓(`block` 使会话继续,连续 8 次上限,已实测) | ✓?(pinrule 亦标待验证) | ✓?(**语义为续跑**,见 §4.3) | ✓(仅 `pre_verify`;**语义为续跑**,见 §4.4;离线核验,触发时机未核验;`lint` 给 `hermes-stop-continue` 警告) |
 | | warn | ✓(`systemMessage`,放行停止,已实测) | ✗ | ✗ | — |
-| SubagentStop | deny | ✓ | — | ✓?(同 stop) | — |
+| SubagentStop | deny | ✓?(M0a 的 `subagent` 用例只记录 stdin,没有断言 block) | — | ✓?(同 stop) | — |
 | | warn | ✓?(按 Stop 推断) | — | ✗ | — |
 
 规则:

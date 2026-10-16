@@ -111,6 +111,15 @@ func TestWireHookLocked(t *testing.T) {
 			if want := []string{"BALLAST_HOME", "BALLAST_INSTALL_ROOT"}; !reflect.DeepEqual(deps.RedirectsIgnored, want) {
 				t.Errorf("RedirectsIgnored = %v, want %v", deps.RedirectsIgnored, want)
 			}
+			// $HOME differs from passwd: the hook's path context (rule `~`,
+			// protected paths) and the runner's sandbox spec read the home
+			// through this Env and must get the passwd home (audit r1).
+			if h, herr := deps.Env.HomeDir(); herr != nil || h != "/home/real" {
+				t.Errorf("deps.Env.HomeDir() = %q, %v, want /home/real (not $HOME)", h, herr)
+			}
+			if v, _ := deps.Env.Getenv("CLAUDE_CONFIG_DIR"); v != "/home/real/.claude" {
+				t.Errorf("CLAUDE_CONFIG_DIR must keep its meaning, got %q", v)
+			}
 			if deps.ProjectSandbox == nil {
 				t.Error("ProjectSandbox must be wired on a locked host")
 			}
@@ -172,6 +181,9 @@ func TestWireHookUnlocked(t *testing.T) {
 			}
 			if deps.RedirectsIgnored != nil || deps.ProjectSandbox != nil || deps.WeakenedProject != "" {
 				t.Errorf("unlocked host wired lock-only fields: %v %v %q", deps.RedirectsIgnored, deps.ProjectSandbox, deps.WeakenedProject)
+			}
+			if h, _ := deps.Env.HomeDir(); h != "/home/agent" {
+				t.Errorf("unlocked host: deps.Env.HomeDir() = %q, want $HOME", h)
 			}
 			if deps.IDs == nil || deps.Tier == nil {
 				t.Error("IDs and Tier are wired on every host")

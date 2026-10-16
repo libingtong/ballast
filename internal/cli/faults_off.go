@@ -3,6 +3,8 @@
 package cli
 
 import (
+	"time"
+
 	"github.com/libingtong/ballast/internal/ports"
 	"github.com/libingtong/ballast/internal/sys"
 	"github.com/libingtong/ballast/internal/tier"
@@ -15,3 +17,6 @@ import (
 func testLock(sys.Env) (tier.OrgConfig, bool) { return tier.OrgConfig{}, false }
 
 func testTier(sys.Env) ports.TierProbe { return nil }
+
+// testWatchdog: production builds always use hook.DefaultWatchdog.
+func testWatchdog(sys.Env) time.Duration { return 0 }

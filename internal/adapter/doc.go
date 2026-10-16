@@ -23,7 +23,9 @@
 //     envelope, which is normalized like apply_patch (Edit; v1.3);
 //     Cursor Shell ⇒ Bash;
 //     Hermes terminal/shell/execute_shell ⇒ Bash, read_file ⇒ Read,
-//     write_file/create_file ⇒ Write, patch_file/edit_file ⇒ Edit;
+//     write_file/create_file ⇒ Write, patch/patch_file/edit_file ⇒ Edit (patch
+//     in V4A mode: every file of the envelope is a target); execute_code
+//     keeps its raw name (no matcher can see what the script writes);
 //     Task ⇒ Agent; Claude PowerShell stays PowerShell (Shell=powershell);
 //     dedicated gate events use NativeEvent.ToolHint (Cursor
 //     beforeShellExecution ⇒ Bash with command from "command";

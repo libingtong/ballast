@@ -46,7 +46,6 @@
       "event": "Stop",
       "native_event": "Stop",
       "generation": "gen1",
-      "tier": "T0",
       "ballast_version": "9.9.9-test",
       "detail": {
         "diag": "lock_timeout",

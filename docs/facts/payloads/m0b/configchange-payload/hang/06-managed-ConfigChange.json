@@ -1,8 +1,8 @@
 {
-  "session_id": "829d2d6f-c8c2-46f6-81cf-f27959d3c18b",
-  "transcript_path": "<home>/.claude/projects/-<project-key>/829d2d6f-c8c2-46f6-81cf-f27959d3c18b.jsonl",
+  "session_id": "<session-7>",
+  "transcript_path": "<home>/.claude/projects/-<project-key>/<session-7>.jsonl",
   "cwd": "<repo>",
-  "prompt_id": "403b0907-72c9-4492-93fd-638c47d13ed8",
+  "prompt_id": "<prompt-7>",
   "hook_event_name": "ConfigChange",
   "source": "skills",
   "file_path": "<home>/.claude/skills/user-skill/SKILL.md"

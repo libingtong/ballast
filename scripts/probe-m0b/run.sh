@@ -115,14 +115,18 @@ mkdir -p "$OUT_ROOT/payloads/m0b"
 CASES_JSON="$OUT_ROOT/m0b-cases.json"
 [ -s "$CASES_JSON" ] || echo '[]' > "$CASES_JSON"
 
-# 路径规范化:容器内路径 -> 占位符(与 M0a 样本约定一致:<repo>、<home>、claude-<uid>)。
+# 路径规范化:容器内路径 -> 占位符(与 M0a 样本约定一致:<repo>、<home>、claude-<uid>);
+# 会话 ID:session_id / prompt_id 的 UUID 与 transcript 文件名 -> <session> / <prompt>(入库样本带序号:<session-N>)。
 normalize() {
   sed -E \
     -e 's#-home-agent-proj#-<project-key>#g' \
     -e 's#-home-agent-#-<home>-#g' \
     -e 's#/home/agent/proj#<repo>#g' \
     -e 's#/home/agent#<home>#g' \
-    -e 's#claude-[0-9]+-#claude-<uid>-#g'
+    -e 's#claude-[0-9]+-#claude-<uid>-#g' \
+    -e 's#("session_id": *")[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"#\1<session>"#g' \
+    -e 's#("prompt_id": *")[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"#\1<prompt>"#g' \
+    -e 's#/[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\.jsonl#/<session>.jsonl#g'
 }
 
 rc_all=0

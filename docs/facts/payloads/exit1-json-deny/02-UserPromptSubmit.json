@@ -1,8 +1,8 @@
 {
-  "session_id": "a26b1d18-0a83-411b-ba2f-59717df6df12",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/a26b1d18-0a83-411b-ba2f-59717df6df12.jsonl",
+  "session_id": "<session-5>",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/<session-5>.jsonl",
   "cwd": "<probe-root>/work/exit1-json-deny",
-  "prompt_id": "d3e68775-a405-44e4-8819-a54385ebf66a",
+  "prompt_id": "<prompt-5>",
   "permission_mode": "default",
   "hook_event_name": "UserPromptSubmit",
   "prompt": "Run exactly this shell command with the Bash tool: touch probe_a.txt . Do not retry and do not try alternatives. Then reply DONE."

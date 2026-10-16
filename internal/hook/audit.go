@@ -40,6 +40,9 @@ type auditBuilder struct {
 	cinfo    model.StateCommitInfo
 	inj      *model.Injection
 	start    time.Time
+	// tier is AuditRecord.Tier of every line of the event: the probed verdict,
+	// "" (omitted) when the event did not probe.
+	tier model.Tier
 }
 
 // records returns, in order: one hit record per hit, config notices that were
@@ -122,7 +125,7 @@ func (b *auditBuilder) base(t model.AuditType) model.AuditRecord {
 		Event:          ev.Name,
 		NativeEvent:    ev.Native,
 		Generation:     gen,
-		Tier:           model.TierT0,
+		Tier:           b.tier,
 		BallastVersion: b.deps.version(),
 	}
 	if b.repo != nil {

@@ -19,7 +19,9 @@
 #                t1-orgjson, t1-env-override, t1-passwd-missing (uid with no
 #                passwd entry), t1-hooks-outside-sandbox / t1-lower-hooks
 #                (Claude Code with a dummy key and a black-hole endpoint),
-#       net      --network bridge : runner_network deny / allow,
+#       net      --network bridge : runner_network deny / allow (asserted against
+#                a listener on the container's own bridge address; the real-internet
+#                probe is an extra that only runs when the container can reach it),
 #       nobwrap  --network none : t1-sandbox-missing (bwrap removed);
 #     as root it installs ballast at /usr/local/libexec/ballast/ballast and
 #     runs `ballast org render --write --i-am-admin`; everything else runs as
@@ -30,8 +32,8 @@
 #     (-e ANTHROPIC_API_KEY): never written to a file, an image layer or a
 #     log, and no keychain or ~/.claude* file is read.
 #
-# Docker missing: SKIP (exit 0), unless BALLAST_REQUIRE_DOCKER=1 (Linux CI sets
-# it): then FAIL. Build-time network overrides: BALLAST_T1_BUILD_PROXY (or the
+# Docker missing: SKIP (exit 0), unless BALLAST_REQUIRE_DOCKER=1 (the Linux CI
+# job is to set it once impl/ci-fix lands, docs/p2-design.md section 11): then FAIL. Build-time network overrides: BALLAST_T1_BUILD_PROXY (or the
 # caller's HTTPS_PROXY), BALLAST_DEBIAN_MIRROR. BALLAST_T1_IMAGE=<tag> uses an
 # existing image (needs bwrap, git, python3, jq, util-linux, user agent uid 1000)
 # instead of building one. BALLAST_T1_EXTERNAL_URL overrides the external

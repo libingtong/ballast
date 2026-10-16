@@ -1,11 +1,13 @@
 package hook
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/libingtong/ballast/internal/layout"
 	"github.com/libingtong/ballast/internal/model"
 )
 
@@ -198,6 +200,19 @@ func TestToolEvents(t *testing.T) {
 				t.Errorf("path context: %+v", in.Paths)
 			}
 		})
+	}
+}
+
+// On a redirect-locked host the CLI hands the hook an Env whose HomeDir is the
+// passwd home, not $HOME (audit r1): the rule path context follows it.
+func TestPathContextHomeFollowsTheLockedEnv(t *testing.T) {
+	h := newHarness(t)
+	lockedHome := filepath.Join(h.sb.Home, "passwd-home")
+	h.deps.Env = layout.WithHome(h.deps.Env, lockedHome)
+	mustExit0(t, h, h.claude("PreToolUse", preToolBash))
+	in := h.engine.lastInput()
+	if in == nil || in.Paths.Home != lockedHome {
+		t.Errorf("path context home = %+v, want %s", in, lockedHome)
 	}
 }
 

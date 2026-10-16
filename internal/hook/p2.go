@@ -191,6 +191,7 @@ func (inv *invocation) syntheticDecision(ev *model.Event, repo *model.RepoInfo, 
 		return nil, nil
 	}
 	info := d.Tier.Probe()
+	inv.tier = info.Tier
 	if info.Tier != model.TierT1 {
 		if info.Declared == model.TierT1 {
 			return nil, []diag{{name: model.DiagTierMismatch, fields: map[string]any{

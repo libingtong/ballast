@@ -32,6 +32,9 @@
 #   BALLAST_BUILD_GOPROXY=https://goproxy.example.org,direct  (go mod download)
 #   BALLAST_DOCKER_VERBOSE=1                                   (show the build output)
 #   BALLAST_DOCKER_REBUILD=1                                   (ignore an existing image)
+#   BALLAST_DOCKER_USER=0:0                                    (run the tests as root instead of uid 1000, for the
+#                                                              few tests that need root to create root-owned files,
+#                                                              e.g. TestBwrapPathDirectoryMustBeTrusted)
 # Package signatures are still verified by apt, module hashes by go.sum.
 #
 # Without Docker the script prints SKIP and exits 0, unless
@@ -116,7 +119,7 @@ fi
 echo "sandbox-docker: go test -count=1 $*"
 docker run --rm \
   --network none \
-  --user 1000:1000 \
+  --user "${BALLAST_DOCKER_USER:-1000:1000}" \
   --security-opt seccomp=unconfined \
   --security-opt apparmor=unconfined \
   --security-opt systempaths=unconfined \

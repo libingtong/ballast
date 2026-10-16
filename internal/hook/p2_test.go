@@ -381,7 +381,7 @@ func TestConfigChangeNeverBlocksAndTouchesNoState(t *testing.T) {
 	}
 	r := h.audit.all()[0]
 	if r.Client != model.ClientClaude || r.SessionID != "s1" || r.RepoInst != "0123456789abcdef" || r.Event != model.EventConfigChange ||
-		r.NativeEvent != "ConfigChange" || r.Tier != model.TierT0 || r.BallastVersion != "9.9.9-test" || r.TS != testNow {
+		r.NativeEvent != "ConfigChange" || r.Tier != "" || r.BallastVersion != "9.9.9-test" || r.TS != testNow {
 		t.Errorf("record common fields: %+v", r)
 	}
 }
@@ -567,4 +567,48 @@ func TestSpawnErrorHomePathsAreScrubbed(t *testing.T) {
 			t.Errorf("home path in the audit detail: %s", r.Detail)
 		}
 	}
+}
+
+// The audit Tier is the verdict the hook actually probed: a canonical verify
+// stamps its lines with the probe result, every other event leaves it out
+// instead of claiming T0 (audit r1).
+func TestAuditTierIsOnlyWhatWasProbed(t *testing.T) {
+	h, tier := t1Harness(t)
+	mustExit0(t, h, h.claude("PreToolUse", verifyStdin))
+	var diagLines int
+	for _, r := range h.audit.all() {
+		diagLines++
+		if r.Tier != model.TierT1 {
+			t.Errorf("%s line of a T1 verify: tier %q, want T1", r.Type, r.Tier)
+		}
+	}
+	if diagLines == 0 {
+		t.Fatal("no audit line")
+	}
+
+	// Declared T1 but detected T0: tier_mismatch carries the probed T0.
+	h2, tier2 := t1Harness(t)
+	tier2.info = model.TierInfo{Tier: model.TierT0, Declared: model.TierT1, Missing: []string{model.TierMissingBinaryOwner}}
+	mustExit0(t, h2, h2.claude("PreToolUse", verifyStdin))
+	for _, r := range h2.audit.all() {
+		if r.Tier != model.TierT0 {
+			t.Errorf("tier_mismatch line: tier %q, want the probed T0", r.Tier)
+		}
+	}
+
+	// An event that never probes has no tier (the golden audit lines under
+	// testdata/golden carry none either).
+	h3 := newHarness(t)
+	tier3 := &fakeTier{info: model.TierInfo{Tier: model.TierT1, Declared: model.TierT1}}
+	h3.deps.Tier = tier3
+	mustExit0(t, h3, h3.claude("PreToolUse", preToolBash))
+	if tier3.calls != 0 {
+		t.Fatalf("an ordinary command probed the tier %d times", tier3.calls)
+	}
+	for _, r := range h3.audit.all() {
+		if r.Tier != "" {
+			t.Errorf("unprobed event: %s line has tier %q", r.Type, r.Tier)
+		}
+	}
+	_ = tier
 }

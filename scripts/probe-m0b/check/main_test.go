@@ -180,6 +180,9 @@ func TestHygienePatterns(t *testing.T) {
 		"private key":         `-----BEGIN RSA PRIVATE KEY-----`,
 		"bearer":              `Authorization: Bearer abcdefghijklmnopqrstuvwxyz`,
 		"directory structure": `x [~]/NewCode`,
+		"session id":          `{"session_id": "9ea44634-b4c0-4890-b35e-cfa9fd6251c2"}`,
+		"prompt id":           `{"prompt_id":"daa1a19b-ae63-4f0b-8e5b-5445558f5be1"}`,
+		"transcript name":     `{"transcript_path":"~/x/9ea44634-b4c0-4890-b35e-cfa9fd6251c2.jsonl"}`,
 	}
 	for name, content := range bad {
 		if name == "directory structure" {
@@ -191,7 +194,8 @@ func TestHygienePatterns(t *testing.T) {
 			t.Errorf("%s: %q was not flagged", name, content)
 		}
 	}
-	ok := []string{`{"cwd":"<repo>","transcript_path":"<home>/.claude/projects/x.jsonl"}`, `ANTHROPIC_API_KEY=dummy-not-a-credential`, `ANTHROPIC_API_KEY=<用户自己提供>`}
+	ok := []string{`{"cwd":"<repo>","transcript_path":"<home>/.claude/projects/x.jsonl"}`, `ANTHROPIC_API_KEY=dummy-not-a-credential`, `ANTHROPIC_API_KEY=<用户自己提供>`,
+		`{"session_id": "<session-3>","prompt_id":"<prompt-3>","transcript_path":"~/x/<session-3>.jsonl"}`}
 	for _, content := range ok {
 		var got []string
 		scanText("f", content, func(f string, a ...any) { got = append(got, f) })

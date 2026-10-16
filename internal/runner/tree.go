@@ -71,6 +71,13 @@ var (
 	// ignored, removed from the index, a symlink, or matched by an exempt
 	// glob. Test not run (see step 1b for why a T0 record would not help).
 	ErrProjectJSONUntracked = errors.New("runner: project_json_untracked")
+	// ErrGitConfigUnsafe (audit r1): the repository's own git config (local
+	// or per-worktree scope, includes resolved by git itself) defines a
+	// command-running key — filter.<name>.clean / smudge / process — that
+	// the out-of-sandbox git children of the runner would execute while
+	// they hash or check out agent-shaped content. Test not run; only the
+	// key name is reported, never the command.
+	ErrGitConfigUnsafe = errors.New("runner: git_config_unsafe")
 	// ErrMaterialize: any other materialization failure (git child failed,
 	// copy failed, ResolveGitDirs rejected the repo's git dirs, the real
 	// index is not a regular file or exceeds MaxIndexBytes).
@@ -304,6 +311,9 @@ func Materialize(opt Options, repo model.RepoInfo, jobID string, pin PinnedEntry
 	git := func(index, workTree, dir string, args ...string) ([]byte, error) {
 		return runGit(opt, repo.GitDir, workTree, index, dir, args...)
 	}
+	if err := checkLocalGitConfig(git, idx, repo.Toplevel); err != nil {
+		return bad(ErrGitConfigUnsafe, "%v", err)
+	}
 	if _, err := git(idx, repo.Toplevel, repo.Toplevel, "add", "-u"); err != nil {
 		return bad(ErrMaterialize, "git add -u: %v", err)
 	}
@@ -350,6 +360,10 @@ func Materialize(opt Options, repo model.RepoInfo, jobID string, pin PinnedEntry
 	}
 
 	// Step 2: checkout of T_full into Dir (no .git).
+	// Checkout runs smudge drivers: look at the config once more.
+	if err := checkLocalGitConfig(git, idxTree, repo.Toplevel); err != nil {
+		return bad(ErrGitConfigUnsafe, "%v", err)
+	}
 	if _, err := git(idxTree, repo.Toplevel, repo.Toplevel, "read-tree", string(full)); err != nil {
 		return bad(ErrMaterialize, "git read-tree: %v", err)
 	}
@@ -388,6 +402,80 @@ func runGit(opt Options, gitDir, workTree, index, dir string, args ...string) ([
 		"GIT_DIR="+gitDir, "GIT_WORK_TREE="+workTree, "GIT_INDEX_FILE="+index, "GIT_OPTIONAL_LOCKS=0")
 	full := append([]string{"-c", "core.fsmonitor=false"}, args...)
 	return opt.gitRunner().Run(gitCtx(), dir, env, full...)
+}
+
+// checkLocalGitConfig refuses to run the out-of-sandbox git children when the
+// repository's own config (scope local or worktree; git resolves includes
+// itself) defines a filter driver command. The runner pins only
+// core.fsmonitor with -c; a filter driver selected through .gitattributes
+// (which the agent shapes) would otherwise run outside every sandbox. User
+// and system config are the user's own and stay trusted (trust-model residual
+// 5). The check and the git children that follow are not atomic: it narrows
+// the window, it does not remove the assumption that the agent cannot write
+// <repo>/.git/config (docs/p2-design.md section 11).
+func checkLocalGitConfig(git gitFn, index, top string) error {
+	out, err := git(index, top, top, "config", "--list", "--show-scope", "-z")
+	scoped := true
+	if err != nil {
+		// git before 2.26 has no --show-scope: list the repository's own
+		// files (includes are not expanded by --local / --worktree, so an
+		// include is treated as unsafe, see findUnsafeConfigKey).
+		scoped = false
+		var werr error
+		if out, err = git(index, top, top, "config", "--local", "--list", "-z"); err != nil {
+			return fmt.Errorf("git config --list: %w", err)
+		}
+		var wout []byte
+		if wout, werr = git(index, top, top, "config", "--worktree", "--list", "-z"); werr == nil {
+			out = append(append(out, 0), wout...)
+		}
+	}
+	if scope, key := findUnsafeConfigKey(string(out), scoped); key != "" {
+		return fmt.Errorf("repository config (%s scope) sets %s", scope, key)
+	}
+	return nil
+}
+
+// findUnsafeConfigKey scans the NUL-separated output of `git config --list -z`.
+// scoped: "--show-scope" output, "<scope> NUL <key> [NL <value>] NUL" per entry,
+// only the local and worktree scopes are looked at (git expanded the
+// includes). Unscoped: "<key> [NL <value>] NUL" per entry of the repository's
+// own files; there git did not expand includes, so any include key is unsafe
+// (the included file could define a driver and is agent-writable if the
+// config is).
+func findUnsafeConfigKey(out string, scoped bool) (scope, key string) {
+	fields := strings.Split(out, "\x00")
+	if scoped {
+		for i := 0; i+1 < len(fields); i += 2 {
+			k, _, _ := strings.Cut(fields[i+1], "\n")
+			if (fields[i] == "local" || fields[i] == "worktree") && isFilterCommandKey(strings.ToLower(k)) {
+				return fields[i], k
+			}
+		}
+		return "", ""
+	}
+	for _, f := range fields {
+		k, _, _ := strings.Cut(f, "\n")
+		lk := strings.ToLower(k)
+		if isFilterCommandKey(lk) || lk == "include.path" || strings.HasPrefix(lk, "includeif.") && strings.HasSuffix(lk, ".path") {
+			return "local", k
+		}
+	}
+	return "", ""
+}
+
+// isFilterCommandKey matches filter.<name>.{clean,smudge,process} (lowercase
+// key; the <name> part may itself contain dots).
+func isFilterCommandKey(key string) bool {
+	if !strings.HasPrefix(key, "filter.") {
+		return false
+	}
+	for _, suf := range []string{".clean", ".smudge", ".process"} {
+		if strings.HasSuffix(key, suf) && len(key) > len("filter.")+len(suf) {
+			return true
+		}
+	}
+	return false
 }
 
 func rmExemptArgs(exempt []string) []string {
@@ -688,6 +776,9 @@ func TreeSEnd(opt Options, repo model.RepoInfo, t Tree, exempt []string) (model.
 	idx := filepath.Join(t.Root, "index.tree")
 	git := func(index, workTree, dir string, args ...string) ([]byte, error) {
 		return runGit(opt, repo.GitDir, workTree, index, dir, args...)
+	}
+	if err := checkLocalGitConfig(git, idx, t.Dir); err != nil {
+		return "", fmt.Errorf("%w: %v", ErrGitConfigUnsafe, err)
 	}
 	if _, err := git(idx, t.Dir, t.Dir, "add", "-u"); err != nil {
 		return "", fmt.Errorf("git add -u (end): %w", err)

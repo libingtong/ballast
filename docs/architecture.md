@@ -191,12 +191,12 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 
 | 客户端 | 事件 | deny | ask | warn |
 |---|---|---|---|---|
-| **Claude Code**(一级) | PreToolUse | ✓ `permissionDecision:"deny"` | ✓ `"ask"`(`-p` 下可能被拒) | ✓ 仅 `additionalContext`,不输出决策(M0a) |
-| | UserPromptSubmit | ✓ `decision:"block"` | ✗ | ✓ `additionalContext` |
-| | PostToolUse | ✗(已执行) | ✗ | ✓ `additionalContext` |
+| **Claude Code**(一级;v2.0.9 起仅 PreToolUse deny/warn、Stop deny/warn 标已核验,其余单元格见下 `【未核验】`) | PreToolUse | ✓ `permissionDecision:"deny"` | ✓ `"ask"`(`-p` 下可能被拒)【未核验:M0a 无对应用例】 | ✓ 仅 `additionalContext`,不输出决策(M0a) |
+| | UserPromptSubmit | ✓ `decision:"block"`【未核验:M0a 无对应用例】 | ✗ | ✓ `additionalContext`【未核验:M0a 无对应用例】 |
+| | PostToolUse | ✗(已执行) | ✗ | ✓ `additionalContext`【未核验:M0a 无对应用例】 |
 | | PostToolUseFailure | ✗ | ✗ | ✓ `additionalContext`【未核验:文档列出,未单独取证】 |
 | | Stop | ✓ `decision:"block"`(会话继续,8 次上限,A10 已实测) | ✗ | ✓ `systemMessage`(放行停止,M0a 已实测) |
-| | SubagentStop | ✓ `decision:"block"` | ✗ | ✓ `systemMessage`【未核验:按 Stop 推断】 |
+| | SubagentStop | ✓ `decision:"block"`【未核验:M0a 的 `subagent` 用例只记录 stdin,没有断言 block】 | ✗ | ✓ `systemMessage`【未核验:按 Stop 推断】 |
 | **Codex**(二级,全部【未核验】) | PreToolUse(含 PermissionRequest) | ✓ PreToolUse:`permissionDecision:"deny"`;PermissionRequest:`decision.behavior:"deny"` | ✗(Codex 解析但不执行,fail open) | ✗ |
 | | UserPromptSubmit | ✗ | ✗ | ✓ `additionalContext` |
 | | PostToolUse | ✗ | ✗ | ✓ `additionalContext` |
@@ -207,10 +207,11 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | | PostToolUse | ✗ | ✗ | ✓ `{"additional_context":…}` |
 | | Stop / SubagentStop | ✓ **语义为续跑**:`{"followup_message":R}`,条目带 `loop_limit:10`;lint 给 `cursor-stop-followup` 警告 | ✗ | ✗ |
 | | PostToolUseFailure | 事件不存在 | | |
-| **Hermes**(三级,尽力,全部【未核验】) | PreToolUse(pre_tool_call) | ✓ `{"decision":"block","reason":R}` | ✗ | ✗ |
+| **Hermes**(三级,尽力;v2.0 起做过**离线核验**(`hermes hooks test`,`docs/facts/hermes-cases.json`),**触发时机未核验**) | PreToolUse(pre_tool_call) | ✓ `{"decision":"block","reason":R}` | ✗ | ✗ |
 | | UserPromptSubmit(pre_llm_call) | ✗ | ✗ | ✓ `{"context":…}` |
 | | PostToolUse(post_tool_call) | ✗ | ✗ | ✗(只能 log) |
-| | Stop / SubagentStop / PostToolUseFailure | 事件不存在(on_session_end 归一为 SessionEnd,不能干预) | | |
+| | Stop(`pre_verify`) | ✓ `{"decision":"block","reason":R}`,**语义为续跑**(agent 继续,受 `agent.max_verify_nudges` 限制;`lint` 给 `hermes-stop-continue` 警告) | ✗ | ✗ |
+| | SubagentStop / PostToolUseFailure | 事件不存在(on_session_end 归一为 SessionEnd,不能干预) | | |
 
 **规则**:
 
@@ -231,10 +232,10 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 
 | 客户端 | 原生事件 → 归一事件(安装全部) |
 |---|---|
-| Claude Code | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, SubagentStop, SessionEnd(同名);另有**仅解析**的 PreCompact、PostCompact、SubagentStart(表中 `Install=false`:适配器能解析,安装器与 doctor 跳过,规则不能引用;v1.3) |
+| Claude Code | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, SubagentStop, SessionEnd(同名);P2 起另有 **ConfigChange**(`Install=true`,只审计、规则不能引用,v2.0);另有**仅解析**的 PreCompact、PostCompact、SubagentStart(表中 `Install=false`:适配器能解析,安装器与 doctor 跳过,规则不能引用;v1.3)。共 10 个已安装事件 |
 | Codex | SessionStart, UserPromptSubmit, PreToolUse, **PermissionRequest→PreToolUse**, PostToolUse, Stop |
 | Cursor | sessionStart→SessionStart, beforeSubmitPrompt→UserPromptSubmit, preToolUse→PreToolUse, beforeShellExecution→PreToolUse(Bash), beforeMCPExecution→PreToolUse(mcp__*), beforeReadFile→PreToolUse(Read), postToolUse→PostToolUse, afterAgentResponse→AgentResponse(仅记账), stop→Stop, subagentStop→SubagentStop |
-| Hermes | on_session_start→SessionStart, pre_llm_call→UserPromptSubmit, pre_tool_call→PreToolUse, post_tool_call→PostToolUse, on_session_end→SessionEnd |
+| Hermes | on_session_start→SessionStart, pre_llm_call→UserPromptSubmit, pre_tool_call→PreToolUse, post_tool_call→PostToolUse, **pre_verify→Stop**(v2.0:续跑语义,离线核验,触发时机未核验), on_session_end→SessionEnd |
 
 字段回退:session = `session_id` → `conversation_id`(Cursor);agent = `agent_id` → `subagent_id`(Cursor)。`effort` 可为对象 `{level}` 或字符串。Claude 压缩用内部 agent(`agent_type` 存在且为空的 SubagentStop)默认忽略(M0a)。
 
@@ -246,7 +247,8 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | Codex `exec_command` / `shell` | Bash | `cmd` 为字符串或 argv 数组(数组按 shell 引号拼接)。例外(v1.3):argv 形如 `["apply_patch"\|"applypatch", …, "<envelope>"]` 时按 `apply_patch` 归一为 Edit(RawName 保留原名);字符串形式的 `apply_patch <<EOF` 仍是 Bash(已知局限) |
 | Cursor `Shell` | Bash | |
 | Hermes `terminal` / `shell` / `execute_shell` | Bash | |
-| Hermes `read_file` / `write_file` / `create_file` / `patch_file` / `edit_file` | Read / Write / Write / Edit / Edit | |
+| Hermes `read_file` / `write_file` / `create_file` / `patch` / `patch_file` / `edit_file` | Read / Write / Write / Edit / Edit / Edit | `patch` 的 V4A 模式取信封里的全部目标文件(`internal/adapter/hermes/patch.go`) |
+| Hermes `execute_code` | 保持原名 | Python 脚本,没有匹配器能看出它写哪些文件(trust-model §2.1 第 1 类) |
 | `Task` | Agent | |
 | Claude `PowerShell` | PowerShell | `Shell=powershell`,走 `ps` 匹配器 |
 
@@ -282,7 +284,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 }}
 ```
 
-工具事件(PreToolUse、PostToolUse、PostToolUseFailure)带 `"matcher":"*"`,其余不带 matcher。manifest 记录内层 `{type,command,args}` 对象的 hash;外层分组在其 `hooks` 为空时随卸载删除。完整 9 个事件的期望输出见 `internal/install/testdata/golden.json`。
+工具事件(PreToolUse、PostToolUse、PostToolUseFailure)带 `"matcher":"*"`,其余不带 matcher。manifest 记录内层 `{type,command,args}` 对象的 hash;外层分组在其 `hooks` 为空时随卸载删除。完整 10 个事件(含 ConfigChange)的期望输出见 `internal/install/testdata/golden.json`。
 
 ### 5.2 Codex
 
@@ -311,7 +313,7 @@ hooks:
 - 只认块状 YAML;`hooks:` 段使用 flow 风格或锚点时报 `ErrSettingsParse` 并拒绝写入。
 - 提示用户以 `--accept-hooks` 同意(pinrule 记录)。
 
-### 5.5 `ballast org render`(T1 托管模板,【未核验】待 M0b)
+### 5.5 `ballast org render`(T1 托管模板;键名与合并行为已由 M0b 核验,【需凭据】项见 trust-model §2.2)
 
 输出 Claude 托管设置片段(只打印;`--write --i-am-admin` 且为 root 时写 `<托管目录>/managed-settings.d/ballast.json`):
 
@@ -331,7 +333,7 @@ hooks:
 }
 ```
 
-MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question)。
+MCP 白名单键名已由 M0b `mcp-allowlist-nocred` 核对:`allowedMcpServers`(条目 `{"serverName":"…"}`)、`deniedMcpServers`、`allowManagedMcpServersOnly`;`org render` 没有对应命令行参数(`install.OrgRenderOptions.MCPAllow` 只供库调用),管理员手工补充;`tier.Detect` 与 doctor 不检查白名单。
 
 v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.ManagedForms`(新增 `./.claude/settings*.json`;v2.0.5 再增任意深度形式 `**/.ballast`、`**/.claude/settings*.json`;`--protect` 的条目同时写 `T(e)` 与 `T(e/**)` 并写进 org.json `protected_extra`),共享 golden `internal/tier/testdata/managed_forms.json`;输出增加 `org.json` 段,`--write --i-am-admin` 同时写 `<托管目录>/ballast/org.json`;各键在真实托管环境中的效果由 M0b 取证,见 `docs/p2-design.md` §3.5、§6。
 
@@ -369,7 +371,7 @@ v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.Mana
 | `verify --foreground <name>` | 同 `--status`;2 配置错误 |
 | `verify --run-job <id>`(内部) | 同 `--status` |
 | `verify --hook-start --request <id> --cwd <dir> --client <c> [--session] [--agent] [--project-dir <dir>] -- [names]`(内部,v2.0;`--project-dir` 为 v2.0.4) | 0 已启动(stdout 每个 job 一行 `job=<id> name=<name>`,第一个 job 的 id 就是 request id);2 配置错误或参数不合 `model.ParseHookStartArgv`(配置错误时请求文件仍写入并带 error);5 基础设施错误。参数格式由 `model.HookStartArgv` 冻结;由 hook 在 T1 下对规范 `ballast verify` 分离启动,不供人直接使用 |
-| `verify --status <request_id>`(v2.0 扩展;P2-CLI 实现) | 没有同名 job 时回退读 `requests/<repo_inst>/<request_id>.json`(`runner.RequestStatus`,各 repo_inst 目录都找):stdout 先打印 `request=<id>`,再每个 job 一行(格式同 `--status`;没有记录又不在运行的 job 为 `state=lost`);单 job 的退出码同该 job 的 `--status`;多 job 取最差(fail 1 > timeout 3 > signal 4 > infra 5 > 运行中 6 > pass 0);请求文件带 error 且没有 job ⇒ 5;**请求文件也找不到 ⇒ 11(无记录)**,输出与找不到 job 时相同。`--json` 另含 `request_id` 与 `error` |
+| `verify --status <request_id>`(v2.0 扩展;P2-CLI 实现) | **v2.0.9 更正查找顺序**:请求有多个 job 时,先于同名 job 读 `requests/<repo_inst>/<request_id>.json`(`runner.RequestStatus`,各 repo_inst 目录都找;hook 代起时 request id 就是第一个 job 的 id,同名 job 总是存在,若同名 job 优先则"多 job 取最差"永远走不到);只有一个 job,或 id 不是请求时,按 job 查找;都找不到才是 11。读到请求文件时:stdout 先打印 `request=<id>`,再每个 job 一行(格式同 `--status`;没有记录又不在运行的 job 为 `state=lost`);单 job 的退出码同该 job 的 `--status`;多 job 取最差(fail 1 > timeout 3 > signal 4 > infra 5 > 运行中 6 > pass 0);请求文件带 error 且没有 job ⇒ 5;**请求文件和 job 都找不到 ⇒ 11(无记录)**,输出与找不到 job 时相同。`--json` 另含 `request_id` 与 `error` |
 | `report --out <file> [--since 30d] [--force]`(v2.0;P2-CLI 实现) | 0 已写入(stdout 一行说明,仅本地文件、未发送任何数据);1 隐私自检失败(`report.ErrPrivacy`,什么都不写,这是 bug);2 用法(缺 `--out`、`--since` 非法、多余参数);4 文件已存在且无 `--force`;5 读审计或写文件失败(含目标的父路径是普通文件)。相对 `--out` 按工作目录解析,父目录不存在时创建;内置规则 id 原样输出、其余输出 `h:`+sha256 前 12 位 |
 | `init [--yes] [--force] [--dry-run]` | 0 已写入/无需写入/dry-run;1 用户拒绝或未探测到栈;2 用法;3 已有 project.json 且无 `--force` |
 | `stats [--since] [--by] [--rule --sample N] [--json]` | 0;2 用法;5 读审计失败 |
@@ -379,7 +381,7 @@ v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.Mana
 | `install --client … [--dry-run] [--codex-trust] [--binary] [--force]` | 0 成功或无变化;1 托管层已部署而拒绝;2 用法/客户端未检测到且无 `--force`/二进制路径不稳定;3 配置解析失败(未写入);5 I/O |
 | `uninstall [--client\|--all] [--dry-run]` | 0;1 部分条目被用户改过而保留(已警告);3 解析失败;5 I/O |
 | `doctor [--json]` | 0 无 fail(可有 warn);1 有 fail。P2:`tier.*` 检查(`tier.level` 逐条列出 Missing,`tier.declared_mismatch`、`tier.runner_sandbox`(沙箱探测由 CLI 注入)、`tier.redirect_ignored`、`tier.locked_home`、`tier.repo_sandbox_weakened`(当前目录与仓库顶层)、`tier.binary_hardening`)。已锁定主机的家目录取不到时 doctor 仍运行到 `tier.locked_home`(此时用 `$HOME` 作诊断回退,重定向变量仍被忽略,不读写状态),其余命令与 hook 则失败(hook 按 B7 放行) |
-| `org render [--client claude-code] [--binary] [--home-root <dir>]... [--protect <path>]... [--part managed-settings\|org-json] [--write --i-am-admin]` | 0;2 用法(含 `--home-root` 不合规,以及 `--write` 的家目录预检失败:`SUDO_UID` 的用户在 passwd 里没有条目又没有 `home_root`,此时什么都不写);4 `--write` 但非 root 或缺 `--i-am-admin`;5 I/O。stdout 恒为**单个合法 JSON 文档**,可直接重定向成文件:`--part managed-settings`(缺省)是托管设置片段,`--part org-json` 是 org.json(无效取值与 Windows 上的 `org-json` 退出 2);org.json 各字段的风险提示写 stderr;`--write` 不受 `--part` 影响,先写 `managed-settings.d/ballast.json` 再写 `<托管目录>/ballast/org.json`(写入即锁定本机),写入的文件是纯 JSON |
+| `org render [--client claude-code] [--binary <绝对路径>] [--home-root <dir>]... [--protect <path>]... [--part managed-settings\|org-json] [--write --i-am-admin]` | 0;2 用法(含 `--binary` 不是干净的绝对路径(相对路径与裸名会让托管 hook 经 `PATH` 解析、denyWrite 出现 `.`;Windows 要求盘符路径)、`--home-root` 不合规,以及 `--write` 的家目录预检失败:`SUDO_UID` 的用户在 passwd 里没有条目又没有 `home_root`,此时什么都不写);4 `--write` 但非 root 或缺 `--i-am-admin`;5 I/O。stdout 恒为**单个合法 JSON 文档**,可直接重定向成文件:`--part managed-settings`(缺省)是托管设置片段,`--part org-json` 是 org.json(无效取值与 Windows 上的 `org-json` 退出 2);org.json 各字段的风险提示写 stderr;`--write` 不受 `--part` 影响,先写 `managed-settings.d/ballast.json` 再写 `<托管目录>/ballast/org.json`(写入即锁定本机),写入的文件是纯 JSON |
 | `gc`(内部) | 0;5(写 stderr,不影响任何人)。P2 起另清理 `requests/` 与 `quarantine/` 下超过 30 天的条目、`work/<job_id>/` 中 job 已结束且超过 24 小时的残留(`runner.GCRequests`) |
 | `version` | 0 |
 
@@ -528,7 +530,7 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 | Cursor `afterAgentResponse` | 归一为 AgentResponse,仅存最终文本供后续 `stop` 规则使用 | Cursor stop payload 可能缺 `last_assistant_message` |
 | shell 读取目标 | `CommandNode.Reads`(bashparse/psparse 提取),Bash/PowerShell 的 PostToolUse 把非动态目标并入已读集合 | Codex 没有 Read 工具;否则 `read-before-edit` 在 Codex 上对每个已存在文件的 `apply_patch` 都命中(审核 major 1) |
 | `verify --check` 与 `GIT_INDEX_FILE` | 热路径忽略;`--check --commit` 由 CLI 读取并经 `CheckOptions.IndexFile` 传入 | pre-commit 阶段 git 指向将要提交的索引,`commit -a`/带路径提交才能判对(审核 major 2) |
-| ConfigChange 审计 hook(计划 M4 内容列) | 归入 P2,本期不实现,也不在安装事件列表中 | M0a 没抓过该事件的 payload(字段【未核验】);T0 下 `no-tamper` 已能检测对 settings 的改写,ConfigChange 只是更晚的第二信号;补抓 payload 后再做(计划 v0.4 变更 §4) |
+| ConfigChange 审计 hook(计划 M4 内容列) | **v2.0.9 更正:已在 P2 实现**(`model.NativeEventTable` 的 `ConfigChange` 行 `Install:true, Verified:true`,只审计、规则不能引用,安装事件共 10 个)。原先"归入 P2、本期不实现"的决定被 P2 取代 | M0b `configchange-payload` 抓到了 payload;T0 下 `no-tamper` 仍是主信号,ConfigChange 是更晚的第二信号(托管目录新增 `managed-settings.d/` 文件与 `~/.claude.json` 不触发它) |
 | 卸载不关闭 `[features] hooks = true`(§5.2) | 维持,**仅限原文件没有该键(`absent`)**;原值为显式 `false` 的,安装前警告、卸载恢复 `false`(v1.8,见 §14);计划 M4"往返 diff 为空"改为"除 `features.hooks` 外为空",`install-e2e.sh` 对"原文件没有 hooks 键"的夹具显式断言该残留 | 同一 `hooks.json` 里可能有别的工具的 hook 依赖该开关,关掉会静默失效;manifest 里的 `set_by_ballast` 只用于提示。用户显式写了 `false` 则相反:卸载后保持 `true` 会把用户原本关掉的其他 hook 静默打开,所以那种情况要恢复 |
 | 提交作者邮箱 | 发布前由仓库所有者决定是否改写历史(`git filter-repo --mailmap` → noreply 邮箱,并设置仓库级 `user.email`) | 历史里的工作邮箱公开后无法撤回;发布动作不由实现任务代做 |
 | 历史 blob 中的本机标识(v1.7) | **历史 blob 中残留的本机标识需由仓库所有者决定是否 `git filter-repo`**(`--replace-text` 替换用户名、`claude-<uid>`、家目录下的项目路径等;或发布前 squash 历史)。HEAD 内容已干净(卡点:`git grep` 对这些模式为 0,`dist/` 已被忽略),但早期提交的 blob 仍含取证样本里的旧路径片段和旧测试数据里的示例家目录。**发布步骤**:① 在干净克隆里 `git log -p --all \| grep -E '<用户名>\|claude-[0-9]+\|家目录下的项目路径'` 复核;② 所有者决定改写则先 `git filter-repo --replace-text`(需要同时 `--mailmap` 处理作者邮箱),再重复 ① 直到为 0;③ 不改写则在发布说明里承认历史保留这些标识。实现任务**不改写历史** | 改写历史会改变所有提交 id、使既有分支与审计引用失效,且公开后无法撤回,必须由所有者决定;发布动作不由实现任务代做 |
@@ -537,6 +539,18 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 ---
 
 ## 14. 修订记录
+
+### v2.0.9(2026-10-16,集成后第 1 轮系统审计)
+
+配套 `docs/p2-design.md` v1.5.5(其 §13 有逐条处置)。其中**契约变更**(architecture §12 第 2 条)只有下面三项,其余是追加或文档更正。
+
+| 项 | 处理 | 涉及文件 |
+|---|---|---|
+| Claude Code 的 PreToolUse `ask`、UserPromptSubmit `deny`/`warn`、PostToolUse `warn`、SubagentStop `deny` 被标为已核验,但 M0a 没有对应取证用例(**契约变更:`Verified` 改为 `false`**) | `ballast lint` 对这些组合给 `action-unverified` 警告;§4.1 标【未核验】;`docs/clients.md`、README 同步;补取证(需真实模型会话,【需凭据】)后再改回 | `internal/model/capability.go`、`internal/dsl/testdata/lint_cases.json`、`docs/clients.md`、`README.md` |
+| 审计行的 `tier` 由写死 `T0` 改为只在探测过的事件上出现(**契约变更:语义**);`report` 的 `tiers` 追加闭合枚举值 `undetermined` | `internal/hook/doc.go`、`report` 包注释写明;hook golden 与 `report.golden.json` 同步 | `internal/hook`、`internal/report` |
+| `org render --binary` 必须是干净的绝对路径,否则退出 2(**行为收紧**,§7 的 `org render` 行) | `install.OrgRenderFull`;`install --binary` 本来就是如此 | `internal/install/org.go` |
+| 追加(无契约影响) | `layout.WithHome`;`runner.ErrGitConfigUnsafe`(infra `git_config_unsafe`);`replay.Deps.Project` 由 CLI 注入(v1.3 接线项补齐);`ballast_fault` 构建的 `BALLAST_TEST_WATCHDOG`;脱敏器 `url_password` 遮蔽整个 userinfo(恢复旧 hook 行为) | 见 p2-design §13 |
+| 文档同步 | §4.1 Hermes 行(`pre_verify→Stop`、离线核验)、§4.3(Claude 的 ConfigChange、Hermes 的 `pre_verify`)、§4.4(Hermes `patch`、`execute_code`)、§5.1(10 个事件)、§5.5(去掉"待 M0b"、MCP 键名)、§7(`verify --status <request_id>` 的查找顺序)、§13(ConfigChange 已实现) | 本文 |
 
 ### v2.0.8(2026-10-16,P2 集成:项目负责人对契约问题的裁决)
 

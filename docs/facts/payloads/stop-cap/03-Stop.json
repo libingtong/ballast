@@ -1,8 +1,8 @@
 {
-  "session_id": "aed0e6ab-dd7a-4075-b311-1df4052de38c",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/aed0e6ab-dd7a-4075-b311-1df4052de38c.jsonl",
+  "session_id": "<session-34>",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/<session-34>.jsonl",
   "cwd": "<probe-root>/work/stop-cap",
-  "prompt_id": "c7d1c3d8-1084-4597-bd10-6193468855c6",
+  "prompt_id": "<prompt-29>",
   "permission_mode": "default",
   "effort": {
     "level": "medium"

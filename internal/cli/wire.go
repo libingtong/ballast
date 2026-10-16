@@ -155,6 +155,14 @@ func newCoreWith(env sys.Env, sm wireSeams) (*core, error) {
 	if c.locked {
 		c.redirects = ignoredRedirects(env)
 	}
+	if locked && lay.InstallRoot != "" {
+		// A locked host never trusts $HOME: every downstream collaborator
+		// (hook path context, runner sandbox spec, tier detector, install)
+		// sees the layout's home (audit r1). The redirect variables stay
+		// visible in the Env so doctor and the audit can name them; the
+		// layout already ignores them.
+		c.env = layout.WithHome(env, lay.InstallRoot)
+	}
 	return c, nil
 }
 
@@ -256,7 +264,7 @@ func wireHook(env sys.Env, sm wireSeams) (*hook.Deps, error) {
 	self := selfPath()
 	deps := &hook.Deps{
 		Clock:    c.clock,
-		Env:      env,
+		Env:      c.env,
 		FS:       c.fs,
 		Layout:   c.lay,
 		Adapters: c.adapters,
@@ -274,6 +282,7 @@ func wireHook(env sys.Env, sm wireSeams) (*hook.Deps, error) {
 		Tier:     c.tierProbe(self),
 		IDs:      c.ids,
 		Faults:   hook.FaultsFromEnv(env.Getenv),
+		Watchdog: testWatchdog(env),
 		Self:     self,
 		Exit:     os.Exit,
 		Version:  version.Version,

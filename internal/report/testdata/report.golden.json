@@ -16,7 +16,8 @@
   "tiers": {
     "T0": 6,
     "T1": 4,
-    "other": 2
+    "other": 2,
+    "undetermined": 27
   },
   "rules": [
     {

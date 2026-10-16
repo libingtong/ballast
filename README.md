@@ -53,7 +53,7 @@ Ballast 把保证强度分成两级(详见 [`docs/trust-model.md`](docs/trust-mo
 
 | 级别 | 客户端 | 支持程度 |
 |---|---|---|
-| 一级 | **Claude Code** | 完整支持。注入、拦截(deny / ask / warn)、Stop 干预均有真实 payload 取证(Claude Code 2.1.300) |
+| 一级 | **Claude Code** | 完整支持。有真实 payload 取证的是各事件的 payload 字段、PreToolUse 的 deny / warn 与 Stop 的 deny / warn(Claude Code 2.1.300);ask、UserPromptSubmit 的 deny 与注入、PostToolUse 的注入、SubagentStop 的 deny 按文档实现、尚未单独取证(`ballast lint` 给 `action-unverified` 警告) |
 | 二级 | **Codex** | 注入与 PreToolUse deny;**不支持 ask**;Stop 的 block 待验证;hook 仅在交互式 TUI 触发。全部行为**未经 Ballast 自己核验** |
 | 二级 | **Cursor** | 注入、PreToolUse deny / ask;Stop 只能"续跑"(`followup_message`);另生成托管的 `ballast.mdc` 规则文件兜底。全部行为**未经 Ballast 自己核验** |
 | 三级 | **Hermes** | 尽力支持:`pre_tool_call` deny、`pre_llm_call` 注入、`pre_verify` 的 Stop deny(语义是续跑),其余只能记 `log`。**离线核验(`hermes hooks test`),触发时机未核验** |

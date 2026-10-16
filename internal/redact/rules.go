@@ -38,8 +38,11 @@ var (
 	// PEM private key; group 1 is the body. An unterminated block (clipped
 	// input) runs to the end of the text.
 	rePEM = lazyRE{pat: `-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----([\s\S]*?)(?:-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----|\z)`}
-	// scheme://user:PASSWORD@host (user may be empty).
-	reURL = lazyRE{pat: `://[^\s/:@]*:([^\s/@]+)@`}
+	// scheme://user:PASSWORD@host (user may be empty). Group 1 is the whole
+	// userinfo: the user name is masked together with the password (the
+	// pre-P2 hook scanner did the same, and a report must not carry user
+	// names; docs/p2-design.md section 4.3).
+	reURL = lazyRE{pat: `://([^\s/@]*:[^\s/@]+)@`}
 	// Bearer VALUE outside Authorization headers.
 	reBearer = lazyRE{pat: `(?i)\bbearer[ \t]+([A-Za-z0-9._~+/=-]{8,})`}
 	// Basic VALUE (base64); see basicLooksSecret for the prose filter.

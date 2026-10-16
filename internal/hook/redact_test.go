@@ -10,7 +10,8 @@ import (
 
 // TestRedact pins the state-ring summary redaction to the shared
 // internal/redact (docs/p2-design.md §4.1): it masks secret VALUES only, so the
-// quote/user parts that the pre-P2 word scanner swallowed now stay readable.
+// quote parts that the pre-P2 word scanner swallowed now stay readable. A URL's
+// userinfo is masked whole (user name included), as it always was.
 func TestRedact(t *testing.T) {
 	cases := []struct {
 		in, want string
@@ -27,7 +28,7 @@ func TestRedact(t *testing.T) {
 		{"curl -H 'Authorization: Bearer abc.def' u", "curl -H 'Authorization: Bearer ***' u"},
 		{"curl -H authorization:Basic dXNlcjpwdw==", "curl -H authorization:Basic ***"},
 		{"Basic dXNlcjpwdw==", "Basic ***"},
-		{"git clone https://user:pw@github.com/x/y.git", "git clone https://user:***@github.com/x/y.git"},
+		{"git clone https://user:pw@github.com/x/y.git", "git clone https://***@github.com/x/y.git"},
 		{"git clone https://github.com/x/y.git", "git clone https://github.com/x/y.git"},
 		{"echo ghp_abcdefghijklmnop1234", "echo ***"},
 		{"echo 'github_pat_11ABCDEFGH0abcdefgh'", "echo '***'"},

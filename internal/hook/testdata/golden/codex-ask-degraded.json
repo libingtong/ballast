@@ -61,7 +61,6 @@
       "action": "ask",
       "target": "ask",
       "decision": "would_ask",
-      "tier": "T0",
       "ballast_version": "9.9.9-test"
     },
     {
@@ -78,7 +77,6 @@
       "native_event": "PreToolUse",
       "tool": "Bash",
       "generation": "gen1",
-      "tier": "T0",
       "ballast_version": "9.9.9-test",
       "detail": {
         "action": "ask",

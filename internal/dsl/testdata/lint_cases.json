@@ -176,11 +176,13 @@
    ]
   },
   {
-   "name": "ask on claude PreToolUse is fine",
+   "name": "ask on claude PreToolUse is supported but unverified",
    "patch": {
     "action": "ask"
    },
-   "want": []
+   "want": [
+    "warning:action-unverified@/rules/0/action"
+   ]
   },
   {
    "name": "ask on claude UserPromptSubmit",
@@ -208,12 +210,14 @@
    ]
   },
   {
-   "name": "warn on PostToolUse",
+   "name": "warn on PostToolUse is supported but unverified",
    "patch": {
     "event": "PostToolUse",
     "action": "warn"
    },
-   "want": []
+   "want": [
+    "warning:action-unverified@/rules/0/action"
+   ]
   },
   {
    "name": "warn on codex PreToolUse",
@@ -254,6 +258,7 @@
    },
    "want": [
     "error:action-unsupported@/rules/0/action",
+    "warning:action-unverified@/rules/0/action",
     "warning:action-unverified@/rules/0/action"
    ]
   },
@@ -1165,7 +1170,7 @@
    "name": "text source tool_response on PostToolUse",
    "patch": {
     "event": "PostToolUse",
-    "action": "warn",
+    "action": "log",
     "match": {
      "tool": null,
      "text": {
@@ -1292,7 +1297,7 @@
    "name": "path on UserPromptSubmit",
    "patch": {
     "event": "UserPromptSubmit",
-    "action": "warn",
+    "action": "log",
     "match": {
      "tool": null,
      "path": "**"
@@ -1321,7 +1326,7 @@
    "name": "run_in_background on UserPromptSubmit",
    "patch": {
     "event": "UserPromptSubmit",
-    "action": "warn",
+    "action": "log",
     "match": {
      "tool": null,
      "run_in_background": true,
@@ -1510,7 +1515,7 @@
    "name": "verify_failed_since_read without a path on UserPromptSubmit",
    "patch": {
     "event": "UserPromptSubmit",
-    "action": "warn",
+    "action": "log",
     "match": {
      "tool": null,
      "text": {

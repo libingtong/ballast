@@ -76,7 +76,6 @@
           "text": "Read: src/a.go"
         }
       ],
-      "tier": "T0",
       "ballast_version": "9.9.9-test"
     }
   ],

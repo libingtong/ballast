@@ -1,8 +1,8 @@
 {
-  "session_id": "f07201df-4ba4-4e98-9651-e0c4e16670e5",
-  "transcript_path": "<home>/.claude/projects/-<project-key>/f07201df-4ba4-4e98-9651-e0c4e16670e5.jsonl",
+  "session_id": "<session-29>",
+  "transcript_path": "<home>/.claude/projects/-<project-key>/<session-29>.jsonl",
   "cwd": "<repo>",
-  "prompt_id": "9a0c8154-dbad-49eb-903c-1ce38728636c",
+  "prompt_id": "<prompt-24>",
   "hook_event_name": "SessionEnd",
   "reason": "other"
 }

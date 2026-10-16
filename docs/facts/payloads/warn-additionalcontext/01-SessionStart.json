@@ -1,6 +1,6 @@
 {
-  "session_id": "0d8a59c8-9d7e-4aab-b60f-b689664c22a0",
-  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/0d8a59c8-9d7e-4aab-b60f-b689664c22a0.jsonl",
+  "session_id": "<session-39>",
+  "transcript_path": "~/.claude/projects/-private-tmp-claude-<uid>-<project-key>/<session-39>.jsonl",
   "cwd": "<probe-root>/work/warn-additionalcontext",
   "hook_event_name": "SessionStart",
   "source": "startup"

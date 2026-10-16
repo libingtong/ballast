@@ -90,7 +90,7 @@ func Validate(r *Report) []string {
 		nonNeg("clients", n)
 	}
 	for k, n := range r.Tiers {
-		enum("tiers", string(k), tierSet, bad)
+		enum("tiers", string(k), auditTierSet, bad)
 		nonNeg("tiers", n)
 	}
 	diags := append(append([]string(nil), model.DiagNames...), DiagOther)

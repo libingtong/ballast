@@ -565,3 +565,119 @@ func TestLinkedWorktreeJob(t *testing.T) {
 		t.Errorf("S_start has %q", blob)
 	}
 }
+
+// --- repo-local filter drivers (audit r1) ----------------------------------
+
+// A filter driver in the repository's own config would run outside every
+// sandbox during `git add -u` / `checkout-index`: the job fails closed,
+// nothing runs, and the marker the driver would create does not appear.
+func TestRepoLocalFilterDriverIsRefused(t *testing.T) {
+	for _, tc := range []struct{ name, key string }{
+		{"clean", "filter.evil.clean"},
+		{"smudge", "filter.evil.smudge"},
+		{"process", "filter.evil.process"},
+		{"dotted name", "filter.a.b.clean"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHookFx(t)
+			marker := filepath.Join(h.sb.Root, "driver-ran")
+			h.setProject(helperSpec("test", "exit", "BALLAST_HELPER_CODE=0"))
+			h.write(".gitattributes", "*.txt filter=evil\n")
+			h.write("a.txt", "x\n")
+			h.git("add", ".gitattributes", "a.txt")
+			h.git("commit", "-q", "-m", "attrs")
+			h.git("config", tc.key, "touch '"+marker+"'") // after the commit: the fixture's own git must not run it
+			h.write("a.txt", "y\n")                       // tracked and dirty: `git add -u` would filter it
+			_, err := h.materialize("test", "job-filter")
+			if !errors.Is(err, ErrGitConfigUnsafe) {
+				t.Fatalf("err = %v", err)
+			}
+			if strings.Contains(err.Error(), "touch") {
+				t.Errorf("the driver command leaked into the error: %v", err)
+			}
+			noJobDir(t, h, "job-filter")
+			if _, err := os.Stat(marker); err == nil {
+				t.Errorf("the filter driver ran")
+			}
+			rec, err := h.runHook("test")
+			if err != nil || rec.Outcome != model.OutcomeInfra || !strings.HasPrefix(rec.Error, "git_config_unsafe") || rec.ValidPass() {
+				t.Fatalf("%+v %v", rec, err)
+			}
+			if h.be.called("wrap") != 0 {
+				t.Errorf("the command was wrapped")
+			}
+		})
+	}
+}
+
+func TestRepoLocalInnocentConfigIsAccepted(t *testing.T) {
+	h := newHookFx(t)
+	h.setProject(helperSpec("test", "exit", "BALLAST_HELPER_CODE=0"))
+	h.git("config", "filter.lfs.required", "true") // a driver name without a command
+	h.git("config", "core.autocrlf", "false")
+	if _, err := h.materialize("test", "job-ok"); err != nil {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestIsFilterCommandKey(t *testing.T) {
+	for k, want := range map[string]bool{
+		"filter.x.clean": true, "filter.x.smudge": true, "filter.x.process": true, "filter.a.b.clean": true,
+		"filter.x.required": false, "filter.clean": false, "core.fsmonitor": false, "user.clean": false,
+	} {
+		if got := isFilterCommandKey(k); got != want {
+			t.Errorf("isFilterCommandKey(%q) = %v, want %v", k, got, want)
+		}
+	}
+}
+
+func TestFindUnsafeConfigKey(t *testing.T) {
+	scoped := func(parts ...string) string { return strings.Join(parts, "\x00") + "\x00" }
+	for _, tc := range []struct {
+		name, out string
+		scoped    bool
+		wantScope string
+		wantKey   string
+	}{
+		{"scoped local clean", scoped("local", "filter.lfs.clean\ngit-lfs clean -- %f"), true, "local", "filter.lfs.clean"},
+		{"scoped worktree process", scoped("worktree", "filter.x.process\ncmd"), true, "worktree", "filter.x.process"},
+		{"scoped global is trusted", scoped("global", "filter.lfs.clean\ngit-lfs clean -- %f", "system", "filter.s.smudge\nx"), true, "", ""},
+		{"scoped harmless local", scoped("local", "core.autocrlf\nfalse", "local", "filter.lfs.required\ntrue"), true, "", ""},
+		{"scoped second entry", scoped("local", "core.bare\nfalse", "local", "Filter.Evil.Smudge\nx"), true, "local", "Filter.Evil.Smudge"},
+		{"unscoped clean", "core.bare\nfalse\x00filter.a.clean\nx\x00", false, "local", "filter.a.clean"},
+		{"unscoped include", "include.path\n../evil\x00", false, "local", "include.path"},
+		{"unscoped includeIf", "includeif.gitdir:/x/.path\nf\x00", false, "local", "includeif.gitdir:/x/.path"},
+		{"unscoped harmless", "core.bare\nfalse\x00user.name\nfilter\x00", false, "", ""},
+	} {
+		scope, key := findUnsafeConfigKey(tc.out, tc.scoped)
+		if scope != tc.wantScope || key != tc.wantKey {
+			t.Errorf("%s: (%q, %q), want (%q, %q)", tc.name, scope, key, tc.wantScope, tc.wantKey)
+		}
+	}
+}
+
+// git before 2.26 has no --show-scope: the check falls back to listing the
+// repository's own files and still refuses a driver.
+func TestCheckLocalGitConfigOldGitFallback(t *testing.T) {
+	run := func(local string) error {
+		git := func(index, workTree, dir string, args ...string) ([]byte, error) {
+			joined := strings.Join(args, " ")
+			switch {
+			case strings.Contains(joined, "--show-scope"):
+				return nil, errors.New("error: unknown option `show-scope'")
+			case strings.Contains(joined, "--local"):
+				return []byte(local), nil
+			case strings.Contains(joined, "--worktree"):
+				return nil, errors.New("not enabled")
+			}
+			return nil, errors.New("unexpected " + joined)
+		}
+		return checkLocalGitConfig(git, "idx", "/top")
+	}
+	if err := run("core.bare\nfalse\x00"); err != nil {
+		t.Errorf("harmless config refused: %v", err)
+	}
+	if err := run("filter.x.clean\nevil\x00"); err == nil || strings.Contains(err.Error(), "evil") {
+		t.Errorf("driver not refused (or the command leaked): %v", err)
+	}
+}

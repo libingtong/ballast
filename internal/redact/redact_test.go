@@ -51,7 +51,7 @@ func TestKeepsContext(t *testing.T) {
 		{"password=hunter2hunter2 next", "password=*** next"},
 		{"Authorization: Bearer abcdef1234567890", "Authorization: Bearer ***"},
 		{"got bearer tok_abcdefghijkl back", "got bearer *** back"},
-		{"https://user:p4ssw0rd@example.com/x", "https://user:***@example.com/x"},
+		{"https://user:p4ssw0rd@example.com/x", "https://***@example.com/x"},
 		{"cli --token=abc123 run", "cli --token=*** run"},
 		{"tool --password hunter2xyz --verbose", "tool --password *** --verbose"},
 		{"line\nsecret=abc\nend", "line\nsecret=***\nend"},
