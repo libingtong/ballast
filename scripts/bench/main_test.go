@@ -1,7 +1,6 @@
 package main
 
 import (
-	"runtime"
 	"testing"
 	"time"
 )
@@ -159,20 +158,16 @@ func TestGateInformational(t *testing.T) {
 	}
 }
 
-// The process-creation floor widens the p95 bound on Windows only.
-func TestGateProcessFloorOnlyOnWindows(t *testing.T) {
-	defer func(f time.Duration) { processFloor = f }(processFloor)
-	processFloor = 40 * time.Millisecond
-	r := good()
-	r.P95 = 65
-	gate(&r)
-	if want := runtime.GOOS == "windows"; r.Pass != want {
-		t.Errorf("p95 65ms with a 40ms floor on %s: pass=%v, want %v", runtime.GOOS, r.Pass, want)
+// BALLAST_BENCH_P95=report only changes how the p95 bound is treated.
+func TestP95ReportMode(t *testing.T) {
+	t.Setenv(BenchP95Env, "report")
+	if !p95ReportOnly() {
+		t.Fatal("report mode not detected")
 	}
-	r = good()
-	r.P95 = 71
-	gate(&r)
-	if r.Pass {
-		t.Error("p95 above 30ms + floor must fail everywhere")
+	for _, v := range []string{"", "enforce", "yes"} {
+		t.Setenv(BenchP95Env, v)
+		if p95ReportOnly() {
+			t.Errorf("%q must keep the gate enforced", v)
+		}
 	}
 }

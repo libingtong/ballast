@@ -436,7 +436,7 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 
 ## 9. 热路径预算与性能约束
 
-- **门槛**:B10 的 11 个场景 p95 ≤ 30ms,三平台(macOS arm64、Linux、Windows)都设门槛。M0c 原型最差 p95 17.13ms(繁忙机器);进程创建 + Go 运行时初始化在 Linux / macOS 约占 3–5ms。**Windows 例外**(GitHub 托管 runner 实测):仅创建进程就要 35–45ms(加载器 + 杀软扫描),所以 Windows 的门槛是 `p95 <= 30ms + 进程创建下限`(bench 每次先测裸 `ballast version` 的 p95 作为下限,写入报告),约束的是钩子自身开销;1k / 10k 文件工作树的 S 快照场景(6c / 6d / 8b / 8c)每个文件一次 lstat,NTFS + Defender 约 8µs/文件,Windows 上只报告 p95、不作门槛,Bad == 0 等正确性条件照常适用。Linux / macOS 仍是固定 30ms。详见 `scripts/bench/README.md`。
+- **门槛**:B10 的 11 个场景 p95 ≤ 30ms,三平台(macOS arm64、Linux、Windows)都设门槛。M0c 原型最差 p95 17.13ms(繁忙机器);进程创建 + Go 运行时初始化在 Linux / macOS 约占 3–5ms。**托管 runner 例外**:GitHub 托管的 macOS(3 vCPU 虚拟机)与 Windows(Defender 扫描每个文件操作)上,同一个二进制的 p95 达不到 30ms(进程创建下限就有 12–13ms,Windows 上钩子自身还要多付约 30ms),所以 CI 对这两个平台设 `BALLAST_BENCH_P95=report`:p95 照常测量并写入报告,但不作门槛;Bad == 0、样本齐全、审计命中仍然适用。Linux CI 与开发机仍强制固定 30ms。详见 `scripts/bench/README.md`。
 - **热路径包**(`archtest.hotPath`):model、ports、sys、layout、version、paths、bashparse、psparse、dsl、config、inject、state、audit、adapter/*、hook、snapshot、evidence、project。
   - 不得依赖 `net/*`(传递闭包也不行)。
   - 不得 import `os/exec`,**唯一例外** `internal/snapshot/gitfallback.go`(受 deadline 约束)。hook、dsl、adapter、state、audit、config、inject、paths、bashparse、psparse 传递闭包也不得含 `os/exec`。

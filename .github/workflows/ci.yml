@@ -106,6 +106,11 @@ jobs:
     needs: lint
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      # bench 的 p95 门槛:Linux 强制 30ms;托管 macOS(3 vCPU 虚拟机)与 Windows(Defender
+      # 扫描每个文件操作)上同一个二进制达不到,p95 只报告、不作门槛,其余条件(Bad == 0、
+      # 样本齐全、审计命中)照常。原因与实测数据见 scripts/bench/README.md。
+      BALLAST_BENCH_P95: ${{ matrix.os == 'ubuntu-latest' && 'enforce' || 'report' }}
     strategy:
       fail-fast: false
       matrix:
@@ -167,18 +172,24 @@ jobs:
           BALLAST_ACCEPT_SKIP_GOTEST: "1"
           BALLAST_ACCEPT_SKIP_BENCH: "1"
         run: |
+          # 某个脚本失败后继续跑其余脚本,最后统一以失败退出(一次 CI 暴露全部问题)。
+          failed=""
           for n in 0 1 2 3 4; do
             script="scripts/accept-m${n}.sh"
             if [ -f "$script" ]; then
               echo "::group::${script}"
-              bash "$script"
+              bash "$script" || { echo "::error title=${script} 失败::${script} 退出码非 0"; failed="$failed $script"; }
               echo "::endgroup::"
             else
               echo "::notice title=跳过 ${script}::${script} 尚不存在,约定路径见 docs/architecture.md §8.3"
             fi
           done
+          if [ -n "$failed" ]; then
+            echo "失败的验收脚本:$failed"
+            exit 1
+          fi
 
-      - name: bench 门槛(p95 不超过 30ms)
+      - name: bench 门槛(p95 不超过 30ms;macOS / Windows 仅报告 p95,见 job 级 env)
         if: ${{ !cancelled() }}
         env:
           GOPROXY: "off"

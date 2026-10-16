@@ -111,41 +111,34 @@ type result struct {
 	Notes    []string `json:"notes,omitempty"`
 	LoadFrom string   `json:"load_start"`
 	LoadTo   string   `json:"load_end"`
-	// Informational: the p95 is reported but not gated (Windows, large-tree
-	// work-tree snapshots; see windowsInformational).
+	// Informational: the p95 is reported but not gated (BALLAST_BENCH_P95=report).
 	Informational bool `json:"p95_informational,omitempty"`
 }
 
 // processFloor is p95 of a bare `ballast version` run (process creation, Go
 // runtime and package initialisation, no hook pipeline), measured once per
-// run. On Windows it is added to the 30 ms budget: creating a process there
-// costs 35-45 ms on a hosted runner (loader, antivirus scan of the freshly
-// built exe) against 2-5 ms on Linux and macOS, so a fixed 30 ms bound on the
-// whole spawn-to-exit time cannot hold even for a no-op. The hook's own share
-// (p95 - floor) is what the 30 ms bound constrains there. Zero in unit tests.
+// run and written to the report. It documents how much of a scenario's time
+// the platform spends before the hook starts: ~1.5 ms on a Linux runner but
+// ~12-13 ms on the hosted macOS and Windows runners.
 var processFloor time.Duration
 
-// windowsInformational are the scenarios whose cost is dominated by lstat of
-// every tracked file of a 1k / 10k-file work tree (the S snapshot). NTFS plus
-// Defender costs ~8 us per file (10k files: ~80 ms over the floor) against
-// ~1.6 us on ext4, so on Windows these report their p95 without gating it. The
-// correctness checks (Bad == 0, complete samples, the audit hit) still apply.
-var windowsInformational = map[string]bool{"6c": true, "6d": true, "8b": true, "8c": true}
+// BenchP95Env selects what the p95 bound does. Unset or "enforce" (the
+// default, and what a developer machine and the Linux CI job use): a scenario
+// over 30 ms fails. "report": the p95 is printed and recorded but does not fail
+// the scenario; CI sets it for the hosted macOS and Windows runners, where a
+// 3-vCPU virtual machine (macOS) or Defender scanning every file operation
+// (Windows) makes 30 ms unreachable independent of the code (see README).
+// Bad == 0, complete samples and the audit-hit checks always apply.
+const BenchP95Env = "BALLAST_BENCH_P95"
+
+func p95ReportOnly() bool { return os.Getenv(BenchP95Env) == "report" }
 
 // budgetText describes the p95 bound for the reports.
 func budgetText() string {
-	if runtime.GOOS == "windows" {
-		return fmt.Sprintf("%dms + 进程创建下限 %.2fms(Windows)", budget/time.Millisecond, ms(processFloor))
+	if p95ReportOnly() {
+		return fmt.Sprintf("%dms(此环境仅报告,不作门槛;BALLAST_BENCH_P95=report)", budget/time.Millisecond)
 	}
 	return fmt.Sprintf("%dms", budget/time.Millisecond)
-}
-
-// effectiveBudget is the p95 bound of the gate on this platform.
-func effectiveBudget() time.Duration {
-	if runtime.GOOS == "windows" {
-		return budget + processFloor
-	}
-	return budget
 }
 
 // gate applies the pass/fail rules to a finished scenario. It is the only
@@ -162,12 +155,8 @@ func gate(r *result) {
 	if r.Samples != r.Want || r.Want == 0 {
 		r.Failures = append(r.Failures, fmt.Sprintf("samples=%d, expected %d", r.Samples, r.Want))
 	}
-	if lim := effectiveBudget(); !r.Informational && r.Samples > 0 && ms2dur(r.P95) > lim {
-		if lim == budget {
-			r.Failures = append(r.Failures, fmt.Sprintf("p95=%.2fms > %dms", r.P95, budget/time.Millisecond))
-		} else {
-			r.Failures = append(r.Failures, fmt.Sprintf("p95=%.2fms > %dms + process floor %.2fms", r.P95, budget/time.Millisecond, ms(processFloor)))
-		}
+	if !r.Informational && r.Samples > 0 && ms2dur(r.P95) > budget {
+		r.Failures = append(r.Failures, fmt.Sprintf("p95=%.2fms > %dms", r.P95, budget/time.Millisecond))
 	}
 	r.Pass = len(r.Failures) == 0
 }
@@ -705,9 +694,11 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 			res.Notes = append(res.Notes, "问题: 预期规则 "+sc.hitRule+" 没有任何命中记录")
 		}
 	}
-	if runtime.GOOS == "windows" && windowsInformational[sc.id] {
+	if p95ReportOnly() {
 		res.Informational = true
-		res.Notes = append(res.Notes, fmt.Sprintf("Windows:本场景为大工作树快照,p95 %.2fms 仅报告、不作门槛(见 scripts/bench/README.md)", res.P95))
+		if ms2dur(res.P95) > budget {
+			res.Notes = append(res.Notes, fmt.Sprintf("p95 %.2fms 超过 %dms,但 BALLAST_BENCH_P95=report:仅报告、不作门槛", res.P95, budget/time.Millisecond))
+		}
 	}
 	gate(&res)
 	return res

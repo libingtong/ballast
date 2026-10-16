@@ -11,14 +11,18 @@ import "time"
 // isTransientRead / isTransientRename are always false there and the helpers
 // below add no cost.
 //
-// The budgets are small on purpose: the hook has a 150 ms watchdog and a
-// failed state/rules operation is already a fail-open path. A collision that
-// outlasts the budget is reported to the caller like any other I/O error.
+// The budgets are bounded by the hook's 150 ms watchdog and a failed
+// state/rules operation is already a fail-open path. Rename gets the longer
+// one because the destination can stay unavailable for tens of milliseconds
+// after a previous rename-over: antivirus (Defender) keeps a handle on the
+// replaced file while it scans it, and the name answers "access denied"
+// (delete pending) until that handle closes. A collision that outlasts the
+// budget is reported to the caller like any other I/O error.
 const (
 	readRetryBudget   = 30 * time.Millisecond
-	renameRetryBudget = 40 * time.Millisecond
+	renameRetryBudget = 100 * time.Millisecond
 	retryFirstSleep   = 500 * time.Microsecond
-	retryMaxSleep     = 4 * time.Millisecond
+	retryMaxSleep     = 5 * time.Millisecond
 )
 
 // retryTransient runs op until it succeeds, fails with an error that
