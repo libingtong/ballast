@@ -143,6 +143,20 @@ check_false() {
 check_file() { if [ -f "$2" ]; then ok "$1"; else bad "$1" "missing file: $2"; fi; }
 check_no_file() { if [ ! -e "$2" ]; then ok "$1"; else bad "$1" "must not exist: $2"; fi; }
 
+# ncpu: the number of CPUs this machine offers (1 when unknown).
+ncpu() {
+  local n=""
+  if command -v nproc >/dev/null 2>&1; then
+    n="$(nproc 2>/dev/null || true)"
+  fi
+  if [ -z "$n" ] && command -v sysctl >/dev/null 2>&1; then
+    n="$(sysctl -n hw.ncpu 2>/dev/null || true)"
+  fi
+  if [ -z "$n" ]; then n="${NUMBER_OF_PROCESSORS:-}"; fi
+  case $n in '' | *[!0-9]*) n=1 ;; esac
+  printf '%s' "$n"
+}
+
 # check_int_le NAME GOT MAX / check_int_ge NAME GOT MIN
 check_int_le() { if [ "$2" -le "$3" ]; then ok "$1"; else bad "$1" "$2 > $3"; fi; }
 check_int_ge() { if [ "$2" -ge "$3" ]; then ok "$1"; else bad "$1" "$2 < $3"; fi; }
@@ -190,8 +204,14 @@ expect_allow() {
 # identity elsewhere. Used for every path that is written into JSON or passed
 # to ballast.
 native() {
-  if [ "$IS_WINDOWS" = 1 ] && command -v cygpath >/dev/null 2>&1; then
-    cygpath -m "$1"
+  # CYGPATH_BIN is resolved once (lib_init), so native still works while a test
+  # runs with an emptied PATH (install-e2e.sh checks "client not installed").
+  local cyg="${CYGPATH_BIN:-}"
+  if [ -z "$cyg" ] && [ "$IS_WINDOWS" = 1 ]; then
+    cyg="$(command -v cygpath 2>/dev/null || true)"
+  fi
+  if [ "$IS_WINDOWS" = 1 ] && [ -n "$cyg" ]; then
+    "$cyg" -m "$1"
   else
     printf '%s' "$1"
   fi
@@ -226,6 +246,10 @@ lib_init() {
       EXE=".exe"
       ;;
   esac
+  if [ "$IS_WINDOWS" = 1 ]; then
+    CYGPATH_BIN="$(command -v cygpath 2>/dev/null || true)"
+    export CYGPATH_BIN
+  fi
   need_cmd go
   need_cmd git
   # Capture the Go caches before HOME is redirected, so building keeps working

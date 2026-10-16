@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/libingtong/ballast/internal/layout"
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
 	"github.com/libingtong/ballast/internal/testenv"
@@ -166,6 +169,28 @@ func TestSampleIDStable(t *testing.T) {
 	}
 }
 
+// sampleRetrying is Sample, repeated on Windows while the final rename-over is
+// refused ("access denied"): a concurrent writer, a reader or the antivirus
+// scanning the previous version still has the destination open, and the name
+// stays unavailable until that handle closes (longer than the rename retry in
+// sys.OSFS covers when six writers hammer one file). The refused writer gets
+// an explicit error and the destination is untouched, which is the contract;
+// what these tests assert is that the file is never torn or lost.
+func sampleRetrying(src *sliceSource, lay layout.Layout, ids sys.IDGen, clk sys.Clock, rule string, n int) (*Review, error) {
+	var (
+		rv  *Review
+		err error
+	)
+	for attempt := 0; attempt < 30; attempt++ {
+		rv, err = Sample(src, lay, sys.OSFS{}, ids, clk, rule, n)
+		if err == nil || runtime.GOOS != "windows" || !errors.Is(err, fs.ErrPermission) {
+			return rv, err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return rv, err
+}
+
 func TestSampleConcurrentWritersKeepFileValid(t *testing.T) {
 	sb := testenv.New(t)
 	lay := sb.Layout(t)
@@ -183,7 +208,7 @@ func TestSampleConcurrentWritersKeepFileValid(t *testing.T) {
 		go func(n int) {
 			defer wg.Done()
 			for i := 0; i < 20; i++ {
-				if _, err := Sample(src, lay, sys.OSFS{}, ids, clk, "rule-a", n); err != nil {
+				if _, err := sampleRetrying(src, lay, ids, clk, "rule-a", n); err != nil {
 					t.Errorf("sample: %v", err)
 					return
 				}

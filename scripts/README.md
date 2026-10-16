@@ -34,6 +34,8 @@
 | `BALLAST_ACCEPT_SKIP_GOTEST=1` / `BALLAST_ACCEPT_SKIP_BENCH=1` | `accept-m1.sh` 把 `go test -race ./...` / 全套 bench 显式 SKIP(CI 在独立步骤里跑,避免重复耗时) |
 | `BALLAST_ACCEPT_MATRIX_REAL=1` | `accept-m2.sh` 额外跑 `matrix.sh --mode real` |
 | `BALLAST_MATRIX_ALLOW_NET=1` | `matrix.sh --mode real` 允许需要联网下载依赖的栈在本地运行 |
+| `BALLAST_TEST_WATCHDOG_MS=<毫秒>` | **仅测试用**:放宽 hook 的 150ms 看门狗(150..60000,其余值忽略;产品默认值不变,见 `docs/architecture.md` §9)。CI 设为 3000;`fault.sh` 的 hang 用例会把它置空,继续断言产品自己的 150ms |
+| `BALLAST_BENCH_P95=enforce\|report` | bench 的 p95 门槛:默认 `enforce`(强制 30ms);`report` 只报告、不作门槛(CI 的托管 macOS / Windows runner,原因见 `scripts/bench/README.md`) |
 
 ## 需要你在本机完成的验收
 
