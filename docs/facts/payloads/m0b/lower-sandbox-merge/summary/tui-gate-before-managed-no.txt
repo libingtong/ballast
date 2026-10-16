@@ -1,0 +1,24 @@
+=== dialog
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Accessingworkspace:
+
+<repo>
+
+Quicksafetycheck:Isthisaprojectyoucreatedoroneyoutrust?(Likeyourowncode,awell-knownopensourceproject,orworkfrom
+
+yourteam).Ifnot,takeamomenttoreviewwhat'sinthisfolderfirst.
+
+ClaudeCode'llbeabletoread,edit,andexecutefileshere.
+
+Securityguide
+
+❯No,exit
+
+Yes,Itrustthisfolder
+
+Entertoconfirm·Esctocancel
+
+

@@ -1,0 +1,7 @@
+{
+  "case_id": "hooks-run-outside-sandbox",
+  "events": ["SessionStart", "UserPromptSubmit"],
+  "assertion": "A20:托管层 sandbox.enabled:true、failIfUnavailable:true、denyWrite 含 <home>/protected 时,托管 hook 仍在沙箱外运行——hook 能写入 denyWrite 路径(对照:不设 sandbox 段同样能写)",
+  "needs_credentials": false,
+  "sandbox": true
+}

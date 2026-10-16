@@ -1,0 +1,5 @@
+toolu_mock0000 error=True Exit code 1 /bin/bash: line 1: <home>/.ballast/evidence/x: Read-only file system
+toolu_mock0001 error=True Exit code 4 sed: couldn't open temporary file <home>/.ballast/sedlzqRGC: Read-only file system
+toolu_mock0002 error=True Exit code 1 Traceback (most recent call last):   File "<string>", line 1, in <module> OSError: [Errno 30] Read-only file system: '<home>/.ballast/evidence/
+toolu_mock0003 error=False (Bash completed with no output)
+toolu_mock0004 error=False (Bash completed with no output)

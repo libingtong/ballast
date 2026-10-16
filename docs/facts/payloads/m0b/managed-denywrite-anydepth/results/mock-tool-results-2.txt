@@ -1,0 +1,12 @@
+toolu_mock0000 error=True Exit code 1 /bin/bash: line 1: <repo>/.claude/settings.json: Read-only file system
+toolu_mock0001 error=True Exit code 1 Traceback (most recent call last):   File "<string>", line 1, in <module> PermissionError: [Errno 13] Permission denied: '<repo>/.claude/s
+toolu_mock0002 error=False (Bash completed with no output)
+toolu_mock0003 error=False (Bash completed with no output)
+toolu_mock0004 error=False 1	{"orig":1}
+toolu_mock0005 error=True Claude requested permissions to edit <repo>/.claude/settings.edit.json which is a sensitive file.
+toolu_mock0006 error=False 1	{"orig":1}
+toolu_mock0007 error=False The file <repo>/.ballast/edit-me has been updated successfully. (file state is current in your context — no need to Read it back)
+toolu_mock0008 error=False File created successfully at: <repo>/.ballast/new.json (file state is current in your context — no need to Read it back)
+toolu_mock0009 error=True Claude requested permissions to edit <repo>/.claude/settings.new.json which is a sensitive file.
+toolu_mock0010 error=True Claude requested permissions to edit <repo>/.claude/other.txt which is a sensitive file.
+toolu_mock0011 error=False File created successfully at: <repo>/sub/ok.txt (file state is current in your context — no need to Read it back)

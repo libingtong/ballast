@@ -1,0 +1,8 @@
+{
+  "case_id": "managed-denywrite-anydepth",
+  "events": [],
+  "assertion": "按 org render 的 T1 模板(含 **/.ballast、**/.claude/settings*.json 及对应的 Edit/Write/NotebookEdit 规则),Bash 与 Edit/Write 写 <cwd>/a/b/.claude/settings.json、<cwd>/a/.ballast/project.json,以及会话在仓库子目录启动时写仓库根的 .claude/settings.json 与 .ballast/project.json,全部被拒才算 pass",
+  "needs_credentials": true,
+  "sandbox": true,
+  "recheck": "ANTHROPIC_API_KEY=<用户自己提供> scripts/probe-m0b/run.sh --with-credentials --cases sandbox-denywrite-bash,permissions-deny-edit,unsandboxed-refused,managed-denywrite-path-forms,managed-denywrite-anydepth,mcp-write"
+}

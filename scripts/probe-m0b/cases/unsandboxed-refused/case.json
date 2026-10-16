@@ -1,0 +1,8 @@
+{
+  "case_id": "unsandboxed-refused",
+  "events": [],
+  "assertion": "allowUnsandboxedCommands:false 时 agent 请求 dangerouslyDisableSandbox:true 的 Bash 仍在沙箱内执行,写 denyWrite 路径失败",
+  "needs_credentials": true,
+  "sandbox": true,
+  "recheck": "ANTHROPIC_API_KEY=<用户自己提供> scripts/probe-m0b/run.sh --with-credentials --cases sandbox-denywrite-bash,permissions-deny-edit,unsandboxed-refused,managed-denywrite-path-forms,managed-denywrite-anydepth,mcp-write"
+}

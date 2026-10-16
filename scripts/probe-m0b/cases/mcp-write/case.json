@@ -1,0 +1,8 @@
+{
+  "case_id": "mcp-write",
+  "events": [],
+  "assertion": "白名单内一个会写文件的 MCP server 写受保护路径成功(记录残余风险);白名单外的 server 不可用",
+  "needs_credentials": true,
+  "sandbox": true,
+  "recheck": "ANTHROPIC_API_KEY=<用户自己提供> scripts/probe-m0b/run.sh --with-credentials --cases sandbox-denywrite-bash,permissions-deny-edit,unsandboxed-refused,managed-denywrite-path-forms,managed-denywrite-anydepth,mcp-write"
+}

@@ -1,0 +1,9 @@
+toolu_mock0000 error=False 1	orig
+toolu_mock0001 error=True <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+toolu_mock0002 error=True <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+toolu_mock0003 error=False 1	{"orig":1}
+toolu_mock0004 error=True <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+toolu_mock0005 error=True <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+toolu_mock0006 error=False File created successfully at: <home>/outside/ok.txt (file state is current in your context — no need to Read it back)
+toolu_mock0007 error=False 1	orig
+toolu_mock0008 error=False The file <repo>/.edit-control has been updated successfully. (file state is current in your context — no need to Read it back)

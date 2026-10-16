@@ -1,0 +1,4 @@
+[子目录 sub 启动(git 根为 child,父目录 par 另有项目层)] 启动目录=<home>/par/child/sub 被调用的项目层 label=[p-par-child-sub] 用户层探针看到的 CLAUDE_PROJECT_DIR=<home>/par/child/sub 
+[git 根 child 启动] 启动目录=<home>/par/child 被调用的项目层 label=[p-par-child] 用户层探针看到的 CLAUDE_PROJECT_DIR=<home>/par/child 
+[非 git 目录 plain 启动,父目录 par 有项目层] 启动目录=<home>/par/plain 被调用的项目层 label=[p-plain] 用户层探针看到的 CLAUDE_PROJECT_DIR=<home>/par/plain 
+[非 git 目录 plain/deeper 启动(上两级有项目层)] 启动目录=<home>/par/plain/deeper 被调用的项目层 label=[无] 用户层探针看到的 CLAUDE_PROJECT_DIR=<home>/par/plain/deeper 

@@ -1,0 +1,8 @@
+{
+  "case_id": "permissions-deny-edit",
+  "events": [],
+  "assertion": "agent 用 Edit/Write 写托管 permissions.deny 覆盖的受保护路径全部被拒,而写非受保护目录成功(对照)",
+  "needs_credentials": true,
+  "sandbox": true,
+  "recheck": "ANTHROPIC_API_KEY=<用户自己提供> scripts/probe-m0b/run.sh --with-credentials --cases sandbox-denywrite-bash,permissions-deny-edit,unsandboxed-refused,managed-denywrite-path-forms,managed-denywrite-anydepth,mcp-write"
+}

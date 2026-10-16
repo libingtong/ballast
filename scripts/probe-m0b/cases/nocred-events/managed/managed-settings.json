@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "SessionStart":     [{"hooks": [{"type": "command", "command": "/opt/probe/probe.sh managed"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/opt/probe/probe.sh managed"}]}],
+    "Stop":             [{"hooks": [{"type": "command", "command": "/opt/probe/probe.sh managed"}]}],
+    "SessionEnd":       [{"hooks": [{"type": "command", "command": "/opt/probe/probe.sh managed"}]}]
+  }
+}
