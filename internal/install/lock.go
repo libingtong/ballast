@@ -6,7 +6,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
+
+	"github.com/libingtong/ballast/internal/sys"
 )
 
 // Tunables (variables so tests can shorten them).
@@ -15,6 +18,28 @@ var (
 	lockStale = 60 * time.Second
 	lockPoll  = 20 * time.Millisecond
 )
+
+// permissionGrace bounds how long a refused create is retried on Windows.
+// Removing the lock file is not instantaneous there: until the last handle on
+// it closes (a concurrent opener, the antivirus scanning the new file) the
+// name is "delete pending" and creating it answers "access denied" instead of
+// "already exists". That state means the lock is taken, so the create is
+// retried; a directory that really refuses writes still fails after the grace.
+const permissionGrace = 3 * time.Second
+
+// removeLock deletes the lock file. On Windows a handle another process or the
+// antivirus has on the file makes the removal fail for a moment; a lock left
+// behind would block every install until it goes stale, so it is retried.
+func removeLock(fsys sys.FS, path string) {
+	deadline := time.Now().Add(permissionGrace)
+	for {
+		err := fsys.Remove(path)
+		if err == nil || errors.Is(err, fs.ErrNotExist) || runtime.GOOS != "windows" || time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(lockPoll)
+	}
+}
 
 // lockInstall serializes install/uninstall across processes with an
 // exclusive-create lock file. A lock older than lockStale is considered
@@ -27,16 +52,27 @@ func lockInstall(opt Options) (release func(), err error) {
 		return nil, fmt.Errorf("install lock: %w", err)
 	}
 	deadline := time.Now().Add(lockWait)
+	var refusedUntil time.Time // Windows: end of the grace for "access denied"
 	for {
 		f, err := fsys.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err == nil {
 			_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
 			_ = f.Close()
-			return func() { _ = fsys.Remove(path) }, nil
+			return func() { removeLock(fsys, path) }, nil
+		}
+		if runtime.GOOS == "windows" && errors.Is(err, fs.ErrPermission) {
+			if refusedUntil.IsZero() {
+				refusedUntil = time.Now().Add(permissionGrace)
+			}
+			if time.Now().Before(refusedUntil) {
+				time.Sleep(lockPoll)
+				continue
+			}
 		}
 		if !errors.Is(err, fs.ErrExist) {
 			return nil, fmt.Errorf("install lock: %w", err)
 		}
+		refusedUntil = time.Time{}
 		if fi, serr := fsys.Stat(path); serr == nil && time.Since(fi.ModTime()) > lockStale {
 			breakStaleLock(opt, path, fi)
 			continue
