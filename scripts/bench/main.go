@@ -74,6 +74,39 @@ var budget, heavyBudget = productBudget, productBudget
 // Giving them their own bound keeps the bound of every other scenario tight.
 var heavyScenarios = map[string]bool{"6c": true, "6d": true, "8b": true, "8c": true}
 
+// The product's own limits that a measured run is compared with. They are
+// restated here (the bench is an external black box) and must follow
+// internal/hook: DefaultWatchdog = 150ms; the deadline of the expensive
+// predicates (git fallback, S snapshot, verify_fresh) is
+// DefaultWatchdog-DeadlineMargin = 120ms. A production run slower than the
+// deadline degrades such a verdict to unknown, one slower than the watchdog
+// fails open. A -tags ballast_test build with BALLAST_TEST_WATCHDOG_MS only
+// stretches the kill timer, never the 120ms deadline, so the bench sees the
+// product's decisions (and counts the runs where they degrade) even on a CI
+// runner whose process start can stall for seconds.
+const (
+	prodDeadline = 120 * time.Millisecond
+	prodWatchdog = 150 * time.Millisecond
+)
+
+// BenchMaxDegradedPctEnv is the share (whole percent of the samples, 0..50) of
+// runs of a heavyScenario that may end differently from the expectation
+// because the 120ms deadline expired (verdict unknown, so no deny). Default 0:
+// every such run is a Bad. CI sets it where the hosted file system cannot walk
+// a 10k-file tree inside the deadline; those runs are counted and printed
+// ("degraded"), never folded into the passing runs silently.
+const BenchMaxDegradedPctEnv = "BALLAST_BENCH_MAX_DEGRADED_PCT"
+
+var maxDegradedPct int
+
+// degradedRun tells a run that did not produce the expected verdict because the
+// deadline passed, from a real failure: the process exited 0 with empty stderr
+// (so it did not crash or fail open with an error) and took at least the
+// deadline.
+func degradedRun(sc scenario, r oneRun) bool {
+	return heavyScenarios[sc.id] && r.code == 0 && r.err == "" && r.d >= prodDeadline
+}
+
 // limitFor returns the p95 bound of a result.
 func limitFor(r *result) time.Duration {
 	if r.Heavy {
@@ -138,6 +171,16 @@ type result struct {
 	LoadTo   string   `json:"load_end"`
 	// Heavy: a whole-work-tree scenario, judged against heavyBudget.
 	Heavy bool `json:"heavy,omitempty"`
+	// OverDeadline / OverWatchdog count measured samples slower than the
+	// product's 120ms deadline / 150ms watchdog (in production the verdict of
+	// an expensive predicate becomes unknown, respectively the hook fails
+	// open). Degraded counts runs of a heavy scenario that missed the
+	// expected verdict because of the deadline (see degradedRun); they are
+	// bounded by BALLAST_BENCH_MAX_DEGRADED_PCT.
+	OverDeadline int `json:"over_deadline"`
+	OverWatchdog int `json:"over_watchdog"`
+	Degraded     int `json:"degraded"`
+	WarmDegraded int `json:"warm_degraded"`
 }
 
 // processFloor is p95 of a bare `ballast version` run (process creation, Go
@@ -185,6 +228,20 @@ func parseBound(name, v string, floor time.Duration) (time.Duration, error) {
 	return d, nil
 }
 
+// parseDegradedPct parses BALLAST_BENCH_MAX_DEGRADED_PCT: empty means 0, else a
+// whole percent 0..50.
+func parseDegradedPct(v string) (int, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 || n > 50 {
+		return 0, fmt.Errorf("%s=%q: must be a whole percent 0..50", BenchMaxDegradedPctEnv, v)
+	}
+	return n, nil
+}
+
 // budgetText describes the p95 bound for the reports.
 func budgetText() string {
 	if budget == productBudget && heavyBudget == productBudget {
@@ -210,6 +267,9 @@ func gate(r *result) {
 	}
 	if r.Samples != r.Want || r.Want == 0 {
 		r.Failures = append(r.Failures, fmt.Sprintf("samples=%d, expected %d", r.Samples, r.Want))
+	}
+	if r.Degraded*100 > maxDegradedPct*r.Want {
+		r.Failures = append(r.Failures, fmt.Sprintf("degraded=%d/%d runs > %d%% (deadline expired: verdict unknown in production)", r.Degraded, r.Want, maxDegradedPct))
 	}
 	if limit := limitFor(r); r.Samples > 0 && ms2dur(r.P95) > limit {
 		r.Failures = append(r.Failures, fmt.Sprintf("p95=%.2fms > %dms", r.P95, limit/time.Millisecond))
@@ -709,15 +769,28 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 		}
 		for _, r := range outs {
 			bad := r.bad(sc.expect)
+			deg := bad && maxDegradedPct > 0 && degradedRun(sc, r)
 			if it < o.warm {
-				if bad {
+				switch {
+				case deg:
+					res.WarmDegraded++
+				case bad:
 					res.WarmBad++
 					noteBad(&res, r)
 				}
 				continue
 			}
 			samples = append(samples, r.d)
-			if bad {
+			if r.d > prodDeadline {
+				res.OverDeadline++
+			}
+			if r.d > prodWatchdog {
+				res.OverWatchdog++
+			}
+			switch {
+			case deg:
+				res.Degraded++
+			case bad:
 				res.Bad++
 				noteBad(&res, r)
 			}
@@ -752,11 +825,34 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 		}
 	}
 	res.Heavy = heavyScenarios[sc.id]
+	if res.OverDeadline > 0 || res.Degraded > 0 || res.WarmDegraded > 0 {
+		res.Notes = append(res.Notes, overNote(&res))
+	}
 	if limit := limitFor(&res); limit != productBudget && ms2dur(res.P95) > productBudget {
 		res.Notes = append(res.Notes, fmt.Sprintf("p95 %.2fms 超过产品门槛 %dms,在本环境的平台上限 %dms 之内", res.P95, productBudget/time.Millisecond, limit/time.Millisecond))
 	}
 	gate(&res)
 	return res
+}
+
+// overNote reports, per scenario, the share of runs that production would have
+// degraded (slower than the 120ms deadline: unknown) or failed open (slower
+// than the 150ms watchdog), measured from process creation to exit, which is a
+// slight over-estimate of the in-process time the watchdog sees.
+func overNote(r *result) string {
+	pct := func(n int) float64 {
+		if r.Samples == 0 {
+			return 0
+		}
+		return 100 * float64(n) / float64(r.Samples)
+	}
+	t := fmt.Sprintf("超过产品 deadline %dms 的样本 %d/%d (%.1f%%)(生产中昂贵谓词会变 unknown),超过看门狗 %dms 的样本 %d (%.1f%%)(生产中会 fail-open)",
+		prodDeadline/time.Millisecond, r.OverDeadline, r.Samples, pct(r.OverDeadline),
+		prodWatchdog/time.Millisecond, r.OverWatchdog, pct(r.OverWatchdog))
+	if r.Degraded > 0 || r.WarmDegraded > 0 {
+		t += fmt.Sprintf(";因 deadline 未得到预期判定(degraded)%d 次(热身 %d 次),上限 %d%%", r.Degraded, r.WarmDegraded, maxDegradedPct)
+	}
+	return t
 }
 
 func noteBad(res *result, r oneRun) {
@@ -1108,6 +1204,9 @@ func main() {
 			budget, heavyBudget = b, h
 		}
 	}
+	if berr == nil {
+		maxDegradedPct, berr = parseDegradedPct(os.Getenv(BenchMaxDegradedPctEnv))
+	}
 	if berr != nil {
 		fmt.Fprintln(os.Stderr, "bench:", berr)
 		os.Exit(2)
@@ -1158,14 +1257,14 @@ func main() {
 	}
 	fmt.Printf("环境: %s | %s | %s | %s 核\n", info["model"], info["cpu"], info["os"], info["num_cpu"])
 	fmt.Printf("负载(开始): %s\n\n", info["load_start"])
-	fmt.Printf("| 场景 | 客户端/事件 | 样本 | p50 ms | p95 ms | max ms | Bad | 结果 |\n|---|---|---|---|---|---|---|---|\n")
+	fmt.Printf("| 场景 | 客户端/事件 | 样本 | p50 ms | p95 ms | max ms | >120ms | >150ms | Bad | 结果 |\n|---|---|---|---|---|---|---|---|---|---|\n")
 
 	var results []result
 	for _, sc := range picked {
 		r := runScenario(sc, &o, rules)
 		results = append(results, r)
-		fmt.Printf("| %s %s | %s/%s | %d/%d | %.2f | %.2f | %.2f | %d | %s |\n",
-			r.ID, r.Name, r.Client, r.Event, r.Samples, r.Want, r.P50, r.P95, r.Max, r.Bad, verdict(r))
+		fmt.Printf("| %s %s | %s/%s | %d/%d | %.2f | %.2f | %.2f | %d | %d | %d | %s |\n",
+			r.ID, r.Name, r.Client, r.Event, r.Samples, r.Want, r.P50, r.P95, r.Max, r.OverDeadline, r.OverWatchdog, r.Bad, verdict(r))
 		for _, nt := range r.Notes {
 			fmt.Printf("    - %s\n", nt)
 		}
@@ -1306,9 +1405,9 @@ func markdown(info map[string]string, rs []result, problems []string, complete, 
 			fmt.Fprintf(&b, "| %s | %s |\n", k, v)
 		}
 	}
-	b.WriteString("\n## 结果(毫秒)\n\n| 场景 | 客户端/事件 | 样本 | p50 | p95 | max | Bad | 结果 |\n|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("\n## 结果(毫秒)\n\n| 场景 | 客户端/事件 | 样本 | p50 | p95 | max | >120ms | >150ms | Bad | 结果 |\n|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, r := range rs {
-		fmt.Fprintf(&b, "| %s %s | %s/%s | %d/%d | %.2f | %.2f | %.2f | %d | %s |\n", r.ID, r.Name, r.Client, r.Event, r.Samples, r.Want, r.P50, r.P95, r.Max, r.Bad, verdict(r))
+		fmt.Fprintf(&b, "| %s %s | %s/%s | %d/%d | %.2f | %.2f | %.2f | %d | %d | %d | %s |\n", r.ID, r.Name, r.Client, r.Event, r.Samples, r.Want, r.P50, r.P95, r.Max, r.OverDeadline, r.OverWatchdog, r.Bad, verdict(r))
 	}
 	for _, r := range rs {
 		if len(r.Notes) == 0 && len(r.Failures) == 0 {

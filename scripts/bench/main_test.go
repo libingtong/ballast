@@ -231,3 +231,61 @@ func TestParseHeavyBound(t *testing.T) {
 		t.Errorf("400 = %v, %v", got, err)
 	}
 }
+
+func TestParseDegradedPct(t *testing.T) {
+	for in, want := range map[string]int{"": 0, " 0 ": 0, "5": 5, "50": 50} {
+		got, err := parseDegradedPct(in)
+		if err != nil || got != want {
+			t.Errorf("parseDegradedPct(%q) = %d, %v; want %d", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"-1", "51", "x", "2.5"} {
+		if _, err := parseDegradedPct(in); err == nil {
+			t.Errorf("parseDegradedPct(%q) accepted", in)
+		}
+	}
+}
+
+// A run that missed the verdict because the 120ms deadline expired is a
+// "degraded" run only in a heavy scenario, only when it exited 0 cleanly and
+// was at least as slow as the deadline; anything else stays a plain Bad.
+func TestDegradedRun(t *testing.T) {
+	slow := oneRun{d: 130 * time.Millisecond}
+	if !degradedRun(scenario{id: "6d"}, slow) {
+		t.Error("slow clean run of a heavy scenario must count as degraded")
+	}
+	if degradedRun(scenario{id: "4"}, slow) {
+		t.Error("a light scenario never degrades through the deadline")
+	}
+	if degradedRun(scenario{id: "6d"}, oneRun{d: 20 * time.Millisecond}) {
+		t.Error("a fast wrong verdict is a real failure")
+	}
+	if degradedRun(scenario{id: "6d"}, oneRun{d: 200 * time.Millisecond, code: 1}) || degradedRun(scenario{id: "6d"}, oneRun{d: 200 * time.Millisecond, err: "boom"}) {
+		t.Error("a crash or an error exit is a real failure")
+	}
+}
+
+func TestGateDegradedBound(t *testing.T) {
+	old := maxDegradedPct
+	defer func() { maxDegradedPct = old }()
+	r := good()
+	r.Degraded = 1
+	maxDegradedPct = 0
+	gate(&r)
+	if r.Pass {
+		t.Error("a degraded run must fail the gate when no share is allowed")
+	}
+	maxDegradedPct = 5 // 5% of 300 = 15 runs
+	r = good()
+	r.Degraded = 15
+	gate(&r)
+	if !r.Pass {
+		t.Errorf("15/300 degraded within 5%% failed: %v", r.Failures)
+	}
+	r = good()
+	r.Degraded = 16
+	gate(&r)
+	if r.Pass {
+		t.Error("16/300 degraded exceeds 5%")
+	}
+}

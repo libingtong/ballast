@@ -34,7 +34,8 @@
 | `BALLAST_ACCEPT_SKIP_GOTEST=1` / `BALLAST_ACCEPT_SKIP_BENCH=1` | `accept-m1.sh` 把 `go test -race ./...` / 全套 bench 显式 SKIP(CI 在独立步骤里跑,避免重复耗时) |
 | `BALLAST_ACCEPT_MATRIX_REAL=1` | `accept-m2.sh` 额外跑 `matrix.sh --mode real` |
 | `BALLAST_MATRIX_ALLOW_NET=1` | `matrix.sh --mode real` 允许需要联网下载依赖的栈在本地运行 |
-| `BALLAST_TEST_WATCHDOG_MS=<毫秒>` | **仅测试用**:放宽 hook 的 150ms 看门狗(150..60000,其余值忽略)。**只有 `-tags ballast_test` 的构建才认这个变量,生产构建忽略它**(与 `BALLAST_FAULT` 同一原则,见 `docs/architecture.md` §9);变量非空时 `lib.sh`(`build_ballast` / `build_ballast_fault`)与 `bench.sh` 才给被测二进制加该标签,Go 测试需 `go test -tags ballast_test`。CI 设为 15000(托管 Windows runner 上观察到单个进程被卡住 4.6s);`fault.sh` 的 hang 用例会把它置空,继续断言产品自己的 150ms |
+| `BALLAST_TEST_WATCHDOG_MS=<毫秒>` | **仅测试用**:放宽 hook 的 150ms 看门狗,即只拉长 guard 的强杀计时(150..60000,其余值忽略);**昂贵谓词的 120ms deadline 不变**,判定语义与生产一致,所以超过 120ms 的快照 / verify_fresh 仍然变 unknown。**只有 `-tags ballast_test` 的构建才认这个变量,生产构建忽略它**(与 `BALLAST_FAULT` 同一原则,见 `docs/architecture.md` §9);变量非空时 `lib.sh`(`build_ballast` / `build_ballast_fault`)与 `bench.sh` 才给被测二进制加该标签,Go 测试需 `go test -tags ballast_test`。CI 设为 15000(托管 Windows runner 上观察到单个进程被卡住 4.6s);`fault.sh` 的 hang 用例会把它置空,继续断言产品自己的 150ms |
+| `BALLAST_BENCH_MAX_DEGRADED_PCT=<0..50>` | bench:遍历整个工作区的场景(6c/6d/8b/8c)里,因 120ms deadline 到期而没得到预期判定的运行最多占样本的百分比;不设为 0(一律算 Bad)。CI 只在 Windows 设 5;这些运行逐场景打印(degraded),另有 `>120ms` / `>150ms` 两列统计生产里会降级 / fail-open 的样本数 |
 | `BALLAST_BENCH_P95_MS=<毫秒>` / `BALLAST_BENCH_P95_HEAVY_MS=<毫秒>` | bench 的 p95 门槛:不设为产品的 30ms;只能抬高(30..1000,HEAVY 不得低于前者,默认等于前者),坏值直接报错。HEAVY 只作用于遍历整个工作区的场景 6c / 6d / 8b / 8c。CI 在托管 macOS(45 / 80)与 Windows(150 / 400)上设了固定的平台上限,依据见 `scripts/bench/README.md` |
 
 ## 需要你在本机完成的验收

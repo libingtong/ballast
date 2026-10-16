@@ -45,6 +45,12 @@ func TestWindowsAppendHandleCanBeLocked(t *testing.T) {
 // they assert is that no record is lost or torn, not how long a turn takes.
 // The product default stays below the hook's watchdog (see
 // TestQueueWaitsFitTheWatchdog).
+//
+// Consequence: Go-level tests do NOT verify that no audit record is lost under
+// the production waits (60 ms + 50 ms); with the production parameters a very
+// hot writer can still give up and lose its record (writer 5 once wrote only
+// 448 lines). That property is guarded by scripts/concurrency.sh ("one audit
+// hit per denied call", real hooks, N up to 8). See architecture.md section 9.
 func init() {
 	if os.Getenv(childEnv) != "" {
 		queueWait = time.Minute
@@ -53,7 +59,10 @@ func init() {
 
 // A hook that cannot get the audit lock must give up, and write its error
 // path, before its 150 ms watchdog fires: the mutex wait and the LockFileEx
-// fallback together stay well inside it.
+// fallback together stay well inside it. This is only the waits' own sum: the
+// pipeline has already spent about 30-40 ms on Windows (plus up to 20 ms of
+// state transaction) before the audit write, so a maximal wait can still lose
+// the race with the watchdog; that known gap is in architecture.md section 9.
 func TestQueueWaitsFitTheWatchdog(t *testing.T) {
 	if defaultQueueWait+rangeWait > 120*time.Millisecond {
 		t.Errorf("queue wait %v + range wait %v leave no room under the 150 ms watchdog", defaultQueueWait, rangeWait)

@@ -14,7 +14,9 @@ import (
 // (DefaultWatchdog, 150 ms) is unchanged. CI needs it because a shared runner
 // can stall a freshly started process for far more than 150 ms at random
 // (file-backed page faults, CPU steal, antivirus scans), which says nothing
-// about the hook.
+// about the hook. It stretches ONLY the guard's kill timer: the deadline of the
+// expensive predicates stays DefaultWatchdog-DeadlineMargin (see
+// invocation.deadlineSpan), so decisions are the product's.
 const WatchdogEnv = "BALLAST_TEST_WATCHDOG_MS"
 
 // maxWatchdogOverride keeps the override from turning the watchdog into an

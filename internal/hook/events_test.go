@@ -452,6 +452,16 @@ func TestEvidenceAndWorldWiring(t *testing.T) {
 		t.Errorf("deadline = %v", h.engine.lastInput().Deadline)
 	}
 
+	// A stretched watchdog (the ballast_test override) only lengthens the
+	// guard's kill timer: the predicate deadline stays at the product's 120 ms.
+	h = newHarness(t)
+	h.deps.Watchdog = 15 * time.Second
+	mustExit0(t, h, h.claude("PreToolUse", preToolBash))
+	if want := testNow.Add(DefaultWatchdog - DeadlineMargin); !h.engine.lastInput().Deadline.Equal(want) || !h.evidence.deadline.Equal(want) {
+		t.Errorf("deadline with a 15s watchdog = %v / %v, want %v (decision semantics must not follow the override)",
+			h.engine.lastInput().Deadline, h.evidence.deadline, want)
+	}
+
 	// Default watchdog applies when the field is zero.
 	d := &Deps{}
 	if d.watchdog() != DefaultWatchdog {
