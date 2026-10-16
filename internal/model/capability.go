@@ -169,10 +169,11 @@ var cursorCaps = CapabilitySet{
 
 var hermesCaps = CapabilitySet{
 	Client:     ClientHermes,
-	RuleEvents: []EventName{EventPreToolUse, EventUserPromptSubmit, EventPostToolUse},
+	RuleEvents: []EventName{EventPreToolUse, EventUserPromptSubmit, EventPostToolUse, EventStop},
 	Cells: []Capability{
-		{EventPreToolUse, ActionDeny, true, false, `{"decision":"block","reason":R}`, ""},
-		{EventUserPromptSubmit, ActionWarn, true, false, `{"context":R+C}`, "仅 pre_llm_call"},
+		{EventPreToolUse, ActionDeny, true, true, `{"decision":"block","reason":R}`, "离线核验(hooks test),触发时机未核验"},
+		{EventUserPromptSubmit, ActionWarn, true, true, `{"context":R+C}`, "仅 pre_llm_call;离线核验,触发时机未核验"},
+		{EventStop, ActionDeny, true, true, `{"decision":"block","reason":R}`, "仅 pre_verify;语义为续跑(agent 继续),不是阻止停止;受 agent.max_verify_nudges 限制;离线核验,触发时机未核验"},
 	},
 	InjectEvents:    []EventName{EventUserPromptSubmit},
 	FullInjectEvent: EventUserPromptSubmit,

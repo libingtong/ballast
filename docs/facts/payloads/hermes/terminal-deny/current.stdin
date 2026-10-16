@@ -1,0 +1,14 @@
+{
+  "hook_event_name": "pre_tool_call",
+  "tool_name": "terminal",
+  "tool_input": {
+    "command": "sleep 300"
+  },
+  "session_id": "p-terminal",
+  "cwd": "<repo>",
+  "profile": "default",
+  "extra": {
+    "task_id": "test-task",
+    "tool_call_id": "test-call"
+  }
+}

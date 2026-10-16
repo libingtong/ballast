@@ -1,0 +1,4 @@
+exit: 0
+stdout: {"decision":"block","reason":"[probe-stop-deny] Not done until the tests have run: keep going."}
+
+stderr: 

@@ -1,0 +1,10 @@
+Firing 2 hook(s) for event 'pre_tool_call':
+
+  → <probe>
+      exit=0  elapsed=<t>s
+      parsed: <none — hook contributed nothing to the dispatcher>
+
+  → <ballast-baseline> hook --client hermes --event pre_tool_call
+      exit=0  elapsed=<t>s
+      parsed: <none — hook contributed nothing to the dispatcher>
+

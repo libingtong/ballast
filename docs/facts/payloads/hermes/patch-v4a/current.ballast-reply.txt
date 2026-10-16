@@ -1,0 +1,4 @@
+exit: 0
+stdout: {"decision":"block","reason":"[no-tamper] 不得改写 Ballast 的规则、状态、证据,或 AI 客户端的 hook 配置。如需调整规则,请让用户手动修改。"}
+
+stderr: 

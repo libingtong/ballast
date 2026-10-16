@@ -1,0 +1,10 @@
+Firing 2 hook(s) for event 'on_session_end':
+
+  → <probe>
+      exit=0  elapsed=<t>s
+      parsed: <none — hook contributed nothing to the dispatcher>
+
+  → <ballast> hook --client hermes --event on_session_end
+      exit=0  elapsed=<t>s
+      parsed: <none — hook contributed nothing to the dispatcher>
+

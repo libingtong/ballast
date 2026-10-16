@@ -1,0 +1,15 @@
+{
+  "hook_event_name": "pre_tool_call",
+  "tool_name": "write_file",
+  "tool_input": {
+    "path": "<home>/.ballast/rules.json",
+    "content": "{}"
+  },
+  "session_id": "p-write",
+  "cwd": "<repo>",
+  "profile": "default",
+  "extra": {
+    "task_id": "test-task",
+    "tool_call_id": "test-call"
+  }
+}

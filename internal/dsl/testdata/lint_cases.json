@@ -350,9 +350,9 @@
    "want": []
   },
   {
-   "name": "hermes has no Stop",
+   "name": "hermes has no SubagentStop",
    "patch": {
-    "event": "Stop",
+    "event": "SubagentStop",
     "action": "log",
     "match": {
      "tool": null,

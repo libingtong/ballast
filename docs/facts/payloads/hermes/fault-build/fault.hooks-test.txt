@@ -1,0 +1,11 @@
+Firing 2 hook(s) for event 'pre_tool_call':
+
+  → <probe>
+      exit=0  elapsed=<t>s
+      parsed: <none — hook contributed nothing to the dispatcher>
+
+  → <ballast-fault> hook --client hermes --event pre_tool_call
+      exit=1  elapsed=<t>s
+      stderr: ballast: fault injected at decided
+      parsed: <none — hook contributed nothing to the dispatcher>
+

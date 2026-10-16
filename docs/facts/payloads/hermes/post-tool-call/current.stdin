@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "post_tool_call",
+  "tool_name": "terminal",
+  "tool_input": {
+    "command": "ls"
+  },
+  "session_id": "p-post",
+  "cwd": "<repo>",
+  "profile": "default",
+  "extra": {
+    "task_id": "test-task",
+    "tool_call_id": "test-call",
+    "result": "{\"output\": \"a.go\"}",
+    "duration_ms": 42
+  }
+}

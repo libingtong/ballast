@@ -1,0 +1,2 @@
+已写入 <hermes-home>/config.yaml
+提示: Hermes: start it with --accept-hooks to consent to the new hooks.

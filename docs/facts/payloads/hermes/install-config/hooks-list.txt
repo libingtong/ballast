@@ -1,0 +1,26 @@
+Configured shell hooks (12 total):
+
+  [on_session_end]
+    - <probe> (timeout=10s, ✗ not allowlisted)
+    - <ballast> hook --client hermes --event on_session_end (timeout=30s, ✗ not allowlisted)
+
+  [on_session_start]
+    - <probe> (timeout=10s, ✗ not allowlisted)
+    - <ballast> hook --client hermes --event on_session_start (timeout=30s, ✗ not allowlisted)
+
+  [post_tool_call]
+    - <probe> (timeout=10s, ✗ not allowlisted)
+    - <ballast> hook --client hermes --event post_tool_call (timeout=30s, ✗ not allowlisted)
+
+  [pre_llm_call]
+    - <probe> (timeout=10s, ✗ not allowlisted)
+    - <ballast> hook --client hermes --event pre_llm_call (timeout=30s, ✗ not allowlisted)
+
+  [pre_tool_call]
+    - <probe> (timeout=10s, ✗ not allowlisted)
+    - <ballast> hook --client hermes --event pre_tool_call (timeout=30s, ✗ not allowlisted)
+
+  [pre_verify]
+    - <probe> (timeout=10s, ✗ not allowlisted)
+    - <ballast> hook --client hermes --event pre_verify (timeout=30s, ✗ not allowlisted)
+

@@ -49,11 +49,30 @@ func (a *Adapter) ParseEvent(native string, stdin []byte) (*model.Event, error) 
 	if ev.ToolResponse == nil {
 		common.SetToolResponse(ev, extra["result"])
 	}
+	if ev.Name == model.EventStop {
+		// pre_verify: the final answer rides in extra.final_response and
+		// extra.attempt counts the continue nudges already issued this turn
+		// (Cursor's loop_count analogue).
+		if !ev.HasLastAssistantMessage {
+			ev.LastAssistantMessage, ev.HasLastAssistantMessage = extra.Str("final_response")
+		}
+		if n, ok := extra.Int64("attempt"); ok && n > 0 {
+			ev.StopHookActive = true
+		}
+	}
 	common.FillTools(ev, f, a.NormalizeTool)
 	return ev, nil
 }
 
 // NormalizeTool implements ports.Adapter.
+//
+// Tool names are Hermes' registry names (verified against Hermes 9a0a162536,
+// tools/*.py): terminal, read_file, write_file, patch, search_files,
+// execute_code. patch_file / edit_file / shell / execute_shell / create_file
+// are older spellings kept for payloads that still use them.
+// execute_code (a Python script) keeps its raw name: rules can match it by
+// name, but no matcher can see which files the script writes (trust-model
+// section 2.1, category 1).
 func (a *Adapter) NormalizeTool(rawName string, input json.RawMessage) (model.ToolCall, error) {
 	name := rawName
 	switch rawName {
@@ -63,8 +82,8 @@ func (a *Adapter) NormalizeTool(rawName string, input json.RawMessage) (model.To
 		name = model.ToolRead
 	case "write_file", "create_file":
 		name = model.ToolWrite
-	case "patch_file", "edit_file":
-		name = model.ToolEdit
+	case "patch", "patch_file", "edit_file":
+		return normalizePatchTool(rawName, input)
 	}
 	tc, f, err := common.NewToolCall(rawName, name, input)
 	if name == model.ToolBash {
@@ -73,6 +92,49 @@ func (a *Adapter) NormalizeTool(rawName string, input json.RawMessage) (model.To
 		common.ApplyFile(&tc, f, "path")
 	}
 	return tc, err
+}
+
+// normalizePatchTool maps Hermes' `patch` tool onto Edit. Replace mode
+// (path, old_string, new_string) is an ordinary Edit of `path`. V4A mode
+// (mode "patch" with the envelope in `patch`) adds every file the envelope
+// names. Hermes' handler checks `path` too in that mode, so the target list is
+// the union, `path` first. The envelope is parsed whenever the `patch`
+// argument is a string, whatever `mode` says: extra targets are safer than
+// missed ones.
+func normalizePatchTool(rawName string, input json.RawMessage) (model.ToolCall, error) {
+	tc, f, err := common.NewToolCall(rawName, model.ToolEdit, input)
+	common.ApplyFile(&tc, f, "path")
+	if len(tc.Edits) == 1 && tc.Edits[0] == (model.FileEdit{}) {
+		tc.Edits = nil // patch mode without path/old/new: nothing to report yet
+	}
+	envelope, ok := f.Str("patch")
+	if !ok || envelope == "" {
+		return tc, err
+	}
+	sum, perr := parsePatch(envelope)
+	targets := tc.Targets
+	for _, p := range sum.Targets {
+		if !contains(targets, p) {
+			targets = append(targets, p)
+		}
+	}
+	tc.Targets = targets
+	tc.TargetAdds = sum.Adds
+	tc.TargetDeletes = sum.Deletes
+	tc.Edits = append(tc.Edits, sum.Edits...)
+	if err == nil && perr != nil {
+		err = perr
+	}
+	return tc, err
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // Render implements ports.Adapter.

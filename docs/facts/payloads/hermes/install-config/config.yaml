@@ -1,0 +1,31 @@
+hooks:
+  on_session_start:
+    - command: "<probe>"
+      timeout: 10
+    - command: "<ballast> hook --client hermes --event on_session_start"
+      timeout: 30
+  pre_llm_call:
+    - command: "<probe>"
+      timeout: 10
+    - command: "<ballast> hook --client hermes --event pre_llm_call"
+      timeout: 30
+  pre_tool_call:
+    - command: "<probe>"
+      timeout: 10
+    - command: "<ballast> hook --client hermes --event pre_tool_call"
+      timeout: 30
+  post_tool_call:
+    - command: "<probe>"
+      timeout: 10
+    - command: "<ballast> hook --client hermes --event post_tool_call"
+      timeout: 30
+  pre_verify:
+    - command: "<probe>"
+      timeout: 10
+    - command: "<ballast> hook --client hermes --event pre_verify"
+      timeout: 30
+  on_session_end:
+    - command: "<probe>"
+      timeout: 10
+    - command: "<ballast> hook --client hermes --event on_session_end"
+      timeout: 30

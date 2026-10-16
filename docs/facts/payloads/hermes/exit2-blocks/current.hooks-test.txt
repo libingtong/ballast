@@ -1,0 +1,7 @@
+Firing 1 hook(s) for event 'pre_tool_call':
+
+  → <bin>/exit2-stderr
+      exit=2  elapsed=<t>s
+      stderr: blocked by probe (exit 2)
+      parsed (Hermes wire shape): {"action": "block", "message": "blocked by probe (exit 2)"}
+

@@ -1,0 +1,7 @@
+Firing 1 hook(s) for event 'post_tool_call':
+
+  → <bin>/dialect-claude
+      exit=0  elapsed=<t>s
+      stdout: {"decision":"block","reason":"claude dialect"}
+      parsed: <none — hook contributed nothing to the dispatcher>
+

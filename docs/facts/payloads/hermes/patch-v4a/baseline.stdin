@@ -1,0 +1,15 @@
+{
+  "hook_event_name": "pre_tool_call",
+  "tool_name": "patch",
+  "tool_input": {
+    "mode": "patch",
+    "patch": "*** Begin Patch\n*** Update File: src/ok.go\n@@\n-a\n+b\n*** Update File: <home>/.ballast/rules.json\n@@\n-x\n+y\n*** End Patch"
+  },
+  "session_id": "p-patch-v4a",
+  "cwd": "<repo>",
+  "profile": "default",
+  "extra": {
+    "task_id": "test-task",
+    "tool_call_id": "test-call"
+  }
+}
