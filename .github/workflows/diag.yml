@@ -71,6 +71,13 @@ jobs:
         run: |
           set +e
           GOPROXY=off go run .github/diag/commit.go
+      - name: concurrency timeline (windows)
+        run: |
+          set +e
+          export BALLAST_TEST_WATCHDOG_MS=3000 BALLAST_KEEP_TMP=1
+          bash scripts/concurrency.sh 2>&1 | grep -E "N=[0-9]: [0-9]+ inv|FAIL|iteration|SUMMARY|kept"
+          d=$(ls -dt "${TMPDIR:-/tmp}"/ballast-accept.* | head -1); echo "tmp=$d"
+          python3 -I .github/diag/timeline.py "$d" uniq4 | head -120
       - name: hook p95 via bench script (idle)
         run: |
           bash scripts/bench.sh 2>&1 | tail -40 || true
@@ -95,6 +102,13 @@ jobs:
         run: |
           set +e
           GOPROXY=off go run .github/diag/commit.go
+      - name: concurrency timeline
+        run: |
+          set +e
+          export BALLAST_TEST_WATCHDOG_MS=3000 BALLAST_KEEP_TMP=1
+          bash scripts/concurrency.sh 2>&1 | grep -E "N=[0-9]: [0-9]+ inv|FAIL|iteration|SUMMARY|kept"
+          d=$(ls -dt "${TMPDIR:-/tmp}"/ballast-accept.* | head -1); echo "tmp=$d"
+          python3 -I .github/diag/timeline.py "$d" uniq4 | head -120
       - name: concurrency detail
         run: |
           go build -o ballast ./cmd/ballast
