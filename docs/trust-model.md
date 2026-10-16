@@ -125,8 +125,10 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 2. **渲染模板**(只打印,不写系统路径):
 
    ```sh
-   ballast org render --binary /usr/local/libexec/ballast/ballast > ballast-managed.json
+   ballast org render --binary /usr/local/libexec/ballast/ballast > ballast-render.txt
    ```
+
+   注意:输出**不是**单个 JSON 文档——托管设置片段(纯 JSON)之后紧跟一行 `// ---- org.json(部署到 …) ----` 和以 `//` 开头的风险注释,再后面才是 org.json 的内容。需要纯 JSON 文件时,用 `--write`(root)让 Ballast 代写两个文件,或自己在那一行处截断。
 
    输出包含:每个 Claude Code 原生事件(含 ConfigChange)的托管 hook(`command` + `args`)、`allowManagedHooksOnly`、`sandbox`、`permissions.deny` 与 `allowManagedPermissionRulesOnly`,然后是以 `//` 注释行开头的 **org.json 段**(`tier`、`runner_sandbox`、`runner_network`、`runner_allow_write`、`weakened_project`,以及 `--home-root`/`--protect` 给出的 `home_root`/`protected_extra`)。注释写明了各项的风险(`runner_allow_write` 的每一项都等于把该目录交给 agent 可改写的测试代码,建议保持为空;`runner_network:"loopback"`/`"allow"` 是残余风险)。写入磁盘的 org.json 是纯 JSON。sssd/LDAP 用户在静态构建下 passwd 里查不到,请加 `--home-root /home`(推荐),否则这些用户在已锁定的主机上每次 hook 调用都会放行,`ballast doctor` 的 `tier.locked_home` 报 fail。
 
