@@ -26,6 +26,7 @@ var Aliases = map[string]string{
 	"sajb":    "start-job",
 	"foreach": "foreach-object", "%": "foreach-object",
 	"cd": "set-location", "sl": "set-location", "chdir": "set-location",
+	"ren": "rename-item", "rni": "rename-item",
 	"tee": "tee-object", "clc": "clear-content", "sls": "select-string",
 	"?": "where-object", "where": "where-object",
 }

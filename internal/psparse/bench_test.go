@@ -26,6 +26,7 @@ text with $(not a command) and "quotes"
 		`[System.IO.File]::WriteAllText("a.txt", "b"); Start-Sleep -Seconds 2; Move-Item a.txt b.txt`,
 		`$r = Invoke-RestMethod -Uri "https://example.invalid/api?q=$q" | ConvertTo-Json # trailing comment`,
 		`while ($true) { Start-Sleep -Milliseconds 500; if ($done) { break } }`,
+		`[IO.File]::AppendAllText('log.txt', "line $i"); Rename-Item -Path log.txt -NewName log.old; Get-Date | Tee-Object -LiteralPath t.txt`,
 		`ls | where { $_.Length -gt 10 } | sort Name | select -First 5 > top.txt`,
 	}
 	var sb strings.Builder
