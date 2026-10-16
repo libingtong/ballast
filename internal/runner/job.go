@@ -41,7 +41,10 @@ type target struct {
 // jobSpec is the sidecar next to a job file (evidence.Store.SpecPath): what
 // RunJob needs although the detached child only gets the job id. It pins the
 // entry as resolved by Start, so a project.json edited in between does not
-// change what a started job runs.
+// change what a started job runs. v1.5.2 (origin=hook): the pin is not
+// trusted on its own — Materialize compares it with the project.json blob of
+// S_start (runner.PinnedEntry, tree.go step 1b) and the job is infra
+// project_json_changed when they differ.
 type jobSpec struct {
 	V               int              `json:"v"`
 	Toplevel        string           `json:"toplevel"`

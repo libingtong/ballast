@@ -1,6 +1,6 @@
 # Ballast(压舱石)实施计划 v0.4
 
-> v0.5(2026-10-16):核心路径完成并通过系统审计,P2 计划见末尾"v0.5 P2 计划"(含 v0.5.1–v0.5.6 审核修订),详细设计见 `docs/p2-design.md`。
+> v0.5(2026-10-16):核心路径完成并通过系统审计,P2 计划见末尾"v0.5 P2 计划"(含 v0.5.1–v0.5.7 审核修订),详细设计见 `docs/p2-design.md`。
 
 > v0.4(2026-10-16):M0a/M0c 实测完成,并按用户要求加入多客户端支持(参照 pinrule)。改动见末尾"v0.4 变更",与正文冲突时以 v0.4 变更为准。
 
@@ -726,3 +726,13 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - **检出依赖 git 的路径防护**(minor):登记为残余风险;检出前加路径布局预检(符号链接条目是其他条目的大小写不敏感前缀等 ⇒ infra `tree_unsafe_path`),检出显式打开 `core.protectHFS`/`core.protectNTFS`;沙箱内检出留作以后的契约追加。
 - `internal/sandbox` 包注释的验收段与设计对齐(minor):监听只在 deny 下断言失败;偏好写入用命名域。
 - 单元划分不变(仍是 13 个),依赖不变,性能门槛不变。
+
+### 11. v0.5.7 修订(2026-10-16,P2 设计第 7 轮独立审核)
+
+设计文档升至 v1.5.2、架构升至 v2.0.7,逐条处置见 `docs/p2-design.md` §13。计划层面的变化:
+
+- **执行的命令与 `S_start` 出自同一次读取**(major,已闭合):hook 代起时读到的 `project.json` 条目只作为钉选值写进 sidecar;runner 实体化时要求 `S_start` 里的 `.ballast/project.json` 与它哈希相等、条目逐字相等,否则 infra `project_json_changed`,不执行;`project.json` 不在 `S_start` 中(未提交、被忽略、被 exempt 覆盖)⇒ infra `project_json_untracked`。由此 T1 仓库必须提交 `.ballast/project.json`。
+- **实体化的源侧读取**(minor):真实索引与白名单源文件不跟随打开、只接受普通文件,索引设上限;换成管道或设备只会记 infra。
+- **验收不可被 SKIP**(minor):P2-SANDBOX、P2-RUNNER 的 Docker 验收命令带 `BALLAST_REQUIRE_DOCKER=1`;P2-SANDBOX 交付须附 macOS 本机 IPC 用例输出(cfprefsd 等),否则这些用例在 macOS CI 接入前不算通过。
+- 文档对齐(minor):P2-INSTALL 验收删去与条件契约矛盾的 `"audit"`;trust-model 按来源区分 runner 沙箱的可写集合;SecurityServer 永不放行。
+- 单元划分不变(仍是 13 个),依赖不变,性能门槛不变(hook p95 ≤ 30ms)。

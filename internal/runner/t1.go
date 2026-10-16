@@ -24,7 +24,13 @@ import "github.com/libingtong/ballast/internal/model"
 // Tree.SStart, the sandbox Spec has Tree = Tree.Dir as its only repo root (W =
 // the copy ∪ TmpDir ∪ runner_allow_write; neither the real work tree nor its
 // git dir / common dir is writable), S_end is TreeSEnd, and the record carries
-// Workspace "copy" and InputsHash. Every git child it runs outside the sandbox (snapshots)
+// Workspace "copy" and InputsHash. v1.5.2: what StartRequest reads from the
+// work tree's project.json (entry, exempt, sha256 of the bytes) is only a
+// PIN written to the sidecar; the --run-job child passes it to Materialize
+// as a PinnedEntry, which refuses to run (infra project_json_changed /
+// project_json_untracked) unless the .ballast/project.json blob of S_start
+// hashes to the pinned value and decodes to the same entry — the read here
+// and S_start are two different reads of an agent-writable file. Every git child it runs outside the sandbox (snapshots)
 // gets a sys.Env filtered by sandbox.HostEnv; the detached --run-job child
 // and the sandbox backend get every LD_* / DYLD_* variable removed (v1.4,
 // docs/p2-design.md §3.4 "沙箱外进程的环境"). On a config error it

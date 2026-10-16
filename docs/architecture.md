@@ -1,6 +1,6 @@
-# Ballast 架构与接口契约(冻结版 v2.0.6)
+# Ballast 架构与接口契约(冻结版 v2.0.7)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4、v2.0.5、v2.0.6 为 P2 设计第 1、2、3、4、5、6 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4、v2.0.5、v2.0.6、v2.0.7 为 P2 设计第 1、2、3、4、5、6、7 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -138,7 +138,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | `labels/<rule_id>.jsonl` | 用户/U9 | `{"sample_id","label":"tp"\|"fp","note"}` | 用户追加 |
 | `install-manifest.json` | U10 | `model.InstallManifest` | 原子 + fsync |
 | `requests/<repo_inst>/<request_id>.json`(v2.0) | P2-RUNNER | `model.VerifyRequestFile`(hook 代起 verify 的请求 → job 映射);同目录 `<request_id>.spawn.log` 为子进程输出 | 原子;`ballast gc` 删除 30 天前的文件 |
-| `work/<job_id>/{index,index.tree,tree/}`(v2.0.5) | P2-RUNNER(`runner.Materialize`) | origin=hook 的 job 私有树:`S_start` 的树经临时索引 `read-tree` + `checkout-index --prefix` 检出到 `tree/`(无 `.git`),加上 project.json `verify[].inputs_untracked` 命中的未跟踪输入(v2.0.6:runner 在沙箱外写这里,检出前做路径布局预检,白名单复制只经副本根上的 `os.Root`、逐级只接受真实目录、叶子 `O_EXCL` 不跟随,写不出副本);沙箱内的测试只能写这里(`sandbox.Spec.Tree`,`layout.WorkDir`),见 `docs/p2-design.md` §3.4 | 目录 0700;job 收尾后删除;`ballast gc` 删除 job 已结束且超过 24 小时的残留 |
+| `work/<job_id>/{index,index.tree,tree/}`(v2.0.5) | P2-RUNNER(`runner.Materialize`) | origin=hook 的 job 私有树:`S_start` 的树经临时索引 `read-tree` + `checkout-index --prefix` 检出到 `tree/`(无 `.git`),加上 project.json `verify[].inputs_untracked` 命中的未跟踪输入(v2.0.6:runner 在沙箱外写这里,检出前做路径布局预检,白名单复制只经副本根上的 `os.Root`、逐级只接受真实目录、叶子 `O_EXCL` 不跟随,写不出副本;v2.0.7:检出前要求 `S_start` 中的 `.ballast/project.json` 与 job sidecar 钉选的条目哈希相等、逐字相等,否则 infra `project_json_changed`/`project_json_untracked`;读真实索引与白名单源文件不跟随、只接受普通文件);沙箱内的测试只能写这里(`sandbox.Spec.Tree`,`layout.WorkDir`),见 `docs/p2-design.md` §3.4 | 目录 0700;job 收尾后删除;`ballast gc` 删除 job 已结束且超过 24 小时的残留 |
 | `quarantine/<job_id>/…`(v2.0.3) | P2-RUNNER(经 `sandbox.Quarantine`) | 沙箱内测试新建的受保护路径(任意深度的 `.git`、`.claude/`、`.vscode/`、`.mcp.json` 等)被移出仓库后的副本,保留相对路径(`layout.QuarantineDir`) | 只由 runner 写;`ballast gc` 删除 30 天前的条目 |
 | `gc.stamp` | U7 | 空文件,mtime 即上次 GC 时间 | 只由 hook 在派生 `ballast gc` 之前 touch;派生失败时删除以便下次重试;`ballast gc` 本身不写(v1.3;v1.5 删除了 `runGC` 里残留的 touch,hook 与 gc 不再双写) |
 | `replay-set.txt` | 用户 | 每行一个 transcript 路径(不入库) | — |
@@ -537,6 +537,16 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 ---
 
 ## 14. 修订记录
+
+### v2.0.7(2026-10-16,P2 设计第 7 轮独立审核修订)
+
+配套 `docs/p2-design.md` v1.5.2(其 §13 有逐条处置)。仍然全部是**追加**或对 v2.0 新增骨架的修改,未改动 v1.x 已实现的导出签名(`internal/runner/job.go`、`doc.go` 只改注释)。
+
+| 项 | 处理 | 涉及文件 |
+|---|---|---|
+| origin=hook 执行的 project.json 条目与 `S_start` 不是同一次读取,可在 `--hook-start` 与 `git add -u` 之间换入换出(major) | sidecar 降为钉选值;新增 `runner.PinnedEntry`,`runner.Materialize(opt, repo, jobID, pin)` 改为接收它(v2.0.5 骨架签名,尚无实现与调用方);第 1b 步核对 `S_start` 中 `.ballast/project.json` 的 blob 哈希与条目;新增错误 `runner.ErrProjectJSONChanged`(`project_json_changed`)、`runner.ErrProjectJSONUntracked`(`project_json_untracked`)与常量 `MaxProjectJSONBytes` | `internal/runner/tree.go`、`t1.go`、`job.go`/`doc.go`(注释)、§3.1 的 `work/` 行 |
+| 实体化在沙箱外读 agent 可控的源时未冻结不跟随打开(minor) | 索引与白名单源文件 `O_NOFOLLOW\|O_NONBLOCK` 打开 + fstat 普通文件(白名单源另核 dev/ino);新增常量 `MaxIndexBytes` | `internal/runner/tree.go` |
+| `DarwinMachForbidden` 中 SecurityServer 注释与契约矛盾;sandbox-docker 与 macOS IPC 用例的验收可被 SKIP(minor) | SecurityServer 永不放行,Forbidden 每项终局;包注释写明 `BALLAST_REQUIRE_DOCKER=1` 与 macOS 本机取证的交付条件 | `internal/sandbox/sandbox.go`(仅注释) |
 
 ### v2.0.6(2026-10-16,P2 设计第 6 轮独立审核修订)
 

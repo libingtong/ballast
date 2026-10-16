@@ -31,7 +31,12 @@
 //   - The detached child only receives the job id, so Start stores the
 //     resolved entry (repo root, argv, env, cwd, exempt, project hash,
 //     session/agent) in a sidecar next to the job file
-//     (evidence.Store.SpecPath). RunJob runs exactly that entry.
+//     (evidence.Store.SpecPath). RunJob runs exactly that entry. P2 v1.5.2:
+//     for origin=hook jobs the sidecar is a pin that Materialize checks
+//     against the .ballast/project.json blob of S_start (tree.go step 1b;
+//     mismatch ⇒ infra project_json_changed, absent from S_start ⇒ infra
+//     project_json_untracked); the command never comes from a read the
+//     agent could race between --hook-start and `git add -u`.
 //   - The child records its own PID in the job file when it starts; Start does
 //     not rewrite the file after spawning (it would race with a fast job).
 //   - Start returns the started jobs; the CLI prints Started.String()

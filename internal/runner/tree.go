@@ -43,8 +43,23 @@ var (
 	// it is never "skipped" silently, because a skipped input changes what
 	// the test sees.
 	ErrInputsConflict = errors.New("runner: inputs_path_conflict")
+	// ErrProjectJSONChanged (v1.5.2): the .ballast/project.json blob of S_start
+	// is not the file StartRequest read and pinned in the job sidecar
+	// (sha256 differs), or the entry / exempt list decoded from that blob is
+	// not byte-for-byte the pinned one — see step 1b. Test not run: the
+	// command to execute must come from the same read as S_start and the
+	// copy, otherwise an agent could swap project.json between the
+	// --hook-start read and `git add -u` (run `true`, restore, get a fresh
+	// pass whose S_start shows the honest file).
+	ErrProjectJSONChanged = errors.New("runner: project_json_changed")
+	// ErrProjectJSONUntracked (v1.5.2): .ballast/project.json is not a
+	// regular-file blob (mode 100644 / 100755) of S_start: untracked,
+	// ignored, removed from the index, a symlink, or matched by an exempt
+	// glob. Test not run (see step 1b for why a T0 record would not help).
+	ErrProjectJSONUntracked = errors.New("runner: project_json_untracked")
 	// ErrMaterialize: any other materialization failure (git child failed,
-	// copy failed, ResolveGitDirs rejected the repo's git dirs).
+	// copy failed, ResolveGitDirs rejected the repo's git dirs, the real
+	// index is not a regular file or exceeds MaxIndexBytes).
 	ErrMaterialize = errors.New("runner: materialize_failed")
 )
 
@@ -52,7 +67,23 @@ var (
 const (
 	MaxUntrackedInputFiles = 500000
 	MaxUntrackedInputBytes = int64(8) << 30
+	// MaxIndexBytes (v1.5.2) caps the copy of the real index in step 1
+	// (ErrMaterialize beyond it); MaxProjectJSONBytes caps the project.json
+	// blob read in step 1b (ErrProjectJSONChanged beyond it).
+	MaxIndexBytes       = int64(1) << 30
+	MaxProjectJSONBytes = int64(1) << 20
 )
+
+// PinnedEntry (v1.5.2) is what StartRequest resolved from the work tree's
+// project.json and pinned in the job sidecar (job.go jobSpec): the entry to
+// run, the exempt globs and sha256 of the file bytes it read. RunJob passes
+// it to Materialize, which checks it against the project.json blob of
+// S_start (step 1b) before anything runs.
+type PinnedEntry struct {
+	Spec            model.VerifySpec
+	Exempt          []string
+	ProjectJSONHash string
+}
 
 // Tree is one materialized job tree.
 type Tree struct {
@@ -87,10 +118,17 @@ type Tree struct {
 //     repo.CommonDir (provenance, as for the sandbox Spec) ⇒ else
 //     ErrMaterialize; Root = <WorkDir>/<jobID> is created 0700 (WorkDir
 //     0700).
-//  1. Root/index = copy of repo.IndexPath; with GIT_INDEX_FILE=Root/index:
+//  1. Root/index = copy of repo.IndexPath (same semantics as the snapshot
+//     fallback's copyIndex: absent ⇒ empty index, mtime preserved). Source
+//     side (v1.5.2): the real index is agent-writable, so it is opened with
+//     O_RDONLY|O_NOFOLLOW|O_NONBLOCK and fstat'ed — not a regular file
+//     (symlink ⇒ ELOOP, FIFO, device such as /dev/zero) or larger than
+//     MaxIndexBytes ⇒ ErrMaterialize; at most MaxIndexBytes+1 bytes are read
+//     from that fd (growth while reading is caught too); never a path-based
+//     ReadFile. With GIT_INDEX_FILE=Root/index:
 //     `git add -u`; Full = `git write-tree`; any index entry with mode 160000
 //     ⇒ ErrTreeSubmodule; `git rm --cached -r -q --ignore-unmatch --
-//     ':(glob)<exempt>'...`; SStart = `git write-tree`. The work tree is read
+//     ':(glob)<exempt>'...` (pin.Exempt); SStart = `git write-tree`. The work tree is read
 //     ONCE (by add -u); every blob is what was read, so the copy and SStart
 //     describe one consistent set of bytes whatever the agent does
 //     concurrently.
@@ -110,6 +148,29 @@ type Tree struct {
 //     from S_start — visible, not an escape). Unicode-normalization
 //     prefixes (NFC vs NFD on APFS/HFS+) are NOT covered by this check and
 //     stay with git's own protection — registered in docs/p2-design.md §11.
+//     1b. (v1.5.2) The command comes from the same read as S_start:
+//     `git ls-tree <SStart> -- .ballast/project.json` (the file at the root
+//     of repo.Toplevel, layout.ProjectJSON) must name a blob with mode
+//     100644 or 100755 ⇒ else ErrProjectJSONUntracked (untracked, ignored,
+//     not in the index, a symlink, or removed by exempt — an exempt
+//     project.json would leave the executed command out of S and C, so the
+//     agent could commit a different one and the pass stays fresh). Then
+//     `git cat-file blob <id>` (size from `cat-file -s` first; more than
+//     MaxProjectJSONBytes ⇒ ErrProjectJSONChanged): sha256 of the blob
+//     bytes must equal pin.ProjectJSONHash, AND project.Decode(blob) must
+//     yield an entry named pin.Spec.Name whose json.Marshal equals that of
+//     pin.Spec, and an exempt list whose json.Marshal equals that of
+//     pin.Exempt (a nil and an empty list compare equal) ⇒
+//     else ErrProjectJSONChanged. Only then is anything checked out. The
+//     blob is what `git add -u` read in step 1 (or, for a skip-worktree /
+//     assume-unchanged entry, what the index holds); either way it is in
+//     S_start, so S_end == C later means the commit carries exactly the
+//     project.json whose command ran. A repository whose clean filter or
+//     eol conversion makes the blob differ from the work-tree bytes gets
+//     ErrProjectJSONChanged on every hook-started job (visible; the fix is
+//     `-text` for that file or committing it normalized). Why not record T0
+//     instead: freshness does not filter by tier (docs/p2-design.md §3.3),
+//     so a T0 pass from a swapped command would still count.
 //  2. Root/index.tree: GIT_INDEX_FILE=Root/index.tree `git read-tree <Full>`
 //     then `git -c core.protectHFS=true -c core.protectNTFS=true
 //     checkout-index -a -f --prefix=<Dir>/` (Dir created 0700). Dir
@@ -118,13 +179,23 @@ type Tree struct {
 //     leading-path (symlink) protection, narrowed by step 1a and
 //     registered as residual risk in docs/p2-design.md §11 (running it in a
 //     W=[Tree] sandbox is a possible later contract addition).
-//  3. spec.InputsUntracked non-empty: walk repo.Toplevel (Lstat, never
+//  3. pin.Spec.InputsUntracked non-empty: walk repo.Toplevel (Lstat, never
 //     following symlinks, never entering the real .git), select every file or
 //     symlink matching one of the globs that is NOT an entry of Full, copy it
 //     to the same relative path under Dir (regular files: content and exec
 //     bit, hashed while copying; symlinks: as symlinks, target bytes hashed);
 //     hard links are NOT allowed (a write through a hard link would reach
-//     the real file). Placement rules (v1.5.1, frozen; Dir may already hold
+//     the real file). Source side (v1.5.2; the real work tree is
+//     agent-writable while this runs, so the Lstat of the walk and the open
+//     are not atomic): a regular file is opened with
+//     O_RDONLY|O_NOFOLLOW|O_NONBLOCK (relative to the walked directory fd
+//     where available) and fstat'ed; it must still be a regular file with the
+//     same dev and ino as the walk's Lstat ⇒ else ErrInputsConflict (a FIFO,
+//     symlink, device or swapped file appearing between Lstat and open never
+//     blocks the job or feeds /dev/zero); bytes are read only from that fd
+//     and count against MaxUntrackedInputBytes as they are read, so a file
+//     growing during the copy stops at the limit with ErrInputsTooLarge. A
+//     symlink is read with Readlink on the walked entry (no open). Placement rules (v1.5.1, frozen; Dir may already hold
 //     symlinks checked out from Full, including entries that `git add -u`
 //     did not refresh):
 //     (a) every write goes through one os.Root opened on Dir
@@ -153,7 +224,7 @@ type Tree struct {
 //
 // On any error Root is removed before returning (CleanupTree semantics: never
 // following symlinks). Not hot path.
-func Materialize(opt Options, repo model.RepoInfo, jobID string, spec model.VerifySpec, exempt []string) (Tree, error) {
+func Materialize(opt Options, repo model.RepoInfo, jobID string, pin PinnedEntry) (Tree, error) {
 	panic("unimplemented: runner.Materialize (unit P2-RUNNER)")
 }
 

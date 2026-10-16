@@ -187,7 +187,14 @@
 // and the rest of ~/.ballast fail. The linux half of every integration
 // case runs in scripts/sandbox-docker.sh (Debian 12 container, the three
 // --security-opt of docs/p2-design.md §3.4, BALLAST_REQUIRE_BWRAP=1) — a
-// mandatory acceptance of the unit that needs Docker only.
+// mandatory acceptance of the unit that needs Docker only, run as
+// `BALLAST_REQUIRE_DOCKER=1 bash scripts/sandbox-docker.sh` (v1.5.2: that one
+// variable turns "no Docker" into a failure, CI=true is not needed). The
+// darwin IPC cases above that only run when CI=true (named preference
+// domain, ctypes CGEventPost / pasteboard, the profile variant without the
+// process-exec rules) count as passed for delivery only with the attached
+// output of a local macOS run of `CI=true BALLAST_REQUIRE_SANDBOX_EXEC=1 go
+// test ./internal/sandbox`, or once P2-CLI's macOS CI has run them (v1.5.2).
 package sandbox
 
 import (
@@ -587,7 +594,11 @@ var DarwinMachAllow = []string{
 // DarwinMachForbidden (v1.5) are mach service names (exact, or prefixes when
 // ending in '.') that must never appear in DarwinMachAllow: each one lets a
 // sandboxed process ask a process OUTSIDE the sandbox to run code, inject
-// input or exfiltrate (golden-asserted).
+// input or exfiltrate (golden-asserted). The list is final for each entry: no
+// measurement moves an entry from here into DarwinMachAllow (that would be a
+// contract change argued in docs/p2-design.md, not an implementation
+// decision); a service that is merely "not needed yet" belongs in neither
+// list (v1.5.2).
 var DarwinMachForbidden = []string{
 	"com.apple.coreservices.launchservicesd", // LaunchServices (open -a)
 	"com.apple.lsd.",                         // LaunchServices daemons
@@ -595,7 +606,7 @@ var DarwinMachForbidden = []string{
 	"com.apple.windowserver.",                // CGEventPost / window server
 	"com.apple.pasteboard.",                  // pboard
 	"com.apple.tccd",                         // privacy database
-	"com.apple.SecurityServer",               // keychain (not needed by the minimal set; listed until evidence says otherwise)
+	"com.apple.SecurityServer",               // securityd / keychain: a credential proxy, NEVER allowed (v1.5.2); TLS chain evaluation uses com.apple.trustd.agent, a runtime that needs securityd fails visibly
 	"com.apple.dock.",                        // Dock / Spaces
 	"com.apple.xpc.launchd.",                 // launchd domains
 }
