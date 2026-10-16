@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
@@ -35,5 +36,26 @@ func TestWindowsAppendHandleCanBeLocked(t *testing.T) {
 	}
 	if got := len(readLines(t, filepath.Join(dir, "2026-10.jsonl"))); got != 2 {
 		t.Errorf("lines = %d, want 2", got)
+	}
+}
+
+// The writers of the multi-process stress tests (8 processes appending in a
+// tight loop, up to 3 KB a line, with Defender scanning every append) are far
+// hotter than any hook, so their wait in the mutex queue is made patient: what
+// they assert is that no record is lost or torn, not how long a turn takes.
+// The product default stays below the hook's watchdog (see
+// TestQueueWaitsFitTheWatchdog).
+func init() {
+	if os.Getenv(childEnv) != "" {
+		queueWait = time.Minute
+	}
+}
+
+// A hook that cannot get the audit lock must give up, and write its error
+// path, before its 150 ms watchdog fires: the mutex wait and the LockFileEx
+// fallback together stay well inside it.
+func TestQueueWaitsFitTheWatchdog(t *testing.T) {
+	if defaultQueueWait+rangeWait > 120*time.Millisecond {
+		t.Errorf("queue wait %v + range wait %v leave no room under the 150 ms watchdog", defaultQueueWait, rangeWait)
 	}
 }

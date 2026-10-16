@@ -28,16 +28,19 @@ const (
 	// lockOffsetHigh puts the one-byte lock range far beyond any real file
 	// size, so readers of the log are never blocked by it.
 	lockOffsetHigh = 0x40000000
-	lockAttempts   = 250
 	lockInterval   = 200 * time.Microsecond
+
+	// rangeWait bounds the LockFileEx polling (wall clock: a 200 us Sleep
+	// often takes a millisecond or more on Windows, so counting attempts
+	// would not bound the time).
+	rangeWait = 50 * time.Millisecond
 
 	// queueWait bounds the wait in the kernel's FIFO queue of the per-directory
 	// mutex (see lockAppend). It must stay well under the hook's 150 ms
-	// watchdog: after a timeout the LockFileEx fallback (about
-	// lockAttempts*lockInterval = 50 ms) and the error path still have to run,
-	// and a wait longer than the watchdog would let the watchdog fire first and
-	// lose the record without any audit of why.
-	queueWait = 60 * time.Millisecond
+	// watchdog: after a timeout the LockFileEx fallback (rangeWait) and the
+	// error path still have to run, and a wait longer than the watchdog would
+	// let the watchdog fire first and lose the record without any audit of why.
+	defaultQueueWait = 60 * time.Millisecond
 
 	waitObject0   = 0x00000000
 	waitAbandoned = 0x00000080
@@ -52,6 +55,10 @@ var (
 	procWaitObject   = kernel32.NewProc("WaitForSingleObject")
 	procReleaseMutex = kernel32.NewProc("ReleaseMutex")
 )
+
+// queueWait is the mutex wait in force; tests that hammer the log from many
+// processes at once raise it in their child processes only.
+var queueWait = defaultQueueWait
 
 var (
 	mutexMu      sync.Mutex
@@ -127,7 +134,8 @@ func lockAppend(f sys.File) (func(), error) {
 // lockRange polls LockFileEx on the far one-byte range of f.
 func lockRange(f sys.File) (func(), error) {
 	fd := f.Fd()
-	for i := 0; i < lockAttempts; i++ {
+	deadline := time.Now().Add(rangeWait)
+	for {
 		ol := syscall.Overlapped{OffsetHigh: lockOffsetHigh}
 		r1, _, e1 := procLockFileEx.Call(fd, lockfileExclusiveLock|lockfileFailImmediately, 0, 1, 0, uintptr(unsafe.Pointer(&ol)))
 		if r1 != 0 {
@@ -139,7 +147,9 @@ func lockRange(f sys.File) (func(), error) {
 		if errno, ok := e1.(syscall.Errno); !ok || (errno != errorLockViolation && errno != errorIOPending) {
 			return nil, e1
 		}
+		if !time.Now().Before(deadline) {
+			return nil, errors.New("audit: timed out waiting for the append lock")
+		}
 		time.Sleep(lockInterval)
 	}
-	return nil, errors.New("audit: timed out waiting for the append lock")
 }
