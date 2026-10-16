@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/libingtong/ballast/internal/model"
+	"github.com/libingtong/ballast/internal/redact"
 )
 
 // Secrets are assembled from parts so the source file itself carries no
@@ -109,7 +112,7 @@ func TestRedactSecrets(t *testing.T) {
 func TestRedactKeepsContext(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"password=hunter2hunter2 next", "password=*** next"},
-		{"Authorization: Bearer abcdef1234567890", "Authorization: ***"},
+		{"Authorization: Bearer abcdef1234567890", "Authorization: Bearer ***"},
 		{"got bearer tok_abcdefghijkl back", "got bearer *** back"},
 		{"https://user:p4ssw0rd@example.com/x", "https://user:***@example.com/x"},
 		{"cli --token=abc123 run", "cli --token=*** run"},
@@ -171,4 +174,39 @@ func FuzzRedact(f *testing.F) {
 			t.Fatalf("output grew from %d to %d bytes", len(s), len(got))
 		}
 	})
+}
+
+// Redact is a one-line wrapper over the unified redactor (P2-REDACT): the
+// audit log, the hook state ring and `ballast report` share one rule set.
+func TestRedactDelegatesToUnifiedRedactor(t *testing.T) {
+	inputs := []string{"", "git status", "Proxy-Authorization: Basic dXNlcjpwYXNzd29yZA==", "twine pypi-AgEIcHlwaS5vcmcCJGFiY2RlZjEyMzQ1Ng", "PGPASSWORD=pgpw123 psql"}
+	for _, tc := range secretCases {
+		inputs = append(inputs, tc.in)
+	}
+	for _, in := range inputs {
+		if got, want := Redact(in), redact.String(in); got != want {
+			t.Errorf("Redact(%q) = %q, redact.String = %q", in, got, want)
+		}
+	}
+}
+
+// Every string the writer persists that can carry user text (Matched and
+// the context summaries) goes through Redact before it is marshalled.
+func TestMarshalLineRedactsMatchedAndContext(t *testing.T) {
+	secret := "hunter2" + "hunter2"
+	rec := &model.AuditRecord{
+		Type:    model.AuditHit,
+		Matched: "curl -H 'Authorization: Digest username=u, response=" + secret + "' --password " + secret,
+		Context: []model.EventSummary{{Seq: 1, Event: "PreToolUse", Text: "export API_KEY=" + secret}},
+	}
+	line, err := MarshalLine(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(line), secret) {
+		t.Errorf("secret persisted: %s", line)
+	}
+	if !strings.Contains(string(line), "API_KEY=***") || !strings.Contains(string(line), "Digest ***") {
+		t.Errorf("key names and schemes must stay readable: %s", line)
+	}
 }

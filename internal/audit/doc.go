@@ -2,7 +2,7 @@
 // docs/architecture.md §3).
 //
 // Hot path: Writer yes; Reader/Lint/GC no. Imports: model, ports, sys,
-// layout, stdlib.
+// layout, redact (P2: Redact wraps redact.String), stdlib.
 //
 // Write protocol (frozen):
 //   - Files: <AuditDir>/YYYY-MM.jsonl, then YYYY-MM.1.jsonl, .2, ... The
