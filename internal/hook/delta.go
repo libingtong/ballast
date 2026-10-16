@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/libingtong/ballast/internal/model"
+	"github.com/libingtong/ballast/internal/redact"
 )
 
 // Persisted-text limits (internal/state caps; the hook clips first).
@@ -151,7 +152,7 @@ func summaryText(t *model.ToolCall) string {
 	default:
 		s = t.Name
 	}
-	return clipRunes(redact(s), model.MaxEventSummaryRunes)
+	return clipRunes(redact.String(s), model.MaxEventSummaryRunes)
 }
 
 // clipRunes truncates s to n runes, appending "…" when cut.
