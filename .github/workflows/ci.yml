@@ -106,7 +106,8 @@ jobs:
     name: 测试(${{ matrix.os }})
     needs: lint
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # Windows 实测 38 分钟(go test 6 + 验收脚本 20 + bench 11),45 分钟的余量太小。
+    timeout-minutes: 60
     env:
       # bench 的 p95 门槛:Linux 强制 30ms;托管 macOS(3 vCPU 虚拟机)与 Windows(Defender
       # 扫描每个文件操作)上同一个二进制达不到,p95 只报告、不作门槛,其余条件(Bad == 0、
