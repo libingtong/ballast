@@ -1,6 +1,11 @@
 package layout
 
-import "github.com/libingtong/ballast/internal/sys"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/libingtong/ballast/internal/sys"
+)
 
 // P2 contract (architecture v2.0, docs/p2-design.md §3.2 "重定向锁").
 // Body owned by unit P2-TIER (this file only); wired by P2-CLI. The
@@ -36,5 +41,61 @@ type Options struct {
 // equal Resolve(env) for every env (table test). It performs no I/O other
 // than calling o.PasswdHome.
 func ResolveWith(env sys.Env, o Options) (Layout, error) {
-	panic("unimplemented: layout.ResolveWith (unit P2-TIER)")
+	if !o.IgnoreRedirects {
+		return Resolve(env)
+	}
+	var home string
+	if o.PasswdHome != nil {
+		h, err := o.PasswdHome()
+		if err != nil {
+			return Layout{}, fmt.Errorf("layout: locked host home directory: %w", err)
+		}
+		home = h
+	} else {
+		h, err := env.HomeDir()
+		if err != nil {
+			return Layout{}, fmt.Errorf("layout: cannot determine home directory: %w", err)
+		}
+		home = h
+	}
+	if home == "" {
+		return Layout{}, errors.New("layout: locked host home directory is empty")
+	}
+	return Resolve(lockedEnv{Env: env, home: home})
+}
+
+// lockedEnv hides the three Ballast redirection variables and replaces the
+// home directory; everything else (CLAUDE_CONFIG_DIR, CODEX_HOME,
+// HERMES_HOME, GOOS) is passed through.
+type lockedEnv struct {
+	sys.Env
+	home string
+}
+
+func (e lockedEnv) Getenv(k string) (string, bool) {
+	switch k {
+	case EnvHome, EnvManagedDir, EnvInstallRoot:
+		return "", false
+	}
+	return e.Env.Getenv(k)
+}
+
+func (e lockedEnv) HomeDir() (string, error) { return e.home, nil }
+
+// Environ implements sys.Env without the ignored variables.
+func (e lockedEnv) Environ() []string {
+	all := e.Env.Environ()
+	out := make([]string, 0, len(all))
+	for _, kv := range all {
+		drop := false
+		for _, k := range [...]string{EnvHome, EnvManagedDir, EnvInstallRoot} {
+			if len(kv) > len(k) && kv[:len(k)] == k && kv[len(k)] == '=' {
+				drop = true
+			}
+		}
+		if !drop {
+			out = append(out, kv)
+		}
+	}
+	return out
 }

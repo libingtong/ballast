@@ -111,6 +111,7 @@ package tier
 import (
 	"errors"
 	"io/fs"
+	"sync"
 	"time"
 
 	"github.com/libingtong/ballast/internal/layout"
@@ -203,7 +204,9 @@ type OrgConfig struct {
 
 // Prober implements ports.TierProbe with per-process memoization.
 type Prober struct {
-	opt Options
+	opt  Options
+	once sync.Once
+	info model.TierInfo
 }
 
 // New returns a Prober.
@@ -211,18 +214,24 @@ func New(opt Options) *Prober { return &Prober{opt: opt} }
 
 // Probe implements ports.TierProbe.
 func (p *Prober) Probe() model.TierInfo {
-	panic("unimplemented: tier.(*Prober).Probe (unit P2-TIER)")
+	p.once.Do(func() { p.info = Detect(p.opt) })
+	info := p.info
+	// Hand out copies of the slices so callers cannot alter the memo.
+	info.Missing = append([]string(nil), info.Missing...)
+	info.ProtectedExtra = append([]string(nil), info.ProtectedExtra...)
+	info.RunnerAllowWrite = append([]string(nil), info.RunnerAllowWrite...)
+	return info
 }
 
 // Detect runs detection once without memoization (doctor, tests).
 func Detect(opt Options) model.TierInfo {
-	panic("unimplemented: tier.Detect (unit P2-TIER)")
+	return detect(opt)
 }
 
 // LoadOrgConfig reads, decodes and validates org.json (rules on
 // OrgConfig). It does not check ownership (Detect and Locked do).
 func LoadOrgConfig(fsys sys.FS, path string) (OrgConfig, error) {
-	panic("unimplemented: tier.LoadOrgConfig (unit P2-TIER)")
+	return loadOrgConfig(fsys, path)
 }
 
 // Locked reports whether the host is "redirect-locked": a regular file
@@ -245,7 +254,8 @@ func LoadOrgConfig(fsys sys.FS, path string) (OrgConfig, error) {
 // create a root-owned org.json at the real managed dir, so they are
 // unaffected; tests of the lock itself use a fake FS and Owner.
 func Locked(fsys sys.FS, goos string, owner func(fi fs.FileInfo) (uid uint32, ok bool)) bool {
-	panic("unimplemented: tier.Locked (unit P2-TIER)")
+	_, ok := lockState(fsys, goos, owner)
+	return ok
 }
 
 // LockState is Locked that also returns the validated org.json it read
@@ -253,7 +263,7 @@ func Locked(fsys sys.FS, goos string, owner func(fi fs.FileInfo) (uid uint32, ok
 // LockedHome without reading org.json twice. Locked(...) ==
 // second result of LockState(...).
 func LockState(fsys sys.FS, goos string, owner func(fi fs.FileInfo) (uid uint32, ok bool)) (OrgConfig, bool) {
-	panic("unimplemented: tier.LockState (unit P2-TIER)")
+	return lockState(fsys, goos, owner)
 }
 
 // Home sources reported by LockedHome (doctor prints them).
@@ -325,7 +335,7 @@ var ErrLockedHomeTimeout = errors.New("tier: locked home lookup timed out")
 // the current user (results discarded); the cold per-process cost is
 // covered by bench scenario 13 (§3.6).
 func LockedHome(opt HomeOptions) (home, source string, err error) {
-	panic("unimplemented: tier.LockedHome (unit P2-TIER)")
+	return lockedHome(opt)
 }
 
 // SettingsLayer selects the WeakenedSandboxKeys rule set (v1.4).
@@ -401,7 +411,7 @@ const (
 // Pure; table-tested in testdata/weakened.json (every row run in both
 // layers with the expected difference).
 func WeakenedSandboxKeys(doc []byte, layer SettingsLayer) ([]string, error) {
-	panic("unimplemented: tier.WeakenedSandboxKeys (unit P2-TIER)")
+	return weakenedSandboxKeys(doc, layer)
 }
 
 // RepoSandboxWeakened applies WeakenedSandboxKeys(doc, LayerRepo) to every
@@ -420,7 +430,7 @@ func WeakenedSandboxKeys(doc []byte, layer SettingsLayer) ([]string, error) {
 // PreToolUse only under weakened_project:"deny"). Cost when <repo>/.claude
 // does not exist: one Lstat. No exec, no network.
 func RepoSandboxWeakened(fsys sys.FS, repo string) []string {
-	panic("unimplemented: tier.RepoSandboxWeakened (unit P2-TIER)")
+	return repoSandboxWeakened(fsys, repo)
 }
 
 // ProjectChecker implements ports.ProjectSandboxChecker with
@@ -432,7 +442,7 @@ type ProjectChecker struct {
 
 // Weakened implements ports.ProjectSandboxChecker.
 func (c ProjectChecker) Weakened(dir string) []string {
-	panic("unimplemented: tier.ProjectChecker.Weakened (unit P2-TIER)")
+	return repoSandboxWeakened(c.FS, dir)
 }
 
 // ManagedForms returns the exact denyWrite and permissions.deny strings
@@ -464,7 +474,7 @@ func (c ProjectChecker) Weakened(dir string) []string {
 // splits on '/' (and '\' when GOOS is windows); duplicates keep the first
 // occurrence. testdata/managed_forms.json is the frozen golden.
 func ManagedForms(lay layout.Layout, self string, extra []string) (denyWrite, permDeny []string) {
-	panic("unimplemented: tier.ManagedForms (unit P2-TIER)")
+	return managedForms(lay, self, extra)
 }
 
 // DefaultWeakenedProject (v1.5) is the effective weakened_project of a T1
@@ -488,7 +498,7 @@ const DefaultWeakenedProject = model.WeakenedProjectDeny
 // DefaultWeakenedProject when it is "". internal/cli fills
 // hook.Deps.WeakenedProject with this value (never "") on a locked host.
 func EffectiveWeakenedProject(org OrgConfig) model.WeakenedProjectPolicy {
-	panic("unimplemented: tier.EffectiveWeakenedProject (unit P2-TIER)")
+	return effectiveWeakened(org)
 }
 
 // ProtectedKind classifies a protected path.
@@ -524,5 +534,5 @@ type ProtectedPath struct {
 // when unknown ⇒ repo entries omitted). It performs EvalSymlinks through
 // fsys and never fails: unresolved paths keep Resolved "".
 func ProtectedPaths(fsys sys.FS, lay layout.Layout, self, repo string, extra []string) []ProtectedPath {
-	panic("unimplemented: tier.ProtectedPaths (unit P2-TIER)")
+	return protectedPaths(fsys, lay, self, repo, extra)
 }
