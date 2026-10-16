@@ -81,7 +81,7 @@ type Case struct {
 var (
 	reLocalPath = regexp.MustCompile(`(^|[^A-Za-z:}])/Users/[a-z][A-Za-z0-9._-]*/(NewCode|Documents|Desktop|Library|\.claude|\.ballast)`)
 	reLocalTree = regexp.MustCompile(`[~]/NewCode|claude-[0-9]+-`)
-	reLinuxHome = regexp.MustCompile(`/home/agent[/"\s]`)
+	reLinuxHome = regexp.MustCompile(`/home/agent\b|-home-agent-`)
 	secretRes   = []*regexp.Regexp{
 		regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{8,}`),
 		regexp.MustCompile(`\bsk-[A-Za-z0-9]{20,}`),
@@ -281,11 +281,19 @@ func validateCase(c Case, factsDir string, bad func(string, ...any)) {
 		if strings.Contains(c.Recheck, "--cases") && !strings.Contains(c.Recheck, id) {
 			bad("case %s: recheck --cases list does not name the case", id)
 		}
+		// A needs_credentials entry may legitimately have no evidence (not run);
+		// mock evidence it does list must still exist (a deleted directory
+		// would otherwise go unnoticed).
+		checkEvidence(c, id, factsDir, bad)
 		return
 	}
 	if len(c.Evidence) == 0 {
 		bad("case %s: evidence missing for a case that ran", id)
 	}
+	checkEvidence(c, id, factsDir, bad)
+}
+
+func checkEvidence(c Case, id, factsDir string, bad func(string, ...any)) {
 	for _, e := range c.Evidence {
 		if filepath.IsAbs(e) || strings.Contains(e, "..") {
 			bad("case %s: evidence %q must be a relative path under docs/facts", id, e)

@@ -16,6 +16,7 @@ import (
 
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/ports"
+	"github.com/libingtong/ballast/internal/redact"
 	"github.com/libingtong/ballast/internal/sys"
 )
 
@@ -203,6 +204,9 @@ func MarshalLine(rec *model.AuditRecord) ([]byte, error) {
 	if len(r.Detail) > 0 && !json.Valid(r.Detail) {
 		r.Detail, _ = encodeJSON(string(r.Detail))
 	}
+	if len(r.Detail) > 0 && redact.MayContainSecret(string(r.Detail)) {
+		r.Detail = redactDetail(r.Detail)
+	}
 
 	if line, ok, err := fit(&r); ok || err != nil {
 		return line, err
@@ -345,6 +349,39 @@ func clipDetail(raw json.RawMessage, n int) json.RawMessage {
 		return json.RawMessage(`{"truncated":true}`)
 	}
 	return out
+}
+
+// redactDetail masks secrets in every string value of a JSON detail. It is
+// only called when the raw bytes pass the redactor's prefilter, so details
+// without anything secret-looking keep their exact bytes.
+func redactDetail(raw json.RawMessage) json.RawMessage {
+	var v any
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&v); err != nil {
+		return json.RawMessage(`{"redacted":true}`)
+	}
+	out, err := encodeJSON(redactValue(v))
+	if err != nil {
+		return json.RawMessage(`{"redacted":true}`)
+	}
+	return out
+}
+
+func redactValue(v any) any {
+	switch x := v.(type) {
+	case string:
+		return Redact(x)
+	case []any:
+		for i := range x {
+			x[i] = redactValue(x[i])
+		}
+	case map[string]any:
+		for k, e := range x {
+			x[k] = redactValue(e)
+		}
+	}
+	return v
 }
 
 func clipValue(v any, n int) any {

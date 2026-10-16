@@ -505,6 +505,104 @@
    ]
   },
   {
+   "id": "ps-tee-object",
+   "client": "claude-code",
+   "tool": "PowerShell",
+   "input": {
+    "command": "Get-Date | Tee-Object -FilePath {{T}}"
+   },
+   "expect": "detected",
+   "via": "PowerShell Tee-Object",
+   "targets": [
+    "rules",
+    "settings"
+   ]
+  },
+  {
+   "id": "ps-set-content-literalpath",
+   "client": "claude-code",
+   "tool": "PowerShell",
+   "input": {
+    "command": "Set-Content -LiteralPath {{T}} -Value x"
+   },
+   "expect": "detected",
+   "via": "PowerShell -LiteralPath",
+   "targets": [
+    "rules",
+    "settings"
+   ]
+  },
+  {
+   "id": "ps-clear-content",
+   "client": "claude-code",
+   "tool": "PowerShell",
+   "input": {
+    "command": "Clear-Content {{T}}"
+   },
+   "expect": "detected",
+   "via": "PowerShell Clear-Content",
+   "targets": [
+    "rules",
+    "settings"
+   ]
+  },
+  {
+   "id": "ps-rename-item",
+   "client": "claude-code",
+   "tool": "PowerShell",
+   "input": {
+    "command": "Rename-Item -LiteralPath {{T}} -NewName moved.txt"
+   },
+   "expect": "detected",
+   "via": "PowerShell Rename-Item",
+   "targets": [
+    "rules",
+    "settings"
+   ]
+  },
+  {
+   "id": "ps-copy-item-positional",
+   "client": "claude-code",
+   "tool": "PowerShell",
+   "input": {
+    "command": "Copy-Item C:/tmp/forged {{T}}"
+   },
+   "expect": "detected",
+   "via": "PowerShell Copy-Item positional destination",
+   "targets": [
+    "rules",
+    "settings"
+   ]
+  },
+  {
+   "id": "ps-iofile-writealltext",
+   "client": "claude-code",
+   "tool": "PowerShell",
+   "input": {
+    "command": "[IO.File]::WriteAllText('{{T}}','x')"
+   },
+   "expect": "detected",
+   "via": "PowerShell [IO.File]::WriteAllText",
+   "targets": [
+    "rules",
+    "settings"
+   ]
+  },
+  {
+   "id": "ps-iofile-appendalltext",
+   "client": "claude-code",
+   "tool": "PowerShell",
+   "input": {
+    "command": "[System.IO.File]::AppendAllText('{{T}}','x')"
+   },
+   "expect": "detected",
+   "via": "PowerShell [System.IO.File]::AppendAllText",
+   "targets": [
+    "rules",
+    "settings"
+   ]
+  },
+  {
    "id": "tool-edit",
    "client": "claude-code",
    "tool": "Edit",

@@ -80,6 +80,11 @@ SECRET_PATTERNS = [
     re.compile(r"(?i)(api[_-]?key|secret|password)\"?\s*[:=]\s*\"?[A-Za-z0-9/+_=-]{12,}"),
     re.compile(r"-----BEGIN [A-Z ]*(PRIVATE KEY|CERTIFICATE)"),
     re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
+    re.compile(r"AIza[0-9A-Za-z_-]{35}"),
+    re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"glpat-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
 ]
 HYGIENE_PATTERNS = [
     re.compile(r"/Users/[A-Za-z][A-Za-z0-9._-]*/"),
@@ -179,6 +184,10 @@ def guard(label, d, fresh=True):
         entries = os.listdir(c)
         if entries and MARKER not in entries:
             return "%s 非空且不是由本探针创建的(缺少 %s 标记)" % (label, MARKER)
+        if MARKER in entries:
+            import stat
+            if not stat.S_ISREG(os.lstat(os.path.join(c, MARKER)).st_mode):
+                return "%s 的 %s 标记不是普通文件(符号链接或其他类型)" % (label, MARKER)
     return None
 
 
@@ -193,8 +202,7 @@ def claim(d):
     r = guard("probe dir", d)
     if r:
         die("refuse: " + r)
-    with open(os.path.join(d, MARKER), "w") as f:
-        f.write("created by scripts/probe-clients; safe to delete\n")
+    write_nofollow(os.path.join(d, MARKER), "created by scripts/probe-clients; safe to delete\n")
 
 
 def snake(ev):
@@ -212,10 +220,21 @@ def trust_hash(event, command, timeout):
     return "sha256:" + hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
+def write_nofollow(path, text):
+    """Create or truncate path without following a symlink planted there
+    (O_NOFOLLOW; where the platform lacks it the plain open is all we have)."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o644)
+    except OSError as e:
+        die("refuse: cannot write %s without following links: %s" % (os.path.basename(path), e.strerror))
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+
+
 def write_atomic(path, text):
     tmp = path + ".probe-tmp"
-    with open(tmp, "w") as f:
-        f.write(text)
+    write_nofollow(tmp, text)
     os.replace(tmp, path)
 
 
@@ -412,7 +431,7 @@ LAUNCH_NOTE = "{LAUNCH}"
 
 CODEX_CASES = [
     dict(id="session-start", title="启动与 SessionStart 注入",
-         steps=["在新终端按上面的 LAUNCH 命令启动 Codex TUI(工作目录为 {WORK}),在临时 CODEX_HOME 下自行登录(凭据只写进该目录,脚本不读取)。",
+         steps=["在新终端按上面的 LAUNCH 命令启动 Codex TUI(工作目录为 {WORK}),在临时 CODEX_HOME 下自行登录(脚本不读取凭据;客户端可能把凭据存进系统钥匙串【未核验】,取证结束后请自行登出)。",
                 "若问是否信任该目录,选择信任。"],
          prompt="What is the session probe token you were given? Reply with the token only.",
          need=["SessionStart", "UserPromptSubmit", "Stop"],
@@ -483,7 +502,7 @@ CODEX_CASES = [
 
 CURSOR_CASES = [
     dict(id="session-start", title="启动与 sessionStart 注入",
-         steps=["在新终端按上面的 LAUNCH 命令启动 Cursor(IDE 需 Reload Window;CLI 在工作目录 {WORK} 下运行),在一次性 HOME 下自行登录(凭据只写进该目录,脚本不读取)。"],
+         steps=["在新终端按上面的 LAUNCH 命令启动 Cursor(IDE 需 Reload Window;CLI 在工作目录 {WORK} 下运行),在一次性 HOME 下自行登录(脚本不读取凭据;客户端可能把凭据存进系统钥匙串【未核验】,取证结束后请自行登出)。"],
          prompt="What is the session probe token you were given? Reply with the token only.",
          need=["sessionStart"],
          question=("模型回复了 BALLAST_PROBE_SESSION_9K4M 吗?", "y"),
@@ -1149,6 +1168,23 @@ pc_t_accepts() { # NAME DIR [mode]
   fi
 }
 
+# pc_realdirs_refused DIR...: precondition of the self-tests that hand a REAL
+# directory to `prepare` and expect a refusal: the guard itself must refuse
+# each DIR first (checked without writing anything). If it does not, the guard
+# regressed and running `prepare` would write a marker into the real home, so
+# the self-test records a failure and the caller must stop before that.
+pc_realdirs_refused() {
+  local d ok=1
+  for d in "$@"; do
+    if pc_py guard probe "$d" fresh >/dev/null 2>&1; then
+      pc_t_eq "前置条件: 守卫拒绝真实目录 $(basename "$d")" "accepted" "refused"
+      ok=0
+    fi
+  done
+  [ "$ok" = 1 ] && pc_t_eq "前置条件: 守卫在 prepare 之前就拒绝全部真实目录" "refused" "refused"
+  [ "$ok" = 1 ]
+}
+
 # pc_selftest_guards ROOT: guard / real-home / hash / merge tests shared by
 # both scripts. ROOT is a fresh temp dir owned by the caller.
 pc_selftest_guards() {
@@ -1179,6 +1215,9 @@ pc_selftest_guards() {
   pc_t_refuses "指向 ~/.codex 的符号链接" "$root/link-to-codex"
   pc_t_refuses "包含真实家目录的祖先目录" "$root"
   pc_t_refuses "非空且无标记的目录" "$root/dirty"
+  mkdir "$root/symmarker"
+  ln -s "$root/afile" "$root/symmarker/.ballast-probe"
+  pc_t_refuses "标记是符号链接的目录" "$root/symmarker"
   local real
   real="$(pc_realhome)"
   pc_t_refuses "passwd 家目录" "$real"

@@ -375,6 +375,39 @@ func TestDoctorTierLevelClaudeConfigDirRedirect(t *testing.T) {
 	}
 }
 
+// End to end (no injected probe): a host that rendered the T1 template but
+// whose session points CLAUDE_CONFIG_DIR elsewhere is reported by the real
+// tier.Detect with sandbox_deny_write and the redirect explanation.
+func TestDoctorTierDetectRedirectedClaudeConfigDir(t *testing.T) {
+	if !runtimeIsUnix() {
+		t.Skip("Detect is darwin/linux only")
+	}
+	e := newTenv(t)
+	lay := e.lay
+	lay.GOOS = "linux"
+	self := filepath.Join(e.sb.Root, "bin", "ballast")
+	e.write(self, "#!/bin/sh\n")
+	defer func(f func() int) { geteuid = f }(geteuid)
+	geteuid = func() int { return 0 }
+	if _, err := OrgRenderFull(lay, e.fs, OrgRenderOptions{GOOS: "linux", Binary: self, Write: true, IAmAdmin: true, Env: sys.MapEnv{}}); err != nil {
+		t.Fatal(err)
+	}
+	vars := map[string]string{}
+	for k, v := range e.sb.Vars {
+		vars[k] = v
+	}
+	vars["CLAUDE_CONFIG_DIR"] = filepath.Join(e.sb.Home, "alt")
+	cs := byID(Doctor(DoctorOptions{
+		Layout: lay, FS: e.fs, Env: sys.MapEnv{Vars: vars}, Self: self, TierManagedDir: lay.ManagedDir,
+		TierOwner: func(fs.FileInfo) (uint32, bool) { return 0, true },
+		TierLock:  func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false },
+	}))
+	c := cs["tier.level"]
+	if !strings.Contains(c.Message, model.TierMissingDenyWrite+"(") || !strings.Contains(c.Message, "CLAUDE_CONFIG_DIR") {
+		t.Errorf("redirected CLAUDE_CONFIG_DIR not reported by Detect: %s", c.Message)
+	}
+}
+
 func TestDoctorWindowsTier(t *testing.T) {
 	e := newTenv(t)
 	lay := e.lay

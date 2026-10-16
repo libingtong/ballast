@@ -52,6 +52,14 @@ func guard(b *testing.B, limit time.Duration, fn func()) {
 	if best > limit {
 		b.Fatalf("best-of-%d %v per op exceeds the %v budget (b.N average %v)", rounds, best, limit, avg)
 	}
+	// The best-of figure is a lower bound, so the budget margin it shows is
+	// optimistic (realfs-faked-root: ~110 µs best vs ~190 µs average on a busy
+	// darwin host against a 200 µs budget). The b.N average must therefore
+	// stay within 1.5x the budget as well; short runs (-benchtime=1x style)
+	// are dominated by cold caches and are not judged on the average.
+	if b.N >= 100 && avg > limit+limit/2 {
+		b.Fatalf("b.N average %v per op exceeds 1.5x the %v budget (best-of-%d %v)", avg, limit, rounds, best)
+	}
 }
 
 // rebaseFS serves the virtual absolute paths of a production host from a real

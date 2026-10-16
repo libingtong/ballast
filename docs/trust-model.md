@@ -26,7 +26,7 @@ hook、规则文件、状态与证据文件都和 agent 以**同一个用户**�
 - 审计日志记录每次命中与诊断(见 `ballast audit lint`、`ballast stats`)。
 - 这些检测本身也运行在 agent 可触及的环境里,**识别写入靠的是 shell 命令的静态解析**,所以有下面这些已知局限。**不要把 T0 当成安全边界。**
 
-  **识别的写入**(`bashparse` 写入目标表,契约见 `internal/bashparse/doc.go`、`docs/dsl-semantics.md` §6):重定向 `> >> &> >|`;`tee`;`cp`/`mv`/`install`/`rsync` 的**目标**;`sed -i`;`perl -i`/`ruby -i`(含 `-pi`、`-pi.bak`);`git checkout [<rev>] -- <path>`、`git restore <path>`;`rm`、`truncate`、`dd of=`、`touch`、`ln` 的链接;PowerShell 的 `Set-Content` 等(覆盖面窄于 bash)。
+  **识别的写入**(`bashparse` 写入目标表,契约见 `internal/bashparse/doc.go`、`docs/dsl-semantics.md` §6):重定向 `> >> &> >|`;`tee`;`cp`/`mv`/`install`/`rsync` 的**目标**;`sed -i`;`perl -i`/`ruby -i`(含 `-pi`、`-pi.bak`);`git checkout [<rev>] -- <path>`、`git restore <path>`;`rm`、`truncate`、`dd of=`、`touch`、`ln` 的链接;PowerShell 的 `Set-Content`/`Add-Content`/`Out-File`/`Tee-Object`/`Clear-Content`/`Remove-Item`/`Copy-Item`/`Move-Item`/`Rename-Item`/`New-Item`(含 `-LiteralPath`)、重定向,以及 `[IO.File]::WriteAllText`/`AppendAllText`/`WriteAllBytes`/`WriteAllLines` 这类静态调用(覆盖面窄于 bash;类型存在变量里再调用、`.Invoke`、哈希字面量值里的调用、`[global::System.IO.File]::` 不识别,不产生节点)。
 
   **受检测的路径**:默认 `no-tamper` 的路径表覆盖 `**/.ballast/**`、`~/.ballast/**`、各客户端的 hook 配置文件,以及 org 规则目录,即三个平台默认托管目录下的 `ballast/`(`/etc/claude-code/ballast/**`、`/Library/Application Support/ClaudeCode/ballast/**`、`c:/Program Files/ClaudeCode/ballast/**`)。org 规则目录在真实部署里是 root 所有,权限本身就拦得住非 root 的写入;把它列进路径表是为了让 agent 以同一用户权限(例如 root 会话或权限被误配的目录)改写它时也留下审计命中。同样只是检测,不是屏障。
 
@@ -88,6 +88,8 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 - **macOS 上 runner 沙箱的 IPC(P2 设计 v1.5)**:沙箱内的测试不能请求沙箱外的系统服务替它执行:mach 服务查找默认拒绝,只放行一个最小白名单;偏好写入(cfprefsd 代写)、launchd 作业提交、LaunchServices、AppleEvents 显式拒绝;WindowServer 与剪贴板服务不在白名单内。文件读、sysctl、IOKit、POSIX/SysV IPC 仍然放行(登记的残余面)。管理员选择 `runner_network:"loopback"` 或 `"allow"` 时,macOS 上的测试可以在所有网络接口上监听并接受其他主机的入站连接(设计期实测,SBPL 挡不住)。
 - **托管 hook 进程的环境(P2 设计)**:项目层 `env` 会进入托管 hook 本身。未启用 hardened runtime 的 macOS 构建会加载 `DYLD_INSERT_LIBRARIES`,动态链接的 Linux 构建(例如管理员自建的 cgo 构建)会加载 `LD_PRELOAD`。macOS 发布构建须以 `codesign -o runtime` 签名(doctor `tier.binary_hardening` 检查);Linux 发布构建是静态链接,不受影响。runner 在沙箱外启动的 git 使用去掉 `GIT_*`、`LD_*`、`DYLD_*` 的环境。
 - **`runner_allow_write`(P2 设计)**:org.json 中的每一项都等价于把该目录交给 agent 可以改写的测试代码。hook 代起的沙箱测试可以写它,写入在 job 结束后仍然存在,而且不在内容快照 `C` 里;如果它是共享的构建缓存(例如家目录下的 Go 构建缓存),之后在沙箱外运行的人工构建会复用被投毒的条目,形成一条跨越边界、能持久存在的通道。默认建议保持为空:runner 会把常见缓存变量(`GOCACHE`、`XDG_CACHE_HOME`、npm/yarn/pip 缓存)指向每个 job 的临时目录;确需持久缓存时优先用仓库内被忽略的目录,并把这一项当作残余风险评估。
+
+- **v1.5.4 补充登记**(各条的原因与处置见 `docs/p2-design.md` §11):① 用户层 `settings*.json` 或 `~/.claude` 是指向 `~/.claude` 之外的符号链接时(dotfiles 仓库),条件 6 跟随链接读目标,内容无害就判 T1,但托管 `denyWrite` 的字面形式未必盖住链接目标,待项目负责人裁决;② `RepoMandatoryDeny` 追加的 shell/工具启动文件名(`.bashrc`、`.zshrc`、`.gitconfig` 等)在仓库任意深度都是只读,dotfiles 仓库与相关夹具里的 verify 会可见地失败;③ macOS 上沙箱内的后代进程可以 `setsid` 脱离进程组,躲过收尾时的 `killpg`,在 `PostCheck`、`Quarantine` 与 `S_end` 之后继续写入沙箱允许的范围,仍写不了受保护路径(origin=hook 时副本随后删除,origin=cli 时只会让结果事后过期),所以包注释不再宣称"S_end 之后没有沙箱进程";④ 大小写不敏感的 macOS 卷上 `.CLAUDE`、`.Git` 这类变体的保护来自 sandbox-exec 自己的路径匹配,不是 Ballast 的匹配器,有测试钉住;⑤ 实体化与 `git add -u` 读副本里测试可写的 `.gitattributes`,配合用户全局的 git-lfs 之类过滤器会在沙箱外处理测试控制的内容,驱动程序仍只来自 agent 写不了的配置;⑥ `ballast verify` 的前缀赋值写法(`X=1 ballast verify test`)被当作规范形式,赋值被悄悄丢弃,不影响安全;⑦ `ballast report` 的 `Validate` 不知道内置规则 id,"自定义 id 必须哈希"只由生成端保证;⑧ macOS 的 hardened runtime 检查只看 `CS_RUNTIME`,不看允许 `DYLD_*` 的 entitlement。
 
 ### 2.4 T1 设计中的两条特权链路(P2 设计,`docs/p2-design.md` §3)
 

@@ -69,6 +69,10 @@ func TestConfigChangeGolden(t *testing.T) {
 			t.Errorf("row %d (%s): unexpected event shape %+v", i, r.Desc, ev)
 		}
 	}
+	// 6 = docs/facts/payloads/m0b/configchange-payload/hang/03..08-managed-
+	// ConfigChange.json (M0b-CONCLUSIONS A16: user/project/local settings,
+	// skill and managed-settings edits). Re-capturing may change the count:
+	// update it here and in TestConfigChangeAllCaptures together.
 	if files != 6 {
 		t.Errorf("%d capture rows, want the 6 M0b ConfigChange payloads", files)
 	}
@@ -112,6 +116,7 @@ func TestConfigChangeAllCaptures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// See TestConfigChangeGolden for what the 6 captures are.
 	if n != 6 {
 		t.Fatalf("%d ConfigChange captures, want 6", n)
 	}

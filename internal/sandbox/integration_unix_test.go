@@ -520,6 +520,38 @@ except Exception as e:
 	}
 }
 
+// On macOS's default case-insensitive APFS, .CLAUDE / .Git / .MCP.json name the
+// protected files too. The matcher (MatchMandatory, PostCheck) is
+// case-sensitive, so the protection of these variants rests entirely on
+// sandbox-exec's own path matching; this test pins that dependency.
+func TestDarwinCaseVariantsAreDenied(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin profile rule")
+	}
+	f := fix(t, model.NetworkDeny)
+	probe := filepath.Join(f.root, "CaseProbe.txt")
+	if err := os.WriteFile(probe, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(f.root, "caseprobe.txt")); err != nil {
+		t.Skip("volume is case-sensitive: the variants are different names there")
+	}
+	_ = os.Remove(probe)
+	// (.Git and .Ballast name the fixture's own existing .git / .ballast on
+	// this volume; their guarded contents are checked through f.guard.)
+	variants := []string{".CLAUDE", ".VSCode", ".MCP.json", "pkg/.Git", "pkg/.GIT"}
+	f.guard(rp(f, ".ballast/project.json"))
+	script := `mkdir -p "$R/pkg"; mkdir "$R/.CLAUDE"; mkdir "$R/.VSCode"; mkdir "$R/.Ballast"; echo '{}' > "$R/.MCP.json"; mkdir -p "$R/pkg/.Git"; echo x > "$R/pkg/.Git/config"; mkdir -p "$R/pkg/.GIT/hooks" && echo x > "$R/pkg/.GIT/hooks/x"; echo x > "$R/.Ballast/project.json"; true`
+	res := f.sh(script, runOpts{})
+	t.Logf("exit=%v found=%v out=%s", res.ExitErr, relFound(f.root, res.Found), strings.TrimSpace(res.Out))
+	f.assertGuards()
+	var paths []string
+	for _, v := range variants {
+		paths = append(paths, rp(f, v))
+	}
+	f.assertAbsent(paths...)
+}
+
 // Under deny, darwin refuses every IP bind, including the wildcard.
 func TestDarwinBindUnderDeny(t *testing.T) {
 	if runtime.GOOS != "darwin" {

@@ -2,6 +2,7 @@ package tier
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"path"
 	"strings"
@@ -104,3 +105,41 @@ func fileTrusted(fi fs.FileInfo, owner ownerFunc) bool {
 }
 
 func isNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
+
+// maxSettingsBytes bounds every settings file Detect and the repo-layer
+// check read. Real settings files are a few hundred bytes; the bound only
+// stops a hostile or accidental /dev/zero, FIFO or giant file from hanging
+// or exhausting a hook that must answer in milliseconds.
+const maxSettingsBytes = 1 << 20
+
+var (
+	errNotRegularFile = errors.New("not a regular file")
+	errFileTooLarge   = errors.New("file too large")
+)
+
+// readSettings reads a settings file after a Stat (which follows symlinks,
+// as Claude does) proved it is a regular file of at most maxSettingsBytes.
+// Anything else is an error, which every caller maps to its "unreadable"
+// (conservative) outcome. The Stat-to-read window is a registered residual
+// (docs/p2-design.md §11): closing it needs a non-blocking open on the sys.FS
+// seam.
+func readSettings(fsys sys.FS, p string) ([]byte, error) {
+	fi, err := fsys.Stat(p)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("tier: %s: %w", path.Base(p), errNotRegularFile)
+	}
+	if fi.Size() > maxSettingsBytes {
+		return nil, fmt.Errorf("tier: %s: %w", path.Base(p), errFileTooLarge)
+	}
+	b, err := fsys.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > maxSettingsBytes {
+		return nil, fmt.Errorf("tier: %s: %w", path.Base(p), errFileTooLarge)
+	}
+	return b, nil
+}

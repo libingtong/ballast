@@ -17,4 +17,5 @@ attempts_run "$atts" --permission-mode default
 obs="托管 allowedMcpServers=[writer];writer 与 other 两个会写文件的 stdio MCP server 配在用户层。claude mcp list 显示:[${listed:-无}]。写受保护路径 ~/.ballast/evidence:$ATT_RESULT(发出 $ATT_STEPS 个工具调用)。解读:mcp-allowed=written 表示白名单内的 MCP server 能写受保护路径(MCP 进程在沙箱外运行,残余风险不变,只能靠白名单);mcp-not-allowed=blocked 表示白名单外的 server 不可用。"
 ok=1
 [ "$(att mcp-allowed)" = written ] && [ "$(att mcp-not-allowed)" = blocked ] && ok=0
+CRED_CONTROLS="control-write"
 cred_finish "$ok" "$obs"

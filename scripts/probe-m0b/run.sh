@@ -119,6 +119,7 @@ CASES_JSON="$OUT_ROOT/m0b-cases.json"
 normalize() {
   sed -E \
     -e 's#-home-agent-proj#-<project-key>#g' \
+    -e 's#-home-agent-#-<home>-#g' \
     -e 's#/home/agent/proj#<repo>#g' \
     -e 's#/home/agent#<home>#g' \
     -e 's#claude-[0-9]+-#claude-<uid>-#g'

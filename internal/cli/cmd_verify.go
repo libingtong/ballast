@@ -245,6 +245,12 @@ func (a *app) verifyStatus(c *command, pos []string, asJSON bool) int {
 	var rows []statusRow
 
 	if len(pos) == 1 && isJobID(pos[0]) {
+		// The request id of a hook-started verify is also the id of its FIRST
+		// job, so for a request with several jobs the plain job lookup would
+		// show (and exit with) that one job only; the aggregate must win.
+		if code, handled := a.requestStatus(pos[0], asJSON, true); handled {
+			return code
+		}
 		js, rec, err := store.FindJob(pos[0])
 		if err != nil {
 			return a.errorf(ExitVerifyInfra, "verify: %v", err)
@@ -252,7 +258,7 @@ func (a *app) verifyStatus(c *command, pos []string, asJSON bool) int {
 		if js == nil && rec == nil {
 			// No job has that id: it may be the request id a hook-started
 			// verify announced in its deny reason (P2, architecture §7).
-			if code, handled := a.requestStatus(pos[0], asJSON); handled {
+			if code, handled := a.requestStatus(pos[0], asJSON, false); handled {
 				return code
 			}
 		}
@@ -320,14 +326,22 @@ func (a *app) verifyStatus(c *command, pos []string, asJSON bool) int {
 // outcome (fail > timeout > signal > infra > running > pass). handled=false
 // means "no such request" and the caller reports the ordinary no-record
 // result (exit 11).
-func (a *app) requestStatus(id string, asJSON bool) (code int, handled bool) {
+//
+// multiOnly restricts the handling to requests with more than one job and
+// treats every read problem as "not handled": it is the pre-check that keeps
+// a plain `--status <job id>` unchanged for single-job requests and for ids
+// that are no request at all.
+func (a *app) requestStatus(id string, asJSON bool, multiOnly bool) (code int, handled bool) {
 	opt := runner.Options{Layout: a.lay, FS: a.fs, Clock: a.clock, IDs: a.ids, Env: a.env}
 	res, err := runner.RequestStatus(opt, "", id)
 	if err != nil {
-		if errors.Is(err, runner.ErrRequestNotFound) {
+		if multiOnly || errors.Is(err, runner.ErrRequestNotFound) {
 			return 0, false
 		}
 		return a.errorf(ExitVerifyInfra, "verify: %v", err), true
+	}
+	if multiOnly && len(res.Jobs) < 2 {
+		return 0, false
 	}
 	rows := make([]statusRow, 0, len(res.Jobs))
 	for _, j := range res.Jobs {

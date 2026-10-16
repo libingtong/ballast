@@ -250,7 +250,7 @@ func repoSandboxWeakened(fsys sys.FS, repo string) []string {
 			out = append(out, name+":unreadable")
 			continue
 		}
-		b, err := fsys.ReadFile(filepath.Join(dir, name))
+		b, err := readSettings(fsys, filepath.Join(dir, name))
 		if err != nil {
 			out = append(out, name+":unreadable")
 			continue

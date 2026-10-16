@@ -241,7 +241,7 @@ func (inv *invocation) startVerify(ev *model.Event, key model.ScopeKey, vr model
 		return &synthetic{reason: fmt.Sprintf(verifyDenyFmt, reqID, list, reqID)},
 			[]diag{{name: model.DiagVerifyHookStart, fields: fields}}
 	}
-	msg := clipRunes(oneLine(err.Error()), maxSpawnErrRunes)
+	msg := clipRunes(oneLine(inv.scrubHome(err.Error())), maxSpawnErrRunes)
 	cmd := "ballast verify"
 	if len(vr.Names) > 0 {
 		cmd += " " + strings.Join(vr.Names, " ")
@@ -325,6 +325,27 @@ func (inv *invocation) configChange(ev *model.Event, repo *model.RepoInfo, pc mo
 	return &Result{Decision: dec, Audit: []model.AuditRecord{rec}, Event: ev}, func() {}, nil
 }
 
+// scrubHome rewrites the Ballast home and the user's home directory inside an
+// error text (an *os.PathError carries the absolute path) to "~/.ballast" and
+// "~", so the audit line and the deny reason carry no user name.
+func (inv *invocation) scrubHome(msg string) string {
+	d := inv.deps
+	var pairs []string
+	add := func(dir, repl string) {
+		if dir = strings.TrimRight(dir, `/\`); dir != "" && dir != "." {
+			pairs = append(pairs, dir, repl)
+		}
+	}
+	add(d.Layout.Home, "~/.ballast") // the more specific prefix first
+	if home, err := d.Env.HomeDir(); err == nil {
+		add(home, "~")
+	}
+	if len(pairs) == 0 {
+		return msg
+	}
+	return strings.NewReplacer(pairs...).Replace(msg)
+}
+
 // displayPath rewrites an absolute config path into "<repo>/…" or "~/…"
 // form; a path under neither keeps only its basename (no usernames, no
 // directory layout in the audit trail). The path is cleaned first, so a
@@ -376,7 +397,10 @@ func (inv *invocation) displayPath(p string, repo *model.RepoInfo) string {
 // protectedPath reports whether the changed file is one Ballast protects:
 // anything under ~/.ballast, the org rules directory, the managed settings
 // directory or <repo>/.ballast, or a Claude settings*.json of the user, the
-// repo or the session directory. Decided on PathService-normalized paths.
+// repo, a project directory Claude loads (CLAUDE_PROJECT_DIR or the event
+// cwd), or any other .claude/settings*.json (the managed any-depth form); the
+// directory of the running binary also counts. protected_extra from org.json
+// is not visible here. Decided on PathService-normalized paths.
 func (inv *invocation) protectedPath(ev *model.Event, pc model.PathContext, repo *model.RepoInfo) bool {
 	d := inv.deps
 	norm := d.Paths.Normalize(ev.ConfigFile, ev.Cwd, pc)
@@ -418,6 +442,19 @@ func (inv *invocation) protectedPath(ev *model.Event, pc model.PathContext, repo
 	if pc.ProjectRoot != "" {
 		settingsDirs = append(settingsDirs, pc.ProjectRoot+"/.claude")
 	}
+	// The directories Claude actually loads the project layers from
+	// ($CLAUDE_PROJECT_DIR, or the event cwd: a monorepo sub-directory).
+	for _, pd := range inv.projectDirs(ev, repo) {
+		if np := strings.TrimRight(d.Paths.Normalize(pd, "", pc), "/"); np != "" {
+			settingsDirs = append(settingsDirs, np+"/.claude")
+		}
+	}
+	// The directory of the running binary (managed binary_dir entry).
+	if d.Self != "" {
+		if sd := path.Dir(d.Paths.Normalize(d.Self, "", pc)); sd != "." && sd != "/" {
+			dirs = append(dirs, sd)
+		}
+	}
 	for _, dir := range dirs {
 		if inDir(dir) {
 			return true
@@ -426,6 +463,11 @@ func (inv *invocation) protectedPath(ev *model.Event, pc model.PathContext, repo
 	base := path.Base(n)
 	if ok, _ := path.Match("settings*.json", base); ok {
 		parent := path.Dir(n)
+		// The managed denyWrite forms also name **/.claude/settings*.json at
+		// any depth (docs/p2-design.md §3.2): protected wherever it is.
+		if path.Base(parent) == ".claude" {
+			return true
+		}
 		for _, sd := range settingsDirs {
 			if sd2 := n2(sd); sd2 != "" && sd2 == parent {
 				return true

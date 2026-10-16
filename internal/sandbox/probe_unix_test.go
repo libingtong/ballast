@@ -127,3 +127,27 @@ func TestHarnessDetectsEscapes(t *testing.T) {
 		t.Errorf("the absent-path check would not notice an escape: %v", err)
 	}
 }
+
+// A root-owned bwrap in a group/other-writable directory is not trusted
+// (the entry could be swapped or replaced by a symlink). Needs root to create
+// root-owned files, so it runs in the Docker/CI root jobs only.
+func TestBwrapPathDirectoryMustBeTrusted(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("needs root to create root-owned files")
+	}
+	dir := realTemp(t)
+	writeScript(t, dir, "bwrap", "exit 0")
+	opt := Options{Env: sys.MapEnv{Vars: map[string]string{"PATH": dir}}}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := opt.bwrapPath(); err != nil || p != filepath.Join(dir, "bwrap") {
+		t.Fatalf("trusted directory: (%q, %v)", p, err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := opt.bwrapPath(); err == nil {
+		t.Fatalf("a bwrap in a world-writable directory was trusted: %s", p)
+	}
+}

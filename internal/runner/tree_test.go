@@ -676,6 +676,24 @@ func TestTreeSourcesHaveNoAbsolutePathWrites(t *testing.T) {
 			}
 		}
 	}
+	// inputs.go copies agent-influenced files: it may read through opt.FS
+	// (O_RDONLY, no-follow) but every write goes through os.Root. (tree.go's
+	// own FS.MkdirAll / FS.OpenFile calls create the runner's private work
+	// directories and index copy and are deliberately not covered.)
+	inputsSrc, _ := os.ReadFile("inputs.go")
+	for n, line := range strings.Split(string(inputsSrc), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "//") {
+			continue
+		}
+		for _, bad := range []string{"FS.MkdirAll(", "FS.WriteFile(", "FS.Symlink(", "FS.Rename(", "FS.Remove(", "FS.RemoveAll("} {
+			if strings.Contains(line, bad) {
+				t.Errorf("inputs.go:%d uses %s: writes must go through os.Root", n+1, bad)
+			}
+		}
+		if strings.Contains(line, "FS.OpenFile(") && !strings.Contains(line, "os.O_RDONLY") {
+			t.Errorf("inputs.go:%d opens through FS for something other than reading: %s", n+1, strings.TrimSpace(line))
+		}
+	}
 	src, _ := os.ReadFile("inputs.go")
 	for _, need := range []string{"os.OpenRoot(", "root.Mkdir(", "root.OpenFile(", "root.Symlink(", "root.Lstat("} {
 		if !strings.Contains(strings.ReplaceAll(string(src), "c.root.", "root."), need) {

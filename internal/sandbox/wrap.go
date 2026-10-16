@@ -48,7 +48,8 @@ func (o Options) sandboxExec() string {
 
 // bwrapPath returns the bwrap to use: Options.Bwrap, or the first "bwrap" on
 // PATH that is a regular executable owned by root and writable by neither
-// group nor others (an agent-planted fake bwrap earlier on PATH is skipped).
+// group nor others, in a directory that is itself root-owned and writable by
+// neither (an agent-planted fake bwrap earlier on PATH is skipped).
 func (o Options) bwrapPath() (string, error) {
 	if o.Bwrap != "" {
 		return o.Bwrap, nil
@@ -68,6 +69,16 @@ func (o Options) bwrapPath() (string, error) {
 			continue
 		}
 		if uid, ok := fileUID(fi); !ok || uid != 0 {
+			continue
+		}
+		// The directory must be trusted too: in a group/other-writable or
+		// non-root directory the entry can be swapped (or replaced by a
+		// symlink to another root-owned binary) between Probe and exec.
+		di, derr := fsys.Stat(dir)
+		if derr != nil || !di.IsDir() || di.Mode().Perm()&0o022 != 0 {
+			continue
+		}
+		if uid, ok := fileUID(di); !ok || uid != 0 {
 			continue
 		}
 		return p, nil

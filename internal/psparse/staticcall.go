@@ -135,6 +135,9 @@ func (p *parser) staticCalls(c ctx, toks []token, redirs []redir) int {
 		if len(inner) >= 2 && inner[0] == '(' && inner[len(inner)-1] == ')' {
 			inner = inner[1 : len(inner)-1]
 		}
+		// Argv[1] (the target) is the unquoted literal when it is one; the
+		// later elements are kept as the raw (possibly quoted) source text.
+		// Only Writes decides detection, so the asymmetry is harmless.
 		for k, a := range splitCallArgs(inner) {
 			a = strings.TrimSpace(a)
 			if a == "" && k == 0 {

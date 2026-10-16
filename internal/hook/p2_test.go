@@ -294,6 +294,8 @@ func TestConfigChangeAudit(t *testing.T) {
 			configDetail{str("user_settings"), str("~/.ballast/rules.json"), &yes}, []string{"file", "protected", "source"}},
 		{"repo ballast dir", "project_settings", "/repo/.ballast/rules.json",
 			configDetail{str("project_settings"), str("<repo>/.ballast/rules.json"), &yes}, []string{"file", "protected", "source"}},
+		{"monorepo sub-directory project settings are protected", "project_settings", "/repo/packages/app/.claude/settings.json",
+			configDetail{str("project_settings"), str("<repo>/packages/app/.claude/settings.json"), &yes}, []string{"file", "protected", "source"}},
 		{"repo skill is not protected", "skills", "/repo/.claude/skills/x/SKILL.md",
 			configDetail{str("skills"), str("<repo>/.claude/skills/x/SKILL.md"), &no}, []string{"file", "protected", "source"}},
 		{"other settings-like name is not protected", "project_settings", "/repo/.claude/settings.txt",
@@ -543,5 +545,26 @@ func TestFirstEventDiagsSkippedOnUnreadableState(t *testing.T) {
 	}
 	if !contains(diagNames(h), "state_unreadable") {
 		t.Errorf("state_unreadable missing: %v", diagNames(h))
+	}
+}
+
+// A spawn error carries absolute paths (*os.PathError); the home directories
+// are rewritten before the text reaches the deny reason and the audit line.
+func TestSpawnErrorHomePathsAreScrubbed(t *testing.T) {
+	h, _ := t1Harness(t)
+	lay := h.deps.Layout
+	home, err := h.deps.Env.HomeDir()
+	if err != nil || home == "" || lay.Home == "" {
+		t.Skip("harness has no home")
+	}
+	h.spawner.err = errors.New("open " + lay.RequestsDir + "/x/y.spawn.log: permission denied; also " + home + "/other")
+	mustExit0(t, h, h.claude("PreToolUse", verifyStdin))
+	if strings.Contains(h.stdout.String(), home) {
+		t.Errorf("home path in the deny reason: %q", h.stdout.String())
+	}
+	for _, r := range h.audit.all() {
+		if strings.Contains(string(r.Detail), home) {
+			t.Errorf("home path in the audit detail: %s", r.Detail)
+		}
 	}
 }

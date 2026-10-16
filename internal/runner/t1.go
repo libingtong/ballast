@@ -279,6 +279,10 @@ func aggregateOutcome(o string) string {
 }
 
 // jobExitCode is the exit code `verify --status <job>` gives for one line.
+// A request job that has neither a record nor a live process is "infra"
+// (5), deliberately not the "no record" 11 of an UNKNOWN job id: the request
+// file proves the job was started, so a missing record means it died or was
+// cleaned up before finishing, which is an infrastructure failure of the run.
 func jobExitCode(l RequestJobStatus) int {
 	if l.Record != nil {
 		return StatusExitCode(l.Record)

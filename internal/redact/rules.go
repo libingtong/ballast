@@ -54,7 +54,7 @@ var (
 		`|glpat-[A-Za-z0-9_-]{16,}` +
 		`|npm_[A-Za-z0-9]{30,}` +
 		`|xox[abposr]-[A-Za-z0-9-]{8,}` +
-		`|sk-[A-Za-z0-9_-]{12,}` +
+		`|sk-[A-Za-z0-9_-]{8,}` +
 		`|[sr]k_(?:live|test)_[A-Za-z0-9]{8,}` +
 		`|whsec_[A-Za-z0-9]{16,}` +
 		`|AIza[0-9A-Za-z_-]{30,}` +
@@ -532,6 +532,9 @@ func classifyKey(k string) keyClass {
 	case "pwd", "pass", "auth":
 		return keyWeak
 	}
+	if len(norm) > len("pwd") && strings.HasSuffix(norm, "pwd") {
+		return keyWeak // mypwd=, userPwd:, db_pwd
+	}
 	seg := k
 	if i := strings.LastIndexAny(k, "_-."); i >= 0 {
 		seg = k[i+1:]
@@ -704,8 +707,21 @@ func findKeyValues(s string, out []Match) []Match {
 		if p <= encEnd {
 			lim = encEnd // starts inside the previous value, cannot outlive it
 		}
-		if p < lim && (s[p] == '[' || s[p] == '{' || s[p] == '(') {
-			continue // a structure, not a value; keys inside are scanned on their own
+		if p < lim && (s[p] == '[' || s[p] == '(') {
+			// A list of scalars under a strong key ("password=[x]",
+			// {"password": ["x"]}): the scalars are the secret. Nested
+			// structures inside are scanned on their own.
+			if class == keyStrong {
+				var end int
+				out, end = listValues(s[:lim], p+1, &noQuote, out)
+				if end > encEnd {
+					encEnd = end
+				}
+			}
+			continue
+		}
+		if p < lim && s[p] == '{' {
+			continue // an object, not a value; keys inside are scanned on their own
 		}
 		a, b, ve := valueSpan(s[:lim], p, &noQuote)
 		if ve == p {
@@ -727,6 +743,45 @@ func findKeyValues(s string, out []Match) []Match {
 		out = append(out, Match{Kind: KindKeyValue, Start: a, End: b})
 	}
 	return out
+}
+
+// maxListValues bounds how many elements of one bracketed list are masked,
+// which keeps the scan linear on "password=[a,a,a,...".
+const maxListValues = 64
+
+// listValues masks the scalar elements of the bracketed list whose first
+// element starts at p (just after "[" or "("): a run of values separated by
+// commas, ended by a closing bracket, a nested structure or anything else.
+// It returns the extended matches and the end offset of the last element.
+func listValues(s string, p int, noQuote *int, out []Match) ([]Match, int) {
+	last := 0
+	for k := 0; k < maxListValues; k++ {
+		for p < len(s) && isBlank(s[p]) {
+			p++
+		}
+		if p >= len(s) || strings.IndexByte("]){}[(", s[p]) >= 0 {
+			break
+		}
+		a, b, ve := valueSpan(s, p, noQuote)
+		if ve == p {
+			break
+		}
+		if b > a && !keepValue(s[a:b]) {
+			out = append(out, Match{Kind: KindKeyValue, Start: a, End: b})
+		}
+		if b > last {
+			last = b
+		}
+		p = ve
+		for p < len(s) && isBlank(s[p]) {
+			p++
+		}
+		if p >= len(s) || s[p] != ',' {
+			break
+		}
+		p++
+	}
+	return out, last
 }
 
 func hasDigit(v string) bool {

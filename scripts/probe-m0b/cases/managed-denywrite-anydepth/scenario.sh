@@ -56,6 +56,8 @@ for tok in $r1 $r3; do
     *) [ "$val" = written ] && ok=1 ;;
   esac
 done
+CRED_CONTROLS="control-write"
+ATT_RESULT="$r1 $r3" # 两次运行各有一条 control-write
 sk='{"managed-settings":["sandbox.filesystem.denyWrite","permissions.deny"]}'
 if [ "$ok" = 1 ] && [ "$AGENT_MODE" = credentials ]; then
   cred_finish 1 "$obs 【契约影响】tier.DefaultWeakenedProject 保持 deny。" "$sk"

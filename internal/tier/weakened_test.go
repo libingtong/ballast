@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/libingtong/ballast/internal/model"
@@ -142,6 +143,7 @@ func TestRepoSandboxWeakened(t *testing.T) {
 		{"mixed-case-settings-name", map[string]string{".claude/Settings.json": `{"sandbox":{"excludedCommands":["npm"]}}`}, nil, []string{"Settings.json:sandbox.excludedCommands"}},
 		{"upper-case-local-name", map[string]string{".claude/SETTINGS.LOCAL.JSON": `{"sandbox":{"network":{"allowUnixSockets":["/s"]}}}`}, nil, []string{"SETTINGS.LOCAL.JSON:sandbox.network.allowUnixSockets"}},
 		{"unicode-fold-settings-name", map[string]string{".claude/\u017fettings.json": `{"sandbox":{"excludedCommands":["npm"]}}`}, nil, []string{"\u017fettings.json:sandbox.excludedCommands"}},
+		{"oversized-settings-unreadable", map[string]string{".claude/settings.json": `{"model":"` + strings.Repeat("x", maxSettingsBytes) + `"}`}, nil, []string{"settings.json:unreadable"}},
 		{"mixed-case-unparsable", map[string]string{".claude/Settings.json": `{oops`}, nil, []string{"Settings.json:unreadable"}},
 		{"too-short-name-ignored", map[string]string{".claude/settings.json.bak": `{"sandbox":{"excludedCommands":["npm"]}}`, ".claude/settingsjson": `x`}, nil, nil},
 		{"local-allow-unix-sockets", map[string]string{".claude/settings.local.json": `{"sandbox":{"network":{"allowUnixSockets":["/var/run/docker.sock"]}}}`}, nil, []string{"settings.local.json:sandbox.network.allowUnixSockets"}},

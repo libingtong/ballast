@@ -50,9 +50,18 @@
 // Known gaps (documented, by design): mysql -pPASSWORD (a short flag glued
 // to its value cannot be told from an ordinary -p); .netrc "password X"
 // with space separation; environment variables with arbitrary names
-// (FOO=<value>); a value that is itself a structure ([...], {...}, (...))
-// under a secret-looking key (its elements are masked only when they match
-// a rule of their own, such as a vendor token or a nested "password": ...).
+// (FOO=<value>). Structured values: under a strong key the scalar elements
+// of a [...] or (...) list ("password=[x]", {"password": ["x"]}, at most 64
+// per list) are masked; a {...} object, a list under a weak key
+// (pwd/pass/auth), and nested lists are masked only through the rules of
+// their own elements (a vendor token, a nested "password": ...).
+// Differences from the two pre-P2 implementations, all registered in
+// docs/p2-design.md §4.2 / §11: a bare "Bearer abc123" shorter than 8
+// characters outside an Authorization header is not masked (prose such as
+// "bearer token" would be); "Authorization: Bearer" with the token on the
+// NEXT line is not masked; an unquoted value is cut at ',' and ';'
+// ("password=abc,def123" leaves "def123": the separators are ambiguous in
+// connection strings and argument lists).
 package redact
 
 import "strings"

@@ -7,7 +7,8 @@ import "github.com/libingtong/ballast/internal/redact"
 // values, --password flags, AWS keys, vendor tokens, JWTs) with "***",
 // keeping key names and surrounding text. Since P2 it is a one-line wrapper
 // around the unified redactor (internal/redact, docs/p2-design.md §4.1);
-// every string the audit writer persists goes through it. It is idempotent:
+// the audit writer applies it to Matched, every Context text and every
+// string value inside Detail. It is idempotent:
 // Redact(Redact(s)) == Redact(s).
 func Redact(s string) string {
 	return redact.String(s)

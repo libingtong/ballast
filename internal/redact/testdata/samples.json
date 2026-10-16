@@ -159,6 +159,11 @@
    ".",
    "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
   ],
+  "SK8": [
+   "sk",
+   "-",
+   "abcdefghij"
+  ],
   "SLA": [
    "xox",
    "a-",
@@ -1334,6 +1339,89 @@
     "{{JWT}}"
    ],
    "want": "a\n***\nb"
+  },
+  {
+   "name": "password in brackets",
+   "kind": "key_value",
+   "in": "password=[Hq7Lm2Wc9Xr]",
+   "secrets": [
+    "Hq7Lm2Wc9Xr"
+   ],
+   "want": "password=[***]"
+  },
+  {
+   "name": "password in parens",
+   "kind": "key_value",
+   "in": "connect password=(Hq7Lm2Wc9Xr) now",
+   "secrets": [
+    "Hq7Lm2Wc9Xr"
+   ],
+   "want": "connect password=(***) now"
+  },
+  {
+   "name": "password json array",
+   "kind": "key_value",
+   "in": "{\"password\": [\"Hq7Lm2Wc9Xr\", \"Zk3Pn8Vd5Tq\"], \"user\": \"bob\"}",
+   "secrets": [
+    "Hq7Lm2Wc9Xr",
+    "Zk3Pn8Vd5Tq"
+   ],
+   "want": "{\"password\": [\"***\", \"***\"], \"user\": \"bob\"}"
+  },
+  {
+   "name": "token list two elements",
+   "kind": "key_value",
+   "in": "run token=[Hq7Lm2Wc9Xr,Zk3Pn8Vd5Tq] now",
+   "secrets": [
+    "Hq7Lm2Wc9Xr",
+    "Zk3Pn8Vd5Tq"
+   ],
+   "want": "run token=[***,***] now"
+  },
+  {
+   "name": "pwd suffix key eq",
+   "kind": "key_value",
+   "in": "mypwd=Hq7Lm2Wc9Xr",
+   "secrets": [
+    "Hq7Lm2Wc9Xr"
+   ],
+   "want": "mypwd=***"
+  },
+  {
+   "name": "pwd suffix key colon",
+   "kind": "key_value",
+   "in": "userpwd: Hq7Lm2Wc9Xr9",
+   "secrets": [
+    "Hq7Lm2Wc9Xr9"
+   ],
+   "want": "userpwd: ***"
+  },
+  {
+   "name": "hook curl password eq",
+   "kind": "key_value",
+   "in": "curl --password=hunter2 host",
+   "secrets": [
+    "hunter2"
+   ],
+   "want": "curl --password=*** host"
+  },
+  {
+   "name": "hook git clone url password",
+   "kind": "url_password",
+   "in": "git clone https://user:pw@github.com/x/y.git",
+   "secrets": [
+    "pw"
+   ],
+   "want": "git clone https://user:***@github.com/x/y.git"
+  },
+  {
+   "name": "sk eight chars",
+   "kind": "vendor_token",
+   "in": "echo {{SK8}}",
+   "secrets": [
+    "{{SK8}}"
+   ],
+   "want": "echo ***"
   }
  ],
  "negative": [

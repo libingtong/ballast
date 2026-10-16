@@ -95,7 +95,7 @@ func Build(opt Options) (*Report, error) {
 
 	shipped := map[string]struct{}{}
 	for _, id := range opt.ShippedRuleIDs {
-		if validSlug(id) && redact.String(id) == id {
+		if validRuleName(id) { // the same test Validate applies to the output
 			shipped[id] = struct{}{}
 		}
 	}
@@ -276,9 +276,12 @@ func diagKey(detail json.RawMessage) string {
 	if !ok {
 		return DiagOther
 	}
-	i := sort.SearchStrings(model.DiagNames, name)
-	if i < len(model.DiagNames) && model.DiagNames[i] == name {
-		return name
+	// A linear scan of the (small) list: model.DiagNames is documented as
+	// append-only, not as sorted.
+	for _, n := range model.DiagNames {
+		if n == name {
+			return name
+		}
 	}
 	return DiagOther
 }

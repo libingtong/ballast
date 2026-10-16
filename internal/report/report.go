@@ -19,6 +19,13 @@
 //   - Every string field is passed through redact.String and then checked
 //     by Validate; a report that fails Validate is not written.
 //   - Distinct sessions/repos are reported as counts only.
+//   - Write also requires the serialized bytes to be unchanged by
+//     redact.String (a last, field-independent check).
+//
+// Known limit: Validate has no list of the shipped rule ids, so a hand-edited
+// report that carries a plain custom rule id of slug shape and without
+// anything secret-looking (e.g. "acme-no-prod-deploy") passes Validate;
+// hashing custom ids is guaranteed by Build only (docs/p2-design.md §11).
 //
 // Acceptance (P2-REPORT): golden test from a fixture audit dir
 // (testdata/audit → testdata/report.golden.json); Validate rejects

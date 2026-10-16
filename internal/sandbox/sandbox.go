@@ -138,8 +138,20 @@
 // SIGKILLed the child's session / process group; linux: bwrap's PID
 // namespace is gone with its init), then Quarantine on what PostCheck found,
 // and only THEN computes S_end (outside the sandbox) — so S_end never sees a
-// protected path that is about to be moved, and no sandboxed process is left
-// to write after S_end.
+// protected path that is about to be moved. On linux no sandboxed process is
+// left to write after S_end (bwrap's PID namespace is gone with its init). On
+// darwin there is no PID namespace: a descendant that left the session with
+// setsid / a double fork survives the runner's killpg and can keep writing
+// inside W after PostCheck, Quarantine and S_end. Its writes are still bound
+// by the profile (no protected path), so it cannot forge T1 evidence — under
+// origin=cli it can only make the result stale later, under origin=hook the
+// private copy is deleted afterwards — but this is a registered darwin
+// residual (docs/p2-design.md §11), not a guarantee of this package.
+//
+// Matching of protected names is case-sensitive (MatchMandatory, PostCheck).
+// On macOS's default case-insensitive APFS the variants (.CLAUDE, .Git,
+// .MCP.json) are denied by sandbox-exec's own path matching, not by this
+// package; TestDarwinCaseVariantsAreDenied pins that dependency.
 //
 // Acceptance (P2-SANDBOX): DarwinProfile/BwrapArgs/AncestorPins golden
 // tests (testdata/profiles.json; paths with spaces, quotes, parens and

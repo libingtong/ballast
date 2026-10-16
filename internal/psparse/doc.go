@@ -44,8 +44,12 @@
 //     [IO.File]::WriteAllText.Invoke('a','x'); the bare [File]:: after
 //     `using namespace System.IO`; other file-writing members (OpenWrite,
 //     Create, CreateText, AppendText, Copy, Move, Replace) and
-//     [IO.StreamWriter]::new. Rename-Item with a source ending in a
-//     separator resolves -NewName against the parent of that directory.
+//     [IO.StreamWriter]::new; the type held in a variable (`$f=[IO.File]; $f::WriteAllText(...)`);
+//     the `[global::System.IO.File]::` spelling; calls inside a hashtable
+//     literal value (`@{a=[IO.File]::WriteAllText('a','x')}`, the baseline
+//     does not parse `@{a=$(Remove-Item x)}` either). None of these
+//     produce a node or set Unknown (docs/trust-model.md §2.1 class 1).
+//     Rename-Item with a source ending in a separator resolves -NewName against the parent of that directory.
 //   - Reads (same purpose and Word rules as bashparse): get-content
 //     (aliases cat/gc/type) -Path/-LiteralPath/-PSPath values or the first
 //     positional word ⇒ Reads{Via:"get-content"}; select-string

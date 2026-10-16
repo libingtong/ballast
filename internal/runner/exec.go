@@ -277,6 +277,10 @@ func (o Options) execute(js *model.JobStatus, side jobSpec, rec *model.VerifyRec
 			o.protectedSpec(&spec, j.info, repo.Toplevel)
 			roots = append([]string{repo.Toplevel}, spec.GitDirs...)
 		}
+		// Quarantine may also move an explicit protected path out of an
+		// administrator's runner_allow_write root (sandbox.Quarantine refuses
+		// paths outside the roots it is given).
+		roots = append(roots, allow...)
 		wrapped, err = o.sbx().Wrap(o.sandboxOptions(), kind, spec, argv)
 		if err != nil {
 			switch {

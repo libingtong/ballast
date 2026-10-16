@@ -31,4 +31,5 @@ obs="T1 模板(仅测试)另加 allowWrite=[<home>,/srv]、denyWrite=[/srv/abs,/
 ok=1
 b=0; for n in tilde-bash relative-bash abs-bash glob-bash tilde-write relative-write single-slash-write double-slash-write single-slash-edit double-slash-edit; do [ "$(att $n)" = blocked ] && b=$((b+1)); done
 [ "$b" = 10 ] && [ "$(att glob-control)" = written ] && [ "$(att allowwrite-control)" = written ] && [ "$(att control-write)" = written ] && [ "$(att control-edit)" = written ] && ok=0
+CRED_CONTROLS="glob-control allowwrite-control control-write control-edit"
 cred_finish "$ok" "$obs"

@@ -109,6 +109,12 @@ func protectedPaths(fsys sys.FS, lay layout.Layout, self, repo string, extra []s
 	}
 	if self != "" {
 		add(ProtectedBinaryDir, filepath.Dir(self), true, false)
+		// A symlinked binary (/usr/local/bin/ballast -> .../libexec/ballast)
+		// is replaced where it really lives, so that directory is protected
+		// too, as a separate entry.
+		if r, err := fsys.EvalSymlinks(self); err == nil && filepath.Dir(r) != filepath.Dir(self) {
+			add(ProtectedBinaryDir, filepath.Dir(r), true, false)
+		}
 	}
 	claudeDir := lay.ClaudeDir
 	if claudeDir == "" && home != "" {

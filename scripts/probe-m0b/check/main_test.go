@@ -124,6 +124,15 @@ func TestNeedsCredentialsRequiresRecheck(t *testing.T) {
 	wantProblem(t, p, "does not name the case")
 }
 
+// A needs_credentials entry that lists mock evidence must still have it on
+// disk (a deleted directory would otherwise go unnoticed).
+func TestNeedsCredentialsEvidenceMustExist(t *testing.T) {
+	p := buildFacts(t, func(cases []map[string]any) {
+		find(cases, "mcp-write")["evidence"] = []string{"payloads/m0b/mcp-write/"}
+	})
+	wantProblem(t, p, `evidence "payloads/m0b/mcp-write/" does not exist`)
+}
+
 func TestFieldsRequired(t *testing.T) {
 	cases := map[string]func(c map[string]any){
 		"assertion missing":         func(c map[string]any) { c["assertion"] = "" },
@@ -162,6 +171,10 @@ func TestHygienePatterns(t *testing.T) {
 		"local absolute path": `{"cwd":"/Users/` + `someone/NewCode/ballast"}`,
 		"uid fragment":        `{"p":"/tmp/claude-` + `501-x"}`,
 		"container home path": `{"cwd":"/home/agent/proj"}`,
+		"home at line end":    "cwd=/home/agent",
+		"home before quote":   `x='/home/agent'`,
+		"home before colon":   `PATH=/home/agent:/usr/bin`,
+		"project key":         `{"dir":"-home-agent-par-child"}`,
 		"looks like a secret": `{"k":"sk-ant-api03-abcdefgh"}`,
 		"non-dummy":           `ANTHROPIC_API_KEY=realvalue`,
 		"private key":         `-----BEGIN RSA PRIVATE KEY-----`,

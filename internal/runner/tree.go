@@ -643,9 +643,27 @@ func removeTreeRoot(opt Options, root string) error {
 	if err := opt.FS.RemoveAll(root); err == nil {
 		return nil
 	}
+	// chmod through an os.Root on the tree: a path component that a surviving
+	// sandbox descendant swaps for a symlink after the walk listed it cannot
+	// redirect the chmod to a directory outside the tree (os.Root rejects
+	// escaping links); Lstat first so a link itself is never chmod'ed.
+	if fi, e := os.Lstat(root); e == nil && fi.IsDir() {
+		_ = os.Chmod(root, 0o700) // the root itself may be 0500 / 0000
+	}
+	rt, rerr := os.OpenRoot(root)
+	if rerr == nil {
+		defer rt.Close()
+	}
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if d != nil && d.IsDir() && d.Type()&fs.ModeSymlink == 0 {
-			_ = os.Chmod(p, 0o700)
+		if d == nil || !d.IsDir() || d.Type()&fs.ModeSymlink != 0 || rerr != nil {
+			return nil
+		}
+		rel, e := filepath.Rel(root, p)
+		if e != nil {
+			return nil
+		}
+		if fi, e := rt.Lstat(rel); e == nil && fi.Mode()&fs.ModeSymlink == 0 && fi.IsDir() {
+			_ = rt.Chmod(rel, 0o700)
 		}
 		return nil
 	})

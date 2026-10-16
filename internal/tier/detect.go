@@ -213,7 +213,7 @@ func (d *detector) loadManaged(resolvedManaged string) (docs []managedDoc, prese
 		if !ok {
 			bad = true
 		}
-		b, err := d.fsys.ReadFile(p)
+		b, err := readSettings(d.fsys, p)
 		if err != nil {
 			d.miss(model.TierMissingUnreadable)
 			bad = true
@@ -493,7 +493,7 @@ func (d *detector) checkLowerLayers() {
 				d.miss(model.TierMissingLowerSandbox)
 				continue
 			}
-			b, err := d.fsys.ReadFile(path.Join(dir, e.Name()))
+			b, err := readSettings(d.fsys, path.Join(dir, e.Name()))
 			if err != nil {
 				d.miss(model.TierMissingLowerSandbox)
 				continue

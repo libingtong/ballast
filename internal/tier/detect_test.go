@@ -2,6 +2,7 @@ package tier
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"reflect"
 	"strings"
@@ -337,5 +338,26 @@ func TestDetectCondition5PermissionFormsM0b(t *testing.T) {
 				t.Errorf("missing = %v, want %v", got.Missing, c.want)
 			}
 		})
+	}
+}
+
+// A user-layer settings file that is a symlink to a non-regular file (FIFO,
+// device) must not be read: Detect answers lower_sandbox_weakened instead of
+// hanging on it. The same goes for an oversized file.
+func TestReadSettingsRefusesNonRegularAndOversized(t *testing.T) {
+	m := newMemFS()
+	m.mkdirAll("/d", 0, 0o755)
+	m.writeFile("/d/ok.json", `{}`, 0, 0o644)
+	m.writeFile("/d/big.json", strings.Repeat("x", maxSettingsBytes+1), 0, 0o644)
+	m.writeFile("/d/fifo.json", "", 0, 0o644)
+	m.nodes["/d/fifo.json"].mode |= fs.ModeNamedPipe
+	m.symlink("/d/link-fifo.json", "/d/fifo.json", 0)
+	if b, err := readSettings(m, "/d/ok.json"); err != nil || string(b) != "{}" {
+		t.Fatalf("ok: %q %v", b, err)
+	}
+	for _, name := range []string{"big.json", "fifo.json", "link-fifo.json"} {
+		if _, err := readSettings(m, "/d/"+name); err == nil {
+			t.Errorf("%s was read", name)
+		}
 	}
 }

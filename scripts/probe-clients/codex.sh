@@ -128,7 +128,7 @@ print_launch() {
   pc_say "  LAUNCH: $LAUNCH"
   pc_say "exec-noninteractive 用例另开终端运行(同样固定 BALLAST_HOME,避免 hook 落到真实 ~/.ballast):"
   pc_say "  EXEC: $EXEC"
-  pc_say "在该 TUI 里自行登录(登录凭据只会写进临时 CODEX_HOME,本脚本不读取)。"
+  pc_say "在该 TUI 里自行登录。本脚本不读取凭据;Codex 可能把凭据存进系统钥匙串而不是临时 CODEX_HOME【未核验】,取证结束后请自行登出。"
   pc_say "探针记录目录: $PROBE/out"
 }
 
@@ -147,6 +147,10 @@ selftest() {
   real_before="$(ls -A "$real" 2>/dev/null | cksum)"
 
   pc_selftest_guards "$root/guards"
+
+  # The refusal cases below hand real directories to `prepare`: only run them
+  # once the guard is seen to refuse those directories on its own.
+  pc_realdirs_refused "$real" "$real/.codex" || { pc_t_finish codex.sh; return 1; }
 
   # ---- the script itself refuses unsafe targets, before writing anything ----
   local rc fresh_bh="$root/refuse-bh"

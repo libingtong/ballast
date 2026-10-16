@@ -56,6 +56,18 @@ fail() { echo "probe-m0b selftest: FAIL $*" >&2; fails=$((fails+1)); }
   [ "$(jq -r .result "$OUT/result.json")" = pass ] || bad "有工具调用且条件成立应写 pass"
   cred_finish 1 "selftest" >/dev/null 2>&1
   [ "$(jq -r .result "$OUT/result.json")" = fail ] || bad "有工具调用且条件不成立应写 fail"
+  # 对照项没有成功写入 => unverifiable,不是 fail(也不是 pass)
+  CRED_CONTROLS="control-a control-b"
+  ATT_RESULT="x=blocked control-a=written control-b=blocked"
+  cred_finish 1 "selftest" >/dev/null 2>&1
+  [ "$(jq -r .result "$OUT/result.json")" = unverifiable ] || bad "对照项被拒时应写 unverifiable(得到 $(jq -r .result "$OUT/result.json"))"
+  ATT_RESULT="x=blocked control-a=written control-b=written control-a=blocked"
+  cred_finish 0 "selftest" >/dev/null 2>&1
+  [ "$(jq -r .result "$OUT/result.json")" = unverifiable ] || bad "同名对照任一次被拒也应写 unverifiable"
+  ATT_RESULT="x=blocked control-a=written control-b=written"
+  cred_finish 0 "selftest" >/dev/null 2>&1
+  [ "$(jq -r .result "$OUT/result.json")" = pass ] || bad "对照项都成功且条件成立应写 pass"
+  CRED_CONTROLS=""; ATT_RESULT=""
   AGENT_MODE=mock
   cred_finish 0 "selftest" >/dev/null 2>&1
   [ "$(jq -r .result "$OUT/result.json")" = needs_credentials ] || bad "mock 模式恒为 needs_credentials"

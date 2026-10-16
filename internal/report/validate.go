@@ -234,6 +234,11 @@ func Write(fsys sys.FS, path string, r *Report, force bool) error {
 	if err != nil {
 		return err
 	}
+	// Last line of defence (docs/p2-design.md §4.1): the serialized bytes
+	// must be a fixed point of the redactor, whatever the field checks said.
+	if redact.String(string(data)) != string(data) {
+		return &PrivacyError{Violations: []string{"serialized report: the redactor would change the output"}}
+	}
 	if fsys == nil {
 		fsys = sys.OSFS{}
 	}

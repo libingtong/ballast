@@ -71,7 +71,11 @@ type WriteTarget struct {
 	// "sed -i", "perl -i", "ruby -i", "git checkout", "git restore", "rm",
 	// "truncate", "dd", "touch", "ln", "out-file",
 	// "set-content", "add-content", "remove-item", "copy-item", "move-item",
-	// "new-item".
+	// "new-item", and (P2 E1, internal/psparse) "tee-object",
+	// "clear-content", "rename-item" and the lower-cased static call
+	// "[io.file]::writealltext" (likewise appendalltext, writeallbytes,
+	// writealllines, appendalllines and the *async forms; the System.IO.File
+	// spelling is normalized to the same "[io.file]::" prefix).
 	// Via for Reads: "redirect" (input redirection `< FILE`), "cat", "tac",
 	// "nl", "head", "tail", "less", "more", "wc", "file", "sed", "grep",
 	// "egrep", "fgrep", "rg", "awk", "gawk", "mawk", "get-content",

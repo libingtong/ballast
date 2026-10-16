@@ -176,3 +176,21 @@ func TestProtectedPathsResolvesExistingSymlinkedEntry(t *testing.T) {
 		t.Errorf("org dir Resolved = %q", got[0].Resolved)
 	}
 }
+
+// A symlinked binary adds the directory of its real file as a second
+// binary_dir entry.
+func TestProtectedPathsSymlinkedBinaryAddsRealDir(t *testing.T) {
+	m := newMemFS()
+	m.writeFile("/usr/local/libexec/ballast/ballast", "bin", 0, 0o755)
+	m.symlink("/usr/local/bin/ballast", "/usr/local/libexec/ballast/ballast", 0)
+	lay := layout.Layout{GOOS: "linux", Home: "/home/u/.ballast", InstallRoot: "/home/u", ClaudeDir: "/home/u/.claude", OrgRules: "/etc/claude-code/ballast/rules.json"}
+	var dirs []string
+	for _, p := range ProtectedPaths(m, lay, "/usr/local/bin/ballast", "", nil) {
+		if p.Kind == ProtectedBinaryDir {
+			dirs = append(dirs, p.Path)
+		}
+	}
+	if want := []string{"/usr/local/bin", "/usr/local/libexec/ballast"}; !reflect.DeepEqual(dirs, want) {
+		t.Errorf("binary dirs = %v, want %v", dirs, want)
+	}
+}

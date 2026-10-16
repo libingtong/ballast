@@ -789,3 +789,35 @@ func TestUnwrappedRunKeepsProcessGroupBehaviour(t *testing.T) {
 		t.Errorf("record: %+v", rec)
 	}
 }
+
+// A protected path found inside an administrator's runner_allow_write root
+// is handed to Quarantine with that root among its roots (Quarantine refuses
+// paths outside the roots it receives), and reported relative to it.
+func TestQuarantineRootsIncludeRunnerAllowWrite(t *testing.T) {
+	h := newHookFx(t)
+	allow := filepath.Join(h.sb.Root, "cache")
+	if err := os.MkdirAll(allow, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	info := t1Info()
+	info.RunnerAllowWrite = []string{allow}
+	h.opt.Tier = fakeTier{info}
+	h.setProject(helperSpec("test", "exit", "BALLAST_HELPER_CODE=0"))
+	found := filepath.Join(allow, ".claude", "settings.local.json")
+	h.opt.trace = func(s string) {
+		if s == "postcheck" {
+			h.be.postFound = []string{found}
+		}
+	}
+	rec, err := h.runHook("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Error != "protected_path_created" || len(h.be.quarantined) != 1 {
+		t.Fatalf("record %+v, quarantine calls %d", rec, len(h.be.quarantined))
+	}
+	q := h.be.quarantined[0]
+	if !reflect.DeepEqual(q.paths, []string{found}) || !reflect.DeepEqual(q.roots, []string{h.be.specs[0].Tree, allow}) {
+		t.Errorf("quarantine call: %+v", q)
+	}
+}

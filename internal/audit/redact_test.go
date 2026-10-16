@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -208,5 +209,32 @@ func TestMarshalLineRedactsMatchedAndContext(t *testing.T) {
 	}
 	if !strings.Contains(string(line), "API_KEY=***") || !strings.Contains(string(line), "Digest ***") {
 		t.Errorf("key names and schemes must stay readable: %s", line)
+	}
+}
+
+func TestMarshalLineRedactsDetailStrings(t *testing.T) {
+	secret := "hunter2" + "hunter2"
+	rec := &model.AuditRecord{
+		Type:   model.AuditHit,
+		Detail: json.RawMessage(`{"error":"spawn failed: export API_KEY=` + secret + `","n":3,"list":["--password ` + secret + `"]}`),
+	}
+	line, err := MarshalLine(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(line), secret) {
+		t.Errorf("secret persisted in detail: %s", line)
+	}
+	if !strings.Contains(string(line), "API_KEY=***") || !strings.Contains(string(line), `"n":3`) {
+		t.Errorf("detail must stay readable: %s", line)
+	}
+	// A detail with nothing secret-looking keeps its exact bytes.
+	plain := &model.AuditRecord{Type: model.AuditHit, Detail: json.RawMessage(`{"b":1,"a":"x"}`)}
+	l2, err := MarshalLine(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(l2), `"detail":{"b":1,"a":"x"}`) {
+		t.Errorf("plain detail changed: %s", l2)
 	}
 }

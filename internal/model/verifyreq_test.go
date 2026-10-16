@@ -87,6 +87,15 @@ func TestParseVerifyRequestBash(t *testing.T) {
 		{"for i in 1 2; do ballast verify test; done", false, nil},
 		{"while true; do ballast verify test; done", false, nil},
 		{"(ballast verify test)", true, []string{"test"}}, // a lone subshell is still exactly one command
+		// Pinned current semantics (docs/p2-design.md §11): bashparse exposes no
+		// prefix assignments, so these parse as the canonical command. hook
+		// starts the job with its own Self and environment, so the agent's
+		// assignment is silently ignored (it neither takes effect nor widens
+		// anything); only `env X=1 ...` is rejected, as above.
+		{"X=1 ballast verify test", true, []string{"test"}},
+		{"BALLAST_HOME=/tmp ballast verify", true, nil},
+		{"! ballast verify test", true, []string{"test"}},
+		{"{ ballast verify test; }", true, []string{"test"}},
 		{"bash -c 'ballast verify test'", false, nil},
 		{"echo $(ballast verify test)", false, nil},
 		{"ballast verify 'a b'", false, nil},

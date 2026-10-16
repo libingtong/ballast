@@ -323,6 +323,19 @@ attempts_run() {
 }
 att() { echo " $ATT_RESULT " | grep -o " $1=[a-z]* " | head -1 | sed -E 's/.*=([a-z]+).*/\1/'; }
 
+# CRED_CONTROLS:场景在调用 cred_finish 之前设置的、以空格分隔的对照项名称(本该是 written 的写入,
+# 例如对会话目录或非受保护目录的写入)。credentials 模式下任何一项不是 written,cred_finish 写 unverifiable。
+CRED_CONTROLS=""
+cred_bad_controls() {
+  local n vals bad=""
+  for n in $CRED_CONTROLS; do
+    # 每一次出现(同名对照在多次运行里各有一条)都必须是 written;一次都没出现也算没成功
+    vals="$(echo " $ATT_RESULT " | grep -o " $n=[a-z]* " | sed -E 's/.*=([a-z]+).*/\1/')"
+    if [ -z "$vals" ] || [ -n "$(printf '%s\n' "$vals" | grep -v '^written$')" ]; then bad="$bad${bad:+,}$n"; fi
+  done
+  printf '%s' "$bad"
+}
+
 # cred_finish <pass-condition-exit> <observation> [schema_keys]:
 #   credentials 模式 ⇒ 按条件写 pass/fail,mode:"credentials";
 #   mock 模式 ⇒ 结果恒为 needs_credentials(mock 不替代 credentials 结论),观察写进 observation。
@@ -333,6 +346,10 @@ cred_finish() { # cred_finish <0|1:条件是否成立> <observation> [schema_key
     if [ "$ATT_NOSTEPS" = 1 ]; then
       # 没有任何工具调用发生,"被拒/未写入"不能证明托管层挡住了它:不写 pass 也不写 fail
       finish unverifiable credentials "[credentials 模式下没有观察到工具调用(claude 未启动、鉴权失败或模型未执行步骤;最近一次 rc=${RC:-?}),结论无法成立] $obs" "$sk"
+    elif bad_ctl="$(cred_bad_controls)" && [ -n "$bad_ctl" ]; then
+      # 对照项(本该成功的写入)没有成功:这次运行本身无效(模型/工具链没有正常工作,或对照路径不可写),
+      # 不能据此推翻或证实文档说法,所以不写 pass 也不写 fail
+      finish unverifiable credentials "[对照项没有成功写入(${bad_ctl}),这次测试本身无效,结论无法成立] $obs" "$sk"
     elif [ "$ok" = 0 ]; then finish pass credentials "$obs" "$sk"; else finish fail credentials "$obs" "$sk"; fi
   else
     local verdict="mock 观察到的行为与期望一致"

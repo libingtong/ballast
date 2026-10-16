@@ -4,6 +4,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -405,6 +406,38 @@ func BenchmarkClean4K(b *testing.B) {
 		if String(s) != s {
 			b.Fatal("changed")
 		}
+	}
+}
+
+// TestClean4KBudget enforces the docs/p2-design.md §4.3 budget (4 KiB of
+// secret-free text <= 10µs per String call) as the best of several rounds,
+// so one scheduler hiccup on a shared runner does not fail it while a
+// genuinely slower implementation still does. Skipped under -race.
+func TestClean4KBudget(t *testing.T) {
+	if raceEnabled || testing.Short() {
+		t.Skip("timing budget is not meaningful under -race / -short")
+	}
+	s := cleanText4K()
+	if MayContainSecret(s) {
+		t.Fatal("budget text must be secret-free and pass the prefilter")
+	}
+	for i := 0; i < 50; i++ { // warm up
+		String(s)
+	}
+	const rounds, iters = 15, 500
+	best := time.Hour
+	for r := 0; r < rounds; r++ {
+		start := time.Now()
+		for i := 0; i < iters; i++ {
+			String(s)
+		}
+		if per := time.Since(start) / iters; per < best {
+			best = per
+		}
+	}
+	t.Logf("String(4 KiB clean) best of %d rounds: %v", rounds, best)
+	if best > 10*time.Microsecond {
+		t.Errorf("String(4 KiB clean) took %v per call, budget 10µs", best)
 	}
 }
 

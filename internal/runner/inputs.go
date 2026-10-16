@@ -73,11 +73,21 @@ func copyInputs(opt Options, toplevel, dir string, tracked map[string]string, gl
 	}
 
 	c := &inputCopier{opt: opt, root: root, tracked: tracked, dirs: map[string]bool{}}
-	var walk func(abs, rel string) error
-	walk = func(abs, rel string) error {
+	var walk func(abs, rel string, want fs.FileInfo) error
+	walk = func(abs, rel string, want fs.FileInfo) error {
 		ents, err := opt.FS.ReadDir(abs)
 		if err != nil {
 			return fmt.Errorf("%w: read %s: %v", ErrMaterialize, abs, err)
+		}
+		// The directory was a real directory when it was Lstat'ed; if the
+		// path now names something else (swapped for a symlink between the
+		// Lstat and the ReadDir) the listing may come from outside the tree.
+		recheck := opt.FS.Lstat
+		if rel == "" {
+			recheck = opt.FS.Stat // the top level itself may legitimately be reached through a link
+		}
+		if now, lerr := recheck(abs); lerr != nil || !now.IsDir() || (want != nil && !os.SameFile(want, now)) {
+			return fmt.Errorf("%w: %s changed while it was being read", ErrMaterialize, abs)
 		}
 		for _, de := range ents {
 			name := de.Name()
@@ -99,7 +109,7 @@ func copyInputs(opt Options, toplevel, dir string, tracked map[string]string, gl
 			switch {
 			case fi.IsDir():
 				if mayContain(crel) {
-					if err := walk(cabs, crel); err != nil {
+					if err := walk(cabs, crel, fi); err != nil {
 						return err
 					}
 				}
@@ -115,7 +125,11 @@ func copyInputs(opt Options, toplevel, dir string, tracked map[string]string, gl
 		}
 		return nil
 	}
-	if err := walk(toplevel, ""); err != nil {
+	top, terr := opt.FS.Stat(toplevel)
+	if terr != nil || !top.IsDir() {
+		return "", 0, fmt.Errorf("%w: %s is not a directory", ErrMaterialize, toplevel)
+	}
+	if err := walk(toplevel, "", top); err != nil {
 		return "", 0, err
 	}
 	return hashLines(c.lines), len(c.lines), nil

@@ -15,4 +15,5 @@ attempts_run "$atts" --permission-mode default
 obs="托管 T1 模板(permissions.deny 含 Edit/Write/NotebookEdit 的 ~/.ballast/**、./.ballast/**、~/.claude/settings*.json;allowManagedPermissionRulesOnly:true)。Edit/Write 结果:$ATT_RESULT(发出 $ATT_STEPS 个工具调用;托管 allow 放行 Edit/Write,拒绝只可能来自 deny 规则)。对照:写会话目录外的非受保护目录与改会话目录内文件应成功。"
 ok=1
 [ "$(att edit-rules)" = blocked ] && [ "$(att write-evidence)" = blocked ] && [ "$(att edit-settings)" = blocked ] && [ "$(att write-cwd-ballast)" = blocked ] && [ "$(att control-write)" = written ] && ok=0
+CRED_CONTROLS="control-write"
 cred_finish "$ok" "$obs"

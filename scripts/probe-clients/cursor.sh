@@ -104,7 +104,7 @@ cmd_prepare() {
 
 print_launch() {
   pc_say ""
-  pc_say "已准备好。用一次性 HOME 启动 Cursor,并在其中自行登录(登录凭据只会写进该目录,本脚本不读取):"
+  pc_say "已准备好。用一次性 HOME 启动 Cursor,并在其中自行登录(本脚本不读取凭据;cursor-agent 在 macOS 上可能把凭据存进登录钥匙串而不是该目录【未核验】,取证结束后请自行登出):"
   pc_say "  LAUNCH: $LAUNCH"
   pc_say "注意: macOS 上 Cursor IDE 的数据目录可能不跟随 HOME【未核验】;能用 cursor-agent CLI 就用 CLI。"
   pc_say "探针记录目录: $PROBE/out"
@@ -124,6 +124,10 @@ selftest() {
   real_before="$(find "$real" -maxdepth 1 -mindepth 1 2>/dev/null | sort | cksum)"
 
   pc_selftest_guards "$root/guards"
+
+  # The refusal cases below hand real directories to `prepare`: only run them
+  # once the guard is seen to refuse those directories on its own.
+  pc_realdirs_refused "$real" "$real/.cursor" "$(dirname "$real")" || { pc_t_finish cursor.sh; return 1; }
 
   # ---- the script itself: real-environment detection and refusal ----
   mkdir -p "$root/refuse-ph" "$root/dirty-ph"

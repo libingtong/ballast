@@ -255,3 +255,61 @@ func TestDoctorTierChecks(t *testing.T) {
 		t.Errorf("no tier.level check: %v", got)
 	}
 }
+
+// TestVerifyStatusMultiJobRequestTakesTheWorst: the request id is also the id
+// of the request's FIRST job, so `--status <request_id>` must still aggregate
+// every job of a multi-job request (worst outcome), not show the first job
+// only. One entry passes and one fails; the aggregate must equal the worst of
+// the per-name results (1 when the sandbox ran them, 5 when it is unusable).
+func TestVerifyStatusMultiJobRequestTakesTheWorst(t *testing.T) {
+	s := newSandbox(t)
+	repo := s.newRepo("proj")
+	writeFile(t, filepath.Join(repo, "a.go"), "package proj\n")
+	pj, err := json.MarshalIndent(map[string]any{
+		"version": 1,
+		"verify": []any{
+			map[string]any{"name": "okjob", "argv": []string{ballastBin, "version"}, "required": true},
+			map[string]any{"name": "badjob", "argv": []string{ballastBin, "no-such-subcommand"}, "required": true},
+		},
+		"exempt": []string{"**/*.md"},
+	}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(repo, ".ballast", "project.json"), string(pj)+"\n")
+	s.git(repo, "add", "-A")
+	s.git(repo, "commit", "-q", "-m", "init")
+
+	id := requestID(6)
+	r := s.mustExit(0, "", "", "verify", "--hook-start", "--request", id, "--cwd", repo,
+		"--client", "claude-code", "--session", "sess-2", "--", "okjob", "badjob")
+	if !strings.Contains(r.stdout, "job="+id) {
+		t.Fatalf("hook-start output: %q", r.stdout)
+	}
+	deadline := time.Now().Add(60 * time.Second)
+	var st result
+	for time.Now().Before(deadline) {
+		st = s.run("", "", "verify", "--status", id)
+		if st.code != 6 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !strings.Contains(st.stdout, "request="+id) || !strings.Contains(st.stdout, "name=okjob") || !strings.Contains(st.stdout, "name=badjob") {
+		t.Fatalf("the status of a two-job request must list both jobs:\n%s", st.stdout)
+	}
+	want := 0
+	for _, name := range []string{"okjob", "badjob"} {
+		one := s.run(repo, "", "verify", "--status", name)
+		t.Logf("--status %s: exit %d", name, one.code)
+		if one.code == 1 || (one.code == 5 && want != 1) {
+			want = one.code
+		}
+	}
+	if st.code != want {
+		t.Errorf("aggregate exit = %d, want the worst per-name result %d\n%s", st.code, want, st.stdout)
+	}
+	if want == 1 && st.code != 1 {
+		t.Errorf("a failing second job must fail the request")
+	}
+}

@@ -19,8 +19,36 @@ import (
 
 	"github.com/libingtong/ballast/internal/audit"
 	"github.com/libingtong/ballast/internal/model"
+	"github.com/libingtong/ballast/internal/redact"
 	"github.com/libingtong/ballast/internal/sys"
 )
+
+// fakeGHP is assembled from parts so no token-shaped literal is stored in the
+// repository (secret scanners, push protection). The audit fixture carries
+// the placeholder {{GHP}} instead; fixtureAuditDir expands it.
+const fakeGHP = "ghp_" + "Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78"
+
+// fixtureAuditDir copies testdata/audit into a temp dir with {{GHP}} expanded.
+func fixtureAuditDir(t testing.TB) string {
+	t.Helper()
+	src := filepath.Join("testdata", "audit")
+	ents, err := os.ReadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := t.TempDir()
+	for _, e := range ents {
+		b, err := os.ReadFile(filepath.Join(src, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		b = bytes.ReplaceAll(b, []byte("{{GHP}}"), []byte(fakeGHP))
+		if err := os.WriteFile(filepath.Join(dst, e.Name()), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dst
+}
 
 var update = flag.Bool("update", false, "rewrite testdata/report.golden.json")
 
@@ -112,7 +140,7 @@ func diagRec(detail string) model.AuditRecord {
 }
 
 func TestGolden(t *testing.T) {
-	rd := &audit.Reader{Dir: filepath.Join("testdata", "audit")}
+	rd := &audit.Reader{Dir: fixtureAuditDir(t)}
 	rep, err := Build(Options{
 		Audit:          rd,
 		Clock:          sys.NewFakeClock(fixedNow),
@@ -178,7 +206,7 @@ func kindBearerOrAuth(r *Report) string {
 }
 
 func TestGoldenWindow(t *testing.T) {
-	rd := &audit.Reader{Dir: filepath.Join("testdata", "audit")}
+	rd := &audit.Reader{Dir: fixtureAuditDir(t)}
 	rep, err := Build(Options{Audit: rd, Clock: sys.NewFakeClock(fixedNow), ShippedRuleIDs: shippedIDs(t)})
 	if err != nil {
 		t.Fatal(err)
@@ -225,7 +253,7 @@ func TestDiagUnknownGoesToOther(t *testing.T) {
 	cases := []struct{ name, detail string }{
 		{"unknown name", `{"diag":"totally_new_diag"}`},
 		{"unknown with path", `{"diag":"x /home/bob/.ssh/id_rsa"}`},
-		{"unknown with secret", `{"diag":"ghp_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78"}`},
+		{"unknown with secret", `{"diag":"` + fakeGHP + `"}`},
 		{"case differs", `{"diag":"Lock_Timeout"}`},
 		{"trailing space", `{"diag":"lock_timeout "}`},
 		{"empty name", `{"diag":""}`},
@@ -270,7 +298,7 @@ func TestRuleIDs(t *testing.T) {
 		rec(model.AuditHit, "2026-10-10T00:00:03Z", func(r *model.AuditRecord) { r.RuleID = "evil/../path"; r.Decision = "warn" }),
 	}}
 	opt := buildOpts(src)
-	opt.ShippedRuleIDs = []string{"no-long-sleep", "Bad/Shipped", "ghp_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78"}
+	opt.ShippedRuleIDs = []string{"no-long-sleep", "Bad/Shipped", fakeGHP}
 	rep, err := Build(opt)
 	if err != nil {
 		t.Fatal(err)
@@ -466,7 +494,7 @@ func TestBuildUntilAndSince(t *testing.T) {
 }
 
 func TestRedactionCounts(t *testing.T) {
-	tok := "ghp_" + "Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78"
+	tok := fakeGHP
 	src := &sliceSource{recs: []model.AuditRecord{
 		rec(model.AuditHit, "2026-10-10T00:00:00Z", func(r *model.AuditRecord) { r.Matched = "export GITHUB=" + tok }),
 		rec(model.AuditHit, "2026-10-10T00:00:01Z", func(r *model.AuditRecord) { r.Matched = "curl --password ***" }),
@@ -502,7 +530,7 @@ func kindVendor() string { return "vendor_token" }
 
 func TestVersionLabelsSanitized(t *testing.T) {
 	opt := buildOpts(&sliceSource{})
-	opt.BallastVersion = "v1 /Users/alice/bin ghp_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78"
+	opt.BallastVersion = "v1 /Users/alice/bin " + fakeGHP
 	opt.GOOS = "linux; rm -rf"
 	rep, err := Build(opt)
 	if err != nil {
@@ -541,7 +569,7 @@ func validReport(t testing.TB) *Report {
 }
 
 func TestValidateRejects(t *testing.T) {
-	tok := "ghp_" + "Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78"
+	tok := fakeGHP
 	cases := []struct {
 		name string
 		mut  func(r *Report)
@@ -727,7 +755,7 @@ func mustJSON(v any) json.RawMessage {
 // validates.
 func FuzzBuildValidates(f *testing.F) {
 	f.Add("no-long-sleep", "lock_timeout", "codex", "T1")
-	f.Add("/etc/passwd", "ghp_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78", "\x00", "T\xff")
+	f.Add("/etc/passwd", fakeGHP, "\x00", "T\xff")
 	f.Add("h:0123456789ab", "", "claude-code", "")
 	f.Fuzz(func(t *testing.T, rule, diag, client, tier string) {
 		recs := []model.AuditRecord{
@@ -865,5 +893,26 @@ func TestWriteFailureIsNotPrivacyOrExists(t *testing.T) {
 		if err := Write(sys.OSFS{}, link, validReport(t), false); !errors.Is(err, ErrExists) {
 			t.Errorf("dangling symlink: err = %v, want ErrExists", err)
 		}
+	}
+}
+
+// The written golden-fixture report is a fixed point of the redactor (Write
+// enforces this itself as a last, field-independent check).
+func TestWrittenReportIsRedactorFixedPoint(t *testing.T) {
+	rd := &audit.Reader{Dir: fixtureAuditDir(t)}
+	rep, err := Build(Options{Audit: rd, Clock: sys.NewFakeClock(fixedNow), ShippedRuleIDs: shippedIDs(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "r.json")
+	if err := Write(nil, out, rep, false); err != nil {
+		t.Fatalf("clean report: %v", err)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := redact.String(string(b)); got != string(b) {
+		t.Errorf("written report is not a fixed point of the redactor")
 	}
 }
