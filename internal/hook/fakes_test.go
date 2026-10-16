@@ -620,6 +620,7 @@ type fakeSpawner struct {
 	mu    sync.Mutex
 	argvs [][]string
 	envs  [][]string
+	logs  []string
 	err   error
 }
 
@@ -628,7 +629,54 @@ func (f *fakeSpawner) SpawnDetached(argv []string, env []string, logPath string)
 	defer f.mu.Unlock()
 	f.argvs = append(f.argvs, append([]string(nil), argv...))
 	f.envs = append(f.envs, env)
+	f.logs = append(f.logs, logPath)
 	return 4242, f.err
+}
+
+func (f *fakeSpawner) logPaths() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.logs...)
+}
+
+// fakeTier is a ports.TierProbe returning a fixed TierInfo.
+type fakeTier struct {
+	mu    sync.Mutex
+	info  model.TierInfo
+	calls int
+}
+
+func (f *fakeTier) Probe() model.TierInfo {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	return f.info
+}
+
+func (f *fakeTier) probeCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+// fakeProject is a ports.ProjectSandboxChecker: dir → entries.
+type fakeProject struct {
+	mu    sync.Mutex
+	byDir map[string][]string
+	dirs  []string
+}
+
+func (f *fakeProject) Weakened(dir string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dirs = append(f.dirs, dir)
+	return append([]string(nil), f.byDir[dir]...)
+}
+
+func (f *fakeProject) checked() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.dirs...)
 }
 
 func (f *fakeSpawner) spawned() [][]string {

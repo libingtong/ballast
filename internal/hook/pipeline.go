@@ -36,6 +36,10 @@ type invocation struct {
 	guard *guard
 	start time.Time
 	wd    time.Duration
+
+	// weakenedEntries memo (p2.go).
+	weakDone    bool
+	weakEntries []string
 }
 
 // fault consults the injector at p. An armed point never lets the pipeline
@@ -118,6 +122,11 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 	pc, normCwd := inv.pathContext(ev, repo)
 	key := scopeFor(ev, repo, normCwd)
 
+	if ev.Name == model.EventConfigChange {
+		// Audit only: no rules, no session state, empty stdout (§5.1).
+		return inv.configChange(ev, repo, pc, key, caps)
+	}
+
 	rs, err := d.Rules.Load(model.LoadRequest{Client: args.Client, Cwd: ev.Cwd, Repo: repo, Now: ev.ReceivedAt})
 	if err != nil {
 		return nil, nil, fmt.Errorf("load rules: %w", err)
@@ -148,6 +157,14 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 		// Claude's compaction helper: no rules, no bookkeeping, state dropped.
 		res := &Result{Event: ev, Decision: &model.Decision{Event: ev.Name, Native: ev.Native, Action: model.ActionNone}}
 		return res, inv.post(ev, key, nil), nil
+	}
+
+	// First event of a session (the scope has no StartedAt yet): redirect
+	// and project-layer diags (docs/p2-design.md §3.2, §3.3). Only judged on
+	// a readable state: an unreadable one reports no StartedAt on every
+	// event, and the diags would be repeated for the whole session.
+	if _, started := st.StartedAt(); !started && readable {
+		diags = append(diags, inv.firstEventDiags(ev, repo)...)
 	}
 
 	if ev.Name.IsStopFamily() && !ev.HasLastAssistantMessage && readable {
@@ -197,6 +214,16 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 	// Form the single in-memory Decision.
 	adj, capDiags := applyCapabilities(ev, caps, verdict)
 	diags = append(diags, capDiags...)
+	// Synthetic deny of the hook itself (hook-started verify under T1,
+	// weakened_project:"deny"), merged with the rule verdict.
+	if syn, sdiags := inv.syntheticDecision(ev, repo, cmds, key); syn != nil || len(sdiags) > 0 {
+		diags = append(diags, sdiags...)
+		if syn != nil {
+			if _, ok := caps.Lookup(ev.Name, model.ActionDeny); ok {
+				adj = mergeSynthetic(adj, syn)
+			}
+		}
+	}
 	blocking := adj.Action == model.ActionDeny || adj.Action == model.ActionAsk
 
 	var inj *model.Injection

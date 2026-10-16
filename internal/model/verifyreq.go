@@ -1,5 +1,12 @@
 package model
 
+import (
+	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
+)
+
 // P2 contract (architecture v2.0, docs/p2-design.md §3.3): recognition of the
 // canonical `ballast verify <name>...` command for hook-started verify under
 // T1, and the request file that maps the hook's pre-allocated id to jobs.
@@ -34,7 +41,90 @@ type VerifyRequest struct {
 //
 // tool.RunInBackground does not matter (the hook denies either way).
 func ParseVerifyRequest(cl *CommandList) (VerifyRequest, bool) {
-	panic("unimplemented: model.ParseVerifyRequest (unit P2-HOOK)")
+	if cl == nil || cl.Unknown || len(cl.Nodes) != 1 || len(cl.Pipes) != 0 {
+		return VerifyRequest{}, false
+	}
+	n := &cl.Nodes[0]
+	if n.Depth != 0 || n.Async || n.InSubst || n.Loop != nil || len(n.Redirects) != 0 ||
+		len(n.Wrappers) != 0 || n.Sudo || len(n.Params) != 0 {
+		return VerifyRequest{}, false
+	}
+	if len(n.Argv) < 2 || len(n.Argv) > 2+MaxVerifyRequestNames {
+		return VerifyRequest{}, false
+	}
+	for _, w := range n.Argv {
+		if w.Dynamic {
+			return VerifyRequest{}, false
+		}
+	}
+	if b := lastPathElem(n.Argv[0].Lit); b != "ballast" && b != "ballast.exe" {
+		return VerifyRequest{}, false
+	}
+	if n.Argv[1].Lit != "verify" {
+		return VerifyRequest{}, false
+	}
+	var names []string
+	seen := make(map[string]struct{}, len(n.Argv))
+	for _, w := range n.Argv[2:] {
+		if !validVerifyName(w.Lit) {
+			return VerifyRequest{}, false
+		}
+		if _, dup := seen[w.Lit]; dup {
+			continue
+		}
+		seen[w.Lit] = struct{}{}
+		names = append(names, w.Lit)
+	}
+	return VerifyRequest{Names: names}, true
+}
+
+// lastPathElem is the basename of p for both '/' and '\\' separators (the
+// command word is the agent's text, not necessarily in the host's syntax).
+func lastPathElem(p string) string {
+	if i := strings.LastIndexAny(p, `/\`); i >= 0 {
+		return p[i+1:]
+	}
+	return p
+}
+
+// validVerifyName reports whether s matches ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$.
+func validVerifyName(s string) bool {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case i > 0 && (c == '.' || c == '_' || c == '-'):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// validRequestID reports whether id has the job-id format: UTC
+// "20060102T150405" + "-" + 6 lowercase hex digits.
+func validRequestID(id string) bool {
+	if len(id) != len("20060102T150405-")+6 || id[8] != 'T' || id[15] != '-' {
+		return false
+	}
+	for i := 0; i < 15; i++ {
+		if i == 8 {
+			continue
+		}
+		if id[i] < '0' || id[i] > '9' {
+			return false
+		}
+	}
+	for i := 16; i < len(id); i++ {
+		c := id[i]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // VerifyOrigin says who started a verify job (VerifyRecord.Origin).
@@ -104,12 +194,92 @@ type HookStartRequest struct {
 // Pure. ParseHookStartArgv(HookStartArgv(s, r)[1:]) == r for every r with a
 // valid RequestID (round-trip test, incl. cwd with spaces and leading '-').
 func HookStartArgv(self string, req HookStartRequest) []string {
-	panic("unimplemented: model.HookStartArgv (unit P2-HOOK)")
+	argv := []string{self, "verify", "--hook-start",
+		"--request", req.RequestID, "--cwd", req.Cwd, "--client", string(req.Client)}
+	if req.SessionID != "" {
+		argv = append(argv, "--session", req.SessionID)
+	}
+	if req.AgentID != "" {
+		argv = append(argv, "--agent", req.AgentID)
+	}
+	if req.ProjectDir != "" {
+		argv = append(argv, "--project-dir", req.ProjectDir)
+	}
+	argv = append(argv, "--")
+	return append(argv, req.Names...)
 }
 
 // ParseHookStartArgv parses the arguments after the binary path (starting
 // with "verify"). It rejects a RequestID that is not in job-id format, a
 // relative Cwd or ProjectDir and names that ParseVerifyRequest would reject.
 func ParseHookStartArgv(args []string) (HookStartRequest, error) {
-	panic("unimplemented: model.ParseHookStartArgv (unit P2-HOOK)")
+	var req HookStartRequest
+	if len(args) < 2 || args[0] != "verify" || args[1] != "--hook-start" {
+		return req, errors.New("hook-start: want `verify --hook-start …`")
+	}
+	have := map[string]bool{}
+	i := 2
+	for ; i < len(args); i++ {
+		flag := args[i]
+		if flag == "--" {
+			i++
+			break
+		}
+		switch flag {
+		case "--request", "--cwd", "--client", "--session", "--agent", "--project-dir":
+		default:
+			return HookStartRequest{}, fmt.Errorf("hook-start: unknown argument %q", flag)
+		}
+		// The value is the next token verbatim, even when it starts with '-'.
+		if i+1 >= len(args) {
+			return HookStartRequest{}, fmt.Errorf("hook-start: flag %s needs a value", flag)
+		}
+		if have[flag] {
+			return HookStartRequest{}, fmt.Errorf("hook-start: flag %s given twice", flag)
+		}
+		have[flag] = true
+		i++
+		val := args[i]
+		switch flag {
+		case "--request":
+			req.RequestID = val
+		case "--cwd":
+			req.Cwd = val
+		case "--client":
+			req.Client = ClientID(val)
+		case "--session":
+			req.SessionID = val
+		case "--agent":
+			req.AgentID = val
+		case "--project-dir":
+			req.ProjectDir = val
+		}
+	}
+	for _, f := range []string{"--request", "--cwd", "--client"} {
+		if !have[f] {
+			return HookStartRequest{}, fmt.Errorf("hook-start: missing required flag %s", f)
+		}
+	}
+	if !validRequestID(req.RequestID) {
+		return HookStartRequest{}, fmt.Errorf("hook-start: request id %q is not in job-id format", req.RequestID)
+	}
+	if !filepath.IsAbs(req.Cwd) {
+		return HookStartRequest{}, errors.New("hook-start: --cwd must be an absolute path")
+	}
+	if have["--project-dir"] && !filepath.IsAbs(req.ProjectDir) {
+		return HookStartRequest{}, errors.New("hook-start: --project-dir must be an absolute path")
+	}
+	rest := args[i:]
+	if len(rest) > MaxVerifyRequestNames {
+		return HookStartRequest{}, fmt.Errorf("hook-start: more than %d names", MaxVerifyRequestNames)
+	}
+	for _, n := range rest {
+		if !validVerifyName(n) {
+			return HookStartRequest{}, fmt.Errorf("hook-start: invalid verify name %q", n)
+		}
+	}
+	if len(rest) > 0 {
+		req.Names = append([]string(nil), rest...)
+	}
+	return req, nil
 }

@@ -4,8 +4,13 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/libingtong/ballast/internal/redact"
 )
 
+// TestRedact pins the state-ring summary redaction to the shared
+// internal/redact (docs/p2-design.md §4.1): it masks secret VALUES only, so the
+// quote/user parts that the pre-P2 word scanner swallowed now stay readable.
 func TestRedact(t *testing.T) {
 	cases := []struct {
 		in, want string
@@ -19,10 +24,10 @@ func TestRedact(t *testing.T) {
 		{"API_KEY=abc123 make", "API_KEY=*** make"},
 		{"x --api-key=zzz", "x --api-key=***"},
 		{"TOKEN:abc", "TOKEN:***"},
-		{"curl -H 'Authorization: Bearer abc.def' u", "curl -H 'Authorization: Bearer *** u"},
-		{"curl -H authorization:Basic dXNlcjpwdw==", "curl -H authorization:*** dXNlcjpwdw=="},
+		{"curl -H 'Authorization: Bearer abc.def' u", "curl -H 'Authorization: Bearer ***' u"},
+		{"curl -H authorization:Basic dXNlcjpwdw==", "curl -H authorization:Basic ***"},
 		{"Basic dXNlcjpwdw==", "Basic ***"},
-		{"git clone https://user:pw@github.com/x/y.git", "git clone https://***@github.com/x/y.git"},
+		{"git clone https://user:pw@github.com/x/y.git", "git clone https://user:***@github.com/x/y.git"},
 		{"git clone https://github.com/x/y.git", "git clone https://github.com/x/y.git"},
 		{"echo ghp_abcdefghijklmnop1234", "echo ***"},
 		{"echo 'github_pat_11ABCDEFGH0abcdefgh'", "echo '***'"},
@@ -41,8 +46,8 @@ func TestRedact(t *testing.T) {
 		{"naïve=ünï password=päss", "naïve=ünï password=***"},
 	}
 	for _, c := range cases {
-		if got := redact(c.in); got != c.want {
-			t.Errorf("redact(%q) = %q, want %q", c.in, got, c.want)
+		if got := redact.String(c.in); got != c.want {
+			t.Errorf("redact.String(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -52,7 +57,7 @@ func FuzzRedact(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		out := redact(s)
+		out := redact.String(s)
 		if utf8.ValidString(s) && !utf8.ValidString(out) {
 			t.Fatalf("redact produced invalid UTF-8 from %q: %q", s, out)
 		}
@@ -61,9 +66,9 @@ func FuzzRedact(f *testing.F) {
 		if len(out) > len(s)+3*(strings.Count(s, " ")+strings.Count(s, "\n")+strings.Count(s, "\t")+1) {
 			t.Fatalf("output grew: %q → %q", s, out)
 		}
-		if redact(out) != out {
+		if redact.String(out) != out {
 			// Idempotence is not required but a second pass must not panic.
-			_ = redact(redact(out))
+			_ = redact.String(redact.String(out))
 		}
 	})
 }

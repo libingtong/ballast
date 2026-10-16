@@ -1,7 +1,8 @@
 // Package hook (unit U7) is the hot-path pipeline behind
 // `ballast hook --client <id> --event <native>` (plan B7; docs/architecture.md §2, §7, §9).
 //
-// Imports: model, ports, sys, layout, version, stdlib ONLY. Every other
+// Imports: model, ports, sys, layout, version, redact (L0, stdlib only; the
+// one relaxation of this rule, docs/p2-design.md §2.2), stdlib ONLY. Every other
 // unit is reached through Deps (ports interfaces) wired by internal/cli
 // (U12). No net/*, no os/exec (detached children go through ports.Spawner).
 //
@@ -114,12 +115,51 @@
 //     after LastJobReportAt, or after the session's StartedAt when nothing
 //     was reported yet; with neither, nothing is reported (a new session is
 //     not flooded with the repo's history). At most 16 per event.
-//   - EventSummary.Text is redacted by a local minimal redactor (the hook
-//     may not import audit); audit.Writer redacts again on write, so the
-//     state ring is the only place holding the narrower redaction.
+//   - EventSummary.Text is redacted with internal/redact (P2, §4.1: the same
+//     rules as the audit writer, which redacts again on write).
 //   - State readability: readable ⇔ Load returned no error (and, for
 //     defensive fakes, not Exists && !Readable && !Corrupt); see
 //     ports.StateStore.Load.
+//
+// P2 additions (unit P2-HOOK; docs/p2-design.md §3.2, §3.3, §5.1; p2.go):
+//   - First event of a session (State.StartedAt() false for the scope), in
+//     this order: diag env_redirect_ignored {vars} when Deps.RedirectsIgnored
+//     is non-empty; diag lower_sandbox_weakened {entries} when (claude-code
+//     and) Deps.ProjectSandbox reports entries for the session's project
+//     directories ($CLAUDE_PROJECT_DIR when absolute, else the event cwd and
+//     the repo top level). Nothing is written to the session state. Only
+//     judged when the state was readable: an unreadable state cannot tell a
+//     new session from an old one, so these diags are skipped (and state_
+//     unreadable is audited) instead of repeating on every event. The
+//     entries come from repo-controlled files and are bounded: at most 8
+//     entries of 80 runes each; a cut list ends with a "…等 N 项" entry (the
+//     detail stays {entries}).
+//   - Synthetic deny (claude-code PreToolUse only), merged with the rule
+//     verdict after the capability check: deny is the strictest action, the
+//     synthetic reason comes first, rule reasons follow within BudgetReason;
+//     no rule hit is fabricated and the eval counters are untouched.
+//     (a) Deps.WeakenedProject == deny and ProjectSandbox non-nil: every
+//     PreToolUse (any tool) of a session whose project layer is weakened is
+//     denied with the frozen reason, diag lower_sandbox_deny {tool}; this
+//     wins over (b) and nothing is started. (b) a canonical
+//     `ballast verify` (model.ParseVerifyRequest) under a T1 Probe: request id
+//     = UTC job-id timestamp + Deps.IDs.NewID(3), Spawner.SpawnDetached(
+//     model.HookStartArgv(Self, …), Env.Environ(), <RequestsDir>/<repo_inst>/
+//     <id>.spawn.log), deny with the frozen reason, diag verify_hook_start
+//     {request_id, names, spawn_ok}; a spawn failure (also no IDs, no
+//     Spawner/Self, non-absolute cwd) still denies with the failure reason and
+//     audits only verify_spawn_failed {request_id, names, error} (no
+//     verify_hook_start: nothing was started). T0
+//     or no Tier ⇒ ordinary evaluation (declared T1 but detected T0 ⇒ diag
+//     tier_mismatch {declared, missing}). With Tier == nil the command is not
+//     even parsed here. The spawn happens before the commit point, so a later
+//     exception (fail open) leaves the detached verify running.
+//   - ConfigChange: audit only. One config_change line {source, file,
+//     protected} from Event.Source and Event.ConfigFile (never the payload);
+//     file is "<repo>/…", "~/…" or the basename, protected is judged on
+//     PathService-normalized paths (Ballast home, org rules / managed
+//     directory, <repo>/.ballast, Claude settings*.json). No rules, no
+//     session state, empty stdout, same B7 failure protocol.
 //
 // Acceptance (U7): scripts/fault.sh with a `-tags ballast_fault` build:
 // for every FaultPoint × {error, panic, hang} ⇒ stdout empty, exit 1,

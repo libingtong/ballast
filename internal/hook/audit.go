@@ -104,6 +104,10 @@ func (b *auditBuilder) records(v *model.Verdict, diags []diag, delta *model.Stat
 
 func (b *auditBuilder) base(t model.AuditType) model.AuditRecord {
 	ev := b.ev
+	gen := ""
+	if b.rs != nil {
+		gen = b.rs.Generation
+	}
 	r := model.AuditRecord{
 		TS:             ev.ReceivedAt.UTC(),
 		V:              model.AuditVersion,
@@ -117,7 +121,7 @@ func (b *auditBuilder) base(t model.AuditType) model.AuditRecord {
 		RepoInst:       b.key.RepoInst,
 		Event:          ev.Name,
 		NativeEvent:    ev.Native,
-		Generation:     b.rs.Generation,
+		Generation:     gen,
 		Tier:           model.TierT0,
 		BallastVersion: b.deps.version(),
 	}
