@@ -1,0 +1,6 @@
+{
+  "case_id": "managed-d-merge-hooks",
+  "events": ["SessionStart", "UserPromptSubmit"],
+  "assertion": "managed-settings.json 与 managed-settings.d/10-a.json、20-b.json 各配一个探针:hook 数组在文件间是拼接(三个都被调用)而不是替换",
+  "needs_credentials": false
+}

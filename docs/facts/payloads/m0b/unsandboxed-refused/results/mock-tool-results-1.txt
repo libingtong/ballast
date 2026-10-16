@@ -1,0 +1,3 @@
+toolu_mock0000 error=True Exit code 1 /bin/bash: line 1: <home>/.ballast/evidence/dsb: Read-only file system
+toolu_mock0001 error=True Exit code 1 /bin/bash: line 1: <home>/.ballast/evidence/plain: Read-only file system
+toolu_mock0002 error=False (Bash completed with no output)

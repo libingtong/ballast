@@ -1,0 +1,6 @@
+{
+  "case_id": "nocred-events",
+  "events": ["SessionStart", "UserPromptSubmit", "SessionEnd"],
+  "assertion": "§6.3:没有凭据时 SessionStart 与 UserPromptSubmit 仍会触发(none / blackhole / hang 三种模式),其余无凭据用例才成立",
+  "needs_credentials": false
+}

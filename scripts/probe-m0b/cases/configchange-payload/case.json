@@ -1,0 +1,6 @@
+{
+  "case_id": "configchange-payload",
+  "events": ["ConfigChange"],
+  "assertion": "A16/§5.1:hang 模式下会话存活期间改写配置文件,托管 ConfigChange 探针收到 payload;记录字段(source、file_path)与各类改动是否触发",
+  "needs_credentials": false
+}

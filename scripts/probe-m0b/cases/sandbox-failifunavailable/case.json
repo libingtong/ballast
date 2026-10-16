@@ -1,0 +1,7 @@
+{
+  "case_id": "sandbox-failifunavailable",
+  "events": ["SessionStart", "UserPromptSubmit"],
+  "assertion": "去掉 bwrap 且托管 sandbox.enabled:true、failIfUnavailable:true 时,客户端在启动阶段拒绝运行(对照:bwrap 可用时正常启动;去掉 bwrap 但不设 failIfUnavailable 时启动并警告)",
+  "needs_credentials": false,
+  "sandbox": true
+}

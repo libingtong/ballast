@@ -1,0 +1,22 @@
+# 用例顺序(§6.4):前 15 个无凭据,后 6 个需凭据。
+nocred-events
+managed-only-blocks-lower
+hooks-merge-all-layers
+lower-disableallhooks-vs-managed
+managed-disableallhooks
+managed-d-merge-hooks
+managed-d-merge-scalar
+managed-hook-path-forms
+managed-file-owner
+sandbox-failifunavailable
+mcp-allowlist-nocred
+configchange-payload
+runner-bwrap-in-docker
+hooks-run-outside-sandbox
+lower-sandbox-merge
+sandbox-denywrite-bash
+permissions-deny-edit
+unsandboxed-refused
+managed-denywrite-path-forms
+managed-denywrite-anydepth
+mcp-write

@@ -1,0 +1,15 @@
+project/env [mode=none rc=1]: 生效(托管探针 hook 的环境里出现 BALLAST_PROBE_ENV=1)
+project/apiKeyHelper [mode=none rc=124]: 生效(标记文件已写入,命令被执行)
+project/statusLine [mode=none rc=1]: 未生效
+project/awsAuthRefresh [mode=none rc=124]: 生效(标记文件已写入,命令被执行)
+project/otelHeadersHelper [mode=none rc=1]: 生效(标记文件已写入,命令被执行)
+project/enabledPlugins [mode=none rc=1]: 未生效(claude plugin list 没有该条目:No plugins installed. Use `claude plugin install` to install a plugin. )
+project/enableAllProjectMcpServers [mode=blackhole rc=124]: 生效(项目 .mcp.json 的 server 被自动批准并启动)
+local/env [mode=none rc=1]: 生效(托管探针 hook 的环境里出现 BALLAST_PROBE_ENV=1)
+local/apiKeyHelper [mode=none rc=124]: 生效(标记文件已写入,命令被执行)
+local/statusLine [mode=none rc=1]: 未生效
+local/awsAuthRefresh [mode=none rc=124]: 生效(标记文件已写入,命令被执行)
+local/otelHeadersHelper [mode=none rc=1]: 生效(标记文件已写入,命令被执行)
+local/enabledPlugins [mode=none rc=1]: 未生效(claude plugin list 没有该条目:No plugins installed. Use `claude plugin install` to install a plugin. )
+local/enableAllProjectMcpServers [mode=blackhole rc=124]: 生效(项目 .mcp.json 的 server 被自动批准并启动)
+none/enableAllProjectMcpServers [mode=blackhole rc=124]: 生效(项目 .mcp.json 的 server 被自动批准并启动)

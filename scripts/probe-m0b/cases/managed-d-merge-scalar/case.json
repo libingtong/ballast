@@ -1,0 +1,6 @@
+{
+  "case_id": "managed-d-merge-scalar",
+  "events": ["SessionStart", "UserPromptSubmit"],
+  "assertion": "标量键冲突按文件名顺序后者胜、managed-settings.d 覆盖基础文件(allowManagedHooksOnly 以用户层探针是否被调用判定;env.BALLAST_PROBE_ENV 以托管探针 hook 的环境判定)",
+  "needs_credentials": false
+}

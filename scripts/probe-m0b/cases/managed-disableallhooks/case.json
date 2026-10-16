@@ -1,0 +1,6 @@
+{
+  "case_id": "managed-disableallhooks",
+  "events": ["SessionStart", "UserPromptSubmit"],
+  "assertion": "对照组:托管 disableAllHooks:true 时没有任何探针(含托管自己的)被调用",
+  "needs_credentials": false
+}

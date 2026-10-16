@@ -1,0 +1,6 @@
+{
+  "case_id": "managed-file-owner",
+  "events": ["SessionStart"],
+  "assertion": "记录客户端行为:托管文件(或其目录)属于 agent 用户、或 root 所有但组/其他可写时,Claude 是否仍读取并执行其中的 hook(Ballast 的层级判定自己检查属主,此项只为记录)",
+  "needs_credentials": false
+}

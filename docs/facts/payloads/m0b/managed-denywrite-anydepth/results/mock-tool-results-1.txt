@@ -1,0 +1,12 @@
+toolu_mock0000 error=False (Bash completed with no output)
+toolu_mock0001 error=False (Bash completed with no output)
+toolu_mock0002 error=False (Bash completed with no output)
+toolu_mock0003 error=False (Bash completed with no output)
+toolu_mock0004 error=False 1	{"orig":1}
+toolu_mock0005 error=True <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+toolu_mock0006 error=True <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+toolu_mock0007 error=False 1	orig
+toolu_mock0008 error=True <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+toolu_mock0009 error=True <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+toolu_mock0010 error=True Claude requested permissions to edit <repo>/a/b/.claude/other.txt which is a sensitive file.
+toolu_mock0011 error=False File created successfully at: <repo>/a/ok.txt (file state is current in your context — no need to Read it back)

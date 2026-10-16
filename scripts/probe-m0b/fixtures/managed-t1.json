@@ -1,0 +1,73 @@
+{
+  "_comment": "org render 的 T1 模板(docs/p2-design.md §3.2 条件 5、§3.5):denyWrite 与 permissions.deny 逐字取自 internal/tier/testdata/managed_forms.json 的 linux-default;hook 换成取证探针;一致性由 scripts/probe-m0b/check 的测试断言。",
+  "allowManagedHooksOnly": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/probe/probe.sh managed"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/probe/probe.sh managed"
+          }
+        ]
+      }
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "failIfUnavailable": true,
+    "excludedCommands": [],
+    "filesystem": {
+      "denyWrite": [
+        "/etc/claude-code/ballast",
+        "~/.ballast",
+        "./.ballast",
+        "**/.ballast",
+        "/usr/local/libexec/ballast",
+        "~/.claude/settings*.json",
+        "./.claude/settings*.json",
+        "**/.claude/settings*.json"
+      ]
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Edit(/etc/claude-code/ballast/**)",
+      "Edit(~/.ballast/**)",
+      "Edit(./.ballast/**)",
+      "Edit(**/.ballast/**)",
+      "Edit(/usr/local/libexec/ballast/**)",
+      "Edit(~/.claude/settings*.json)",
+      "Edit(./.claude/settings*.json)",
+      "Edit(**/.claude/settings*.json)",
+      "Write(/etc/claude-code/ballast/**)",
+      "Write(~/.ballast/**)",
+      "Write(./.ballast/**)",
+      "Write(**/.ballast/**)",
+      "Write(/usr/local/libexec/ballast/**)",
+      "Write(~/.claude/settings*.json)",
+      "Write(./.claude/settings*.json)",
+      "Write(**/.claude/settings*.json)",
+      "NotebookEdit(/etc/claude-code/ballast/**)",
+      "NotebookEdit(~/.ballast/**)",
+      "NotebookEdit(./.ballast/**)",
+      "NotebookEdit(**/.ballast/**)",
+      "NotebookEdit(/usr/local/libexec/ballast/**)",
+      "NotebookEdit(~/.claude/settings*.json)",
+      "NotebookEdit(./.claude/settings*.json)",
+      "NotebookEdit(**/.claude/settings*.json)"
+    ]
+  },
+  "allowManagedPermissionRulesOnly": true
+}

@@ -1,0 +1,6 @@
+{
+  "case_id": "lower-disableallhooks-vs-managed",
+  "events": ["SessionStart", "UserPromptSubmit"],
+  "assertion": "A14:用户层、项目层、本地层分别设 disableAllHooks:true 时,托管 hook 仍被调用,该层自己的 hook 不被调用",
+  "needs_credentials": false
+}

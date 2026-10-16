@@ -1,0 +1,9 @@
+{
+  "session_id": "40f6aacb-41d5-4c57-8334-c7fe1113ee1b",
+  "transcript_path": "<home>/.claude/projects/-<project-key>/40f6aacb-41d5-4c57-8334-c7fe1113ee1b.jsonl",
+  "cwd": "<repo>",
+  "prompt_id": "4ee54dee-d78e-4a37-a828-ee0f90cc44b9",
+  "permission_mode": "auto",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "hello"
+}

@@ -1,0 +1,9 @@
+{
+  "session_id": "829d2d6f-c8c2-46f6-81cf-f27959d3c18b",
+  "transcript_path": "<home>/.claude/projects/-<project-key>/829d2d6f-c8c2-46f6-81cf-f27959d3c18b.jsonl",
+  "cwd": "<repo>",
+  "prompt_id": "403b0907-72c9-4492-93fd-638c47d13ed8",
+  "hook_event_name": "ConfigChange",
+  "source": "project_settings",
+  "file_path": "<repo>/.claude/settings.json"
+}

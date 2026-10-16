@@ -1,0 +1,5 @@
+Checking MCP server health…
+
+other-srv: /bin/true  - ✘ Failed to connect — CONNECTION_CLOSED: Connection closed
+allowed-srv: /bin/true  - ✘ Failed to connect — CONNECTION_CLOSED: Connection closed
+project-srv: /bin/true  - ⏸ Pending approval (run `claude` to approve)

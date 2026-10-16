@@ -1,0 +1,806 @@
+{
+  "builds": {
+    "literal-novarrun": {
+      "items": [
+        {
+          "name": "write-bashrc",
+          "expect": "deny",
+          "rc": 0,
+          "ok": false,
+          "changed": [
+            "~/.bashrc"
+          ],
+          "new_mandatory": [],
+          "msg": ""
+        },
+        {
+          "name": "write-zshrc",
+          "expect": "deny",
+          "rc": 0,
+          "ok": false,
+          "changed": [
+            "~/.zshrc"
+          ],
+          "new_mandatory": [],
+          "msg": ""
+        },
+        {
+          "name": "write-profile",
+          "expect": "deny",
+          "rc": 0,
+          "ok": false,
+          "changed": [
+            "~/.profile"
+          ],
+          "new_mandatory": [],
+          "msg": ""
+        },
+        {
+          "name": "write-claude-json",
+          "expect": "deny",
+          "rc": 0,
+          "ok": false,
+          "changed": [
+            "~/.claude.json"
+          ],
+          "new_mandatory": [],
+          "msg": ""
+        },
+        {
+          "name": "write-ballast-evidence",
+          "expect": "deny",
+          "rc": 0,
+          "ok": false,
+          "changed": [
+            "~/.ballast/evidence/x"
+          ],
+          "new_mandatory": [],
+          "msg": ""
+        },
+        {
+          "name": "write-ballast-rules",
+          "expect": "deny",
+          "rc": 0,
+          "ok": false,
+          "changed": [
+            "~/.ballast/rules.json"
+          ],
+          "new_mandatory": [],
+          "msg": ""
+        },
+        {
+          "name": "write-repo-project-json",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.ballast/project.json: Read-only file system"
+        },
+        {
+          "name": "create-repo-ballast-x",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.ballast/x: Read-only file system"
+        },
+        {
+          "name": "mv-repo-write-back",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "mv: cannot move '<home>/repo' to '<home>/repo2': Device or resource busy\nmv: cannot stat '<home>/repo2': "
+        },
+        {
+          "name": "mv-dotgit-recreate",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "mv: cannot move '<home>/repo/.git' to '<home>/repo/.git2': Device or resource busy"
+        },
+        {
+          "name": "hardlink-rules",
+          "expect": "deny",
+          "rc": 0,
+          "ok": false,
+          "changed": [
+            "~/repo/hl"
+          ],
+          "new_mandatory": [],
+          "msg": ""
+        },
+        {
+          "name": "write-git-hooks",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/hooks/pre-commit: Read-only file system"
+        },
+        {
+          "name": "write-git-config",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/config: Read-only file system"
+        },
+        {
+          "name": "sub-gitfile-to-dir",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "rm: cannot remove '<home>/repo/sub/.git': Device or resource busy"
+        },
+        {
+          "name": "sub-gitfile-rewrite",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/sub/.git: Read-only file system"
+        },
+        {
+          "name": "modules-sub-config",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/modules/sub/config: Read-only file system"
+        },
+        {
+          "name": "modules-sub-hook",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/modules/sub/hooks/post-checkout: Read-only file system"
+        },
+        {
+          "name": "worktree-config-existing",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/worktrees/w2/config.worktree: Read-only file system"
+        },
+        {
+          "name": "worktree-config-new",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.git/worktrees/w3/config.worktree"
+          ],
+          "new_mandatory": [
+            "~/repo/.git/worktrees/w3/config.worktree"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "unix-socket-run",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nFileNotFoundError: [Errno 2] No such file or d"
+        },
+        {
+          "name": "gitlink-evil-dotgit",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.git/index",
+            "~/repo/evil/",
+            "~/repo/evil/.git/",
+            "~/repo/evil/.git/config"
+          ],
+          "new_mandatory": [
+            "~/repo/evil/.git"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "create-claude-settings-local",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.claude/",
+            "~/repo/.claude/settings.local.json"
+          ],
+          "new_mandatory": [
+            "~/repo/.claude"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "create-vscode-tasks",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.vscode/",
+            "~/repo/.vscode/tasks.json"
+          ],
+          "new_mandatory": [
+            "~/repo/.vscode"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "create-mcp-json",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.mcp.json"
+          ],
+          "new_mandatory": [
+            "~/repo/.mcp.json"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "write-ok-and-git-add",
+          "expect": "allow",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.git/index",
+            "~/repo/.git/objects/97/",
+            "~/repo/.git/objects/97/66475a4185a151dc9d56d614ffb9aaea3bfd42",
+            "~/repo/ok.txt"
+          ],
+          "new_mandatory": [],
+          "msg": ""
+        }
+      ],
+      "baseline_count": 13,
+      "net_deny_loopback_blocked": true,
+      "net_allow_loopback_reachable": true,
+      "allow_run_socket_blocked": true,
+      "custom_location_socket_reachable": true,
+      "setenv_ld_reaches_test": true,
+      "pty": {
+        "rc": 0,
+        "output": "open-tty:6 tiocsti0:1 tiocsti1:1 tiocsti2:1"
+      }
+    },
+    "ro-after": {
+      "items": [
+        {
+          "name": "write-bashrc",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.bashrc: Read-only file system"
+        },
+        {
+          "name": "write-zshrc",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.zshrc: Read-only file system"
+        },
+        {
+          "name": "write-profile",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.profile: Read-only file system"
+        },
+        {
+          "name": "write-claude-json",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.claude.json: Read-only file system"
+        },
+        {
+          "name": "write-ballast-evidence",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.ballast/evidence/x: Read-only file system"
+        },
+        {
+          "name": "write-ballast-rules",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.ballast/rules.json: Read-only file system"
+        },
+        {
+          "name": "write-repo-project-json",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.ballast/project.json: Read-only file system"
+        },
+        {
+          "name": "create-repo-ballast-x",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.ballast/x: Read-only file system"
+        },
+        {
+          "name": "mv-repo-write-back",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "mv: cannot move '<home>/repo' to '<home>/repo2': Read-only file system\nmv: cannot stat '<home>/repo2': No"
+        },
+        {
+          "name": "mv-dotgit-recreate",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "mv: cannot move '<home>/repo/.git' to '<home>/repo/.git2': Read-only file system"
+        },
+        {
+          "name": "hardlink-rules",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "ln: failed to create hard link '<home>/repo/hl': Read-only file system"
+        },
+        {
+          "name": "write-git-hooks",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/hooks/pre-commit: Read-only file system"
+        },
+        {
+          "name": "write-git-config",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/config: Read-only file system"
+        },
+        {
+          "name": "sub-gitfile-to-dir",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "rm: cannot remove '<home>/repo/sub/.git': Read-only file system"
+        },
+        {
+          "name": "sub-gitfile-rewrite",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/sub/.git: Read-only file system"
+        },
+        {
+          "name": "modules-sub-config",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/modules/sub/config: Read-only file system"
+        },
+        {
+          "name": "modules-sub-hook",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/modules/sub/hooks/post-checkout: Read-only file system"
+        },
+        {
+          "name": "worktree-config-existing",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/worktrees/w2/config.worktree: Read-only file system"
+        },
+        {
+          "name": "worktree-config-new",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.git/worktrees/w3/config.worktree"
+          ],
+          "new_mandatory": [
+            "~/repo/.git/worktrees/w3/config.worktree"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "unix-socket-run",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nFileNotFoundError: [Errno 2] No such file or d"
+        },
+        {
+          "name": "gitlink-evil-dotgit",
+          "expect": "post",
+          "rc": 1,
+          "ok": true,
+          "changed": [
+            "~/repo/.git/index"
+          ],
+          "new_mandatory": [],
+          "msg": "mkdir: cannot create directory ‘evil’: Read-only file system"
+        },
+        {
+          "name": "create-claude-settings-local",
+          "expect": "post",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "mkdir: cannot create directory ‘<home>/repo/.claude’: Read-only file system"
+        },
+        {
+          "name": "create-vscode-tasks",
+          "expect": "post",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "mkdir: cannot create directory ‘<home>/repo/.vscode’: Read-only file system"
+        },
+        {
+          "name": "create-mcp-json",
+          "expect": "post",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.mcp.json: Read-only file system"
+        },
+        {
+          "name": "write-ok-and-git-add",
+          "expect": "allow",
+          "rc": 2,
+          "ok": false,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create ok.txt: Read-only file system"
+        }
+      ],
+      "baseline_count": 13,
+      "net_deny_loopback_blocked": true,
+      "net_allow_loopback_reachable": true,
+      "allow_run_socket_blocked": true,
+      "custom_location_socket_reachable": true,
+      "setenv_ld_reaches_test": true,
+      "pty": {
+        "rc": 0,
+        "output": "open-tty:6 tiocsti0:1 tiocsti1:1 tiocsti2:1"
+      }
+    },
+    "fixed": {
+      "items": [
+        {
+          "name": "write-bashrc",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.bashrc: Read-only file system"
+        },
+        {
+          "name": "write-zshrc",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.zshrc: Read-only file system"
+        },
+        {
+          "name": "write-profile",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.profile: Read-only file system"
+        },
+        {
+          "name": "write-claude-json",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.claude.json: Read-only file system"
+        },
+        {
+          "name": "write-ballast-evidence",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.ballast/evidence/x: Read-only file system"
+        },
+        {
+          "name": "write-ballast-rules",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/.ballast/rules.json: Read-only file system"
+        },
+        {
+          "name": "write-repo-project-json",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.ballast/project.json: Read-only file system"
+        },
+        {
+          "name": "create-repo-ballast-x",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.ballast/x: Read-only file system"
+        },
+        {
+          "name": "mv-repo-write-back",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "mv: cannot move '<home>/repo' to '<home>/repo2': Read-only file system\nmv: cannot stat '<home>/repo2': No"
+        },
+        {
+          "name": "mv-dotgit-recreate",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "mv: cannot move '<home>/repo/.git' to '<home>/repo/.git2': Device or resource busy"
+        },
+        {
+          "name": "hardlink-rules",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "ln: failed to create hard link '<home>/repo/hl' => '<home>/.ballast/rules.json': Invalid cross-device link"
+        },
+        {
+          "name": "write-git-hooks",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/hooks/pre-commit: Read-only file system"
+        },
+        {
+          "name": "write-git-config",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/config: Read-only file system"
+        },
+        {
+          "name": "sub-gitfile-to-dir",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "rm: cannot remove '<home>/repo/sub/.git': Device or resource busy"
+        },
+        {
+          "name": "sub-gitfile-rewrite",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/sub/.git: Read-only file system"
+        },
+        {
+          "name": "modules-sub-config",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/modules/sub/config: Read-only file system"
+        },
+        {
+          "name": "modules-sub-hook",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/modules/sub/hooks/post-checkout: Read-only file system"
+        },
+        {
+          "name": "worktree-config-existing",
+          "expect": "deny",
+          "rc": 2,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "sh: 1: cannot create <home>/repo/.git/worktrees/w2/config.worktree: Read-only file system"
+        },
+        {
+          "name": "worktree-config-new",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.git/worktrees/w3/config.worktree"
+          ],
+          "new_mandatory": [
+            "~/repo/.git/worktrees/w3/config.worktree"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "unix-socket-run",
+          "expect": "deny",
+          "rc": 1,
+          "ok": true,
+          "changed": [],
+          "new_mandatory": [],
+          "msg": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nFileNotFoundError: [Errno 2] No such file or d"
+        },
+        {
+          "name": "gitlink-evil-dotgit",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.git/index",
+            "~/repo/evil/",
+            "~/repo/evil/.git/",
+            "~/repo/evil/.git/config"
+          ],
+          "new_mandatory": [
+            "~/repo/evil/.git"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "create-claude-settings-local",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.claude/",
+            "~/repo/.claude/settings.local.json"
+          ],
+          "new_mandatory": [
+            "~/repo/.claude"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "create-vscode-tasks",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.vscode/",
+            "~/repo/.vscode/tasks.json"
+          ],
+          "new_mandatory": [
+            "~/repo/.vscode"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "create-mcp-json",
+          "expect": "post",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.mcp.json"
+          ],
+          "new_mandatory": [
+            "~/repo/.mcp.json"
+          ],
+          "msg": ""
+        },
+        {
+          "name": "write-ok-and-git-add",
+          "expect": "allow",
+          "rc": 0,
+          "ok": true,
+          "changed": [
+            "~/repo/.git/index",
+            "~/repo/.git/objects/97/",
+            "~/repo/.git/objects/97/66475a4185a151dc9d56d614ffb9aaea3bfd42",
+            "~/repo/ok.txt"
+          ],
+          "new_mandatory": [],
+          "msg": ""
+        }
+      ],
+      "baseline_count": 13,
+      "net_deny_loopback_blocked": true,
+      "net_allow_loopback_reachable": true,
+      "allow_run_socket_blocked": true,
+      "custom_location_socket_reachable": true,
+      "setenv_ld_reaches_test": true,
+      "pty": {
+        "rc": 0,
+        "output": "open-tty:6 tiocsti0:1 tiocsti1:1 tiocsti2:1"
+      }
+    }
+  },
+  "literal_smoke": {
+    "rc": 1,
+    "msg": "bwrap: Can't mount tmpfs on /newroot/var/run: No such file or directory"
+  },
+  "var_run_is_symlink": true
+}

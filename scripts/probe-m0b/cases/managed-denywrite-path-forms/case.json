@@ -1,0 +1,8 @@
+{
+  "case_id": "managed-denywrite-path-forms",
+  "events": [],
+  "assertion": "denyWrite 中 ~/、./相对路径、glob、绝对路径的实际效果;permissions.deny 中单斜杠开头的绝对路径是否按绝对路径解释(不按则 ManagedForms 改为 // 形式)",
+  "needs_credentials": true,
+  "sandbox": true,
+  "recheck": "ANTHROPIC_API_KEY=<用户自己提供> scripts/probe-m0b/run.sh --with-credentials --cases sandbox-denywrite-bash,permissions-deny-edit,unsandboxed-refused,managed-denywrite-path-forms,managed-denywrite-anydepth,mcp-write"
+}

@@ -1,0 +1,6 @@
+{
+  "case_id": "managed-only-blocks-lower",
+  "events": ["SessionStart", "UserPromptSubmit"],
+  "assertion": "A13:托管 allowManagedHooksOnly:true 时,用户层、项目层、本地层的 hook 都不被调用,只有托管层被调用",
+  "needs_credentials": false
+}

@@ -1,0 +1,8 @@
+{
+  "case_id": "sandbox-denywrite-bash",
+  "events": [],
+  "assertion": "agent 用 Bash 的 echo >、sed -i、python3 -c 写托管 denyWrite 路径(~/.ballast 下)全部失败,而写非受保护目录成功(对照)",
+  "needs_credentials": true,
+  "sandbox": true,
+  "recheck": "ANTHROPIC_API_KEY=<用户自己提供> scripts/probe-m0b/run.sh --with-credentials --cases sandbox-denywrite-bash,permissions-deny-edit,unsandboxed-refused,managed-denywrite-path-forms,managed-denywrite-anydepth,mcp-write"
+}

@@ -1,0 +1,7 @@
+{
+  "session_id": "30272104-ff27-46a6-a432-4080a0302785",
+  "transcript_path": "<home>/.claude/projects/-<project-key>/30272104-ff27-46a6-a432-4080a0302785.jsonl",
+  "cwd": "<repo>",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}

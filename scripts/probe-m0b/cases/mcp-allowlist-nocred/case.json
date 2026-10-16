@@ -1,0 +1,7 @@
+{
+  "case_id": "mcp-allowlist-nocred",
+  "events": [],
+  "schema_keys": {"managed-settings": ["allowedMcpServers", "deniedMcpServers", "allowManagedMcpServersOnly"]},
+  "assertion": "托管 allowedMcpServers 白名单(键名核对)生效:用户层配置的、不在白名单里的 MCP server 不出现在 claude mcp list 中;白名单为空时全部不可用;deniedMcpServers 点名拒绝;一个拼错的键名不起作用",
+  "needs_credentials": false
+}

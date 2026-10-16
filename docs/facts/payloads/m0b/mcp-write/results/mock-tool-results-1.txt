@@ -1,0 +1,3 @@
+toolu_mock0000 error=False wrote
+toolu_mock0001 error=True <tool_use_error>Error: No such tool available: mcp__other__write_file</tool_use_error>
+toolu_mock0002 error=False File created successfully at: <home>/outside/ok.txt (file state is current in your context — no need to Read it back)

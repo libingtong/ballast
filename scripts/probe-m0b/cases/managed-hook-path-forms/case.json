@@ -1,0 +1,6 @@
+{
+  "case_id": "managed-hook-path-forms",
+  "events": ["SessionStart"],
+  "assertion": "托管 hook 的 command 写法:绝对路径(含 args 数组形式、含空格的路径)被执行;裸名按调用进程的 PATH 解析、./相对路径按会话目录解析、~ 与 $HOME 按用户家目录解析——这些形式的目标位于 agent 可写位置,可被劫持,所以 org render 只能写绝对路径",
+  "needs_credentials": false
+}

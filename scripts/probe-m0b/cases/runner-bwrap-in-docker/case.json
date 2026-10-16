@@ -1,0 +1,9 @@
+{
+  "case_id": "runner-bwrap-in-docker",
+  "events": [],
+  "schema_keys": {"bwrap-argv": ["--die-with-parent", "--new-session", "--unshare-pid", "--unshare-net", "--ro-bind", "--bind", "--dev", "--proc", "--tmpfs", "--chdir", "--setenv"]},
+  "assertion": "不经 Claude:容器内按 §3.4 Linux 行的 bwrap 参数(祖先 --bind、位于 W 之后,另加 --tmpfs /var/run)运行 §3.4 沙箱集成用例的 Linux 条目——每条逃逸写入都失败,写 W 内文件与 git add 成功;所需 --security-opt 为 seccomp、apparmor、systempaths 三项",
+  "needs_credentials": false,
+  "sandbox": true,
+  "matrix": true
+}
