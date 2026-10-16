@@ -141,33 +141,44 @@ func TestOkOutput(t *testing.T) {
 	}
 }
 
-// Informational scenarios skip only the p95 bound; the correctness checks
-// still gate them.
-func TestGateInformational(t *testing.T) {
-	r := good()
-	r.P95, r.Informational = 500, true
-	gate(&r)
-	if !r.Pass {
-		t.Errorf("an informational p95 must not fail the gate: %v", r.Failures)
+// BALLAST_BENCH_P95_MS can only raise the bound; anything else is an error.
+func TestParseBudget(t *testing.T) {
+	ok := map[string]time.Duration{"": 30 * time.Millisecond, " ": 30 * time.Millisecond, "30": 30 * time.Millisecond, "60": 60 * time.Millisecond, " 200 ": 200 * time.Millisecond, "1000": time.Second}
+	for in, want := range ok {
+		got, err := parseBudget(in)
+		if err != nil || got != want {
+			t.Errorf("parseBudget(%q) = %v, %v; want %v", in, got, err, want)
+		}
 	}
-	r = good()
-	r.P95, r.Informational, r.Bad = 500, true, 1
-	gate(&r)
-	if r.Pass {
-		t.Error("an informational scenario with Bad runs must still fail")
+	for _, in := range []string{"29", "0", "-1", "1001", "report", "30.5", "enforce"} {
+		if got, err := parseBudget(in); err == nil {
+			t.Errorf("parseBudget(%q) = %v, want an error", in, got)
+		}
 	}
 }
 
-// BALLAST_BENCH_P95=report only changes how the p95 bound is treated.
-func TestP95ReportMode(t *testing.T) {
-	t.Setenv(BenchP95Env, "report")
-	if !p95ReportOnly() {
-		t.Fatal("report mode not detected")
+// With a raised bound the gate follows it, and the correctness checks still
+// gate the scenario.
+func TestGateRaisedBudget(t *testing.T) {
+	old := budget
+	defer func() { budget = old }()
+	budget = 60 * time.Millisecond
+	r := good()
+	r.P95 = 51
+	gate(&r)
+	if !r.Pass {
+		t.Errorf("p95 inside the raised bound failed: %v", r.Failures)
 	}
-	for _, v := range []string{"", "enforce", "yes"} {
-		t.Setenv(BenchP95Env, v)
-		if p95ReportOnly() {
-			t.Errorf("%q must keep the gate enforced", v)
-		}
+	r = good()
+	r.P95 = 60.5
+	gate(&r)
+	if r.Pass {
+		t.Error("p95 over the raised bound must fail")
+	}
+	r = good()
+	r.P95, r.Bad = 20, 1
+	gate(&r)
+	if r.Pass {
+		t.Error("Bad runs must still fail")
 	}
 }

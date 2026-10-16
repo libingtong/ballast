@@ -133,6 +133,10 @@ func TestSupersedeStopsRunningJob(t *testing.T) {
 		// runner just has to be gone, which also releases its job lock.
 		runnerPID := jsA.PID
 		waitFor(t, "A's runner to be terminated", 15*time.Second, func() bool { return processGone(runnerPID) })
+		// The command must not outlive the runner: terminateProcess does not
+		// reach children by itself, so this relies on the runner's Job Object
+		// (kill-on-close, exec_windows.go) dying with it.
+		waitFor(t, "A's command to die with its runner", 15*time.Second, func() bool { return processGone(aCmd) })
 	}
 
 	// B passes once released; A's record stays superseded.

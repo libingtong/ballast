@@ -436,21 +436,29 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 
 ## 9. 热路径预算与性能约束
 
-- **门槛**:B10 的 11 个场景 p95 ≤ 30ms,三平台(macOS arm64、Linux、Windows)都设门槛。M0c 原型最差 p95 17.13ms(繁忙机器);进程创建 + Go 运行时初始化在 Linux / macOS 约占 3–5ms。**托管 runner 例外**:GitHub 托管的 macOS(3 vCPU 虚拟机)与 Windows(Defender 扫描每个文件操作)上,同一个二进制的 p95 达不到 30ms(进程创建下限就有 12–13ms,Windows 上钩子自身还要多付约 30ms),所以 CI 对这两个平台设 `BALLAST_BENCH_P95=report`:p95 照常测量并写入报告,但不作门槛;Bad == 0、样本齐全、审计命中仍然适用。Linux CI 与开发机仍强制固定 30ms。详见 `scripts/bench/README.md`。
+- **门槛**:B10 的 11 个场景 p95 ≤ 30ms,三平台(macOS arm64、Linux、Windows)都设门槛。M0c 原型最差 p95 17.13ms(繁忙机器);进程创建 + Go 运行时初始化约占 3–5ms。
+  - 规格本身未改。GitHub 托管的 macOS / Windows runner 达不到 30ms,CI 在那两个平台用 `BALLAST_BENCH_P95_MS` 设了**固定的临时平台上限**(macOS 80ms、Windows 250ms,依据与实测数据见 `scripts/bench/README.md`),Linux CI 与开发机仍是 30ms。这是 CI 修复期间的临时措施,**是否接受(或应改为别的口径)待负责人确认**;Windows 上钩子自身比进程创建下限多约 30ms 是产品性能缺口,见本节末"已知缺口"。
 - **热路径包**(`archtest.hotPath`):model、ports、sys、layout、version、paths、bashparse、psparse、dsl、config、inject、state、audit、adapter/*、hook、snapshot、evidence、project。
   - 不得依赖 `net/*`(传递闭包也不行)。
   - 不得 import `os/exec`,**唯一例外** `internal/snapshot/gitfallback.go`(受 deadline 约束)。hook、dsl、adapter、state、audit、config、inject、paths、bashparse、psparse 传递闭包也不得含 `os/exec`。
   - 不得在包级变量中 `regexp.MustCompile`(惰性编译);不做重的 `init()`。**这两条适用于 cmd/ballast 链接进来的全部包**(`./internal/...` 与 `./cmd/...`,含 install、stats、replay、runner),因为每次 hook 调用都会执行所有包的初始化;`internal/archtest` 的 `TestNoHeavyPackageInit` 用 AST 检查包级 var 初始化中的 `regexp.(Must)Compile(POSIX)` 并禁止 `func init()`(白名单 `initAllowed`,当前为空)。
   - 时间、随机数、环境变量、文件系统一律经 `sys.Clock`/`sys.IDGen`/`sys.Env`/`sys.FS` 注入。
 - **分项预算**(进程内,p50 目标):读 stdin + 解析 ≤ 0.3ms;规则加载(缓存命中)≤ 0.5ms;冷编译 12 条 ≤ 1ms;状态无锁读 ≤ 0.2ms;求值(不含快照)≤ 0.5ms;100KB bash 解析 ≤ 3ms;原生 C 快照 10k 文件 ≤ 5ms;状态事务 ≤ 1ms(锁等待上限 20ms);审计写 ≤ 0.3ms。
-- **看门狗** 150ms(产品默认值,不可经配置改变);昂贵谓词(快照退回 git)的 deadline = 启动时刻 + 120ms。退回 git 超时 → unknown + 审计 diag。
-- **看门狗的测试覆盖开关**:环境变量 `BALLAST_TEST_WATCHDOG_MS=<毫秒>` 仅供 CI 与测试使用(`hook.WatchdogFromEnv`),只能放宽、不能收紧——取值必须是 150..60000 的整数,否则忽略并回到 150ms。产品安装从不设置它,默认值不变;它只放宽看门狗,不改变任何判定逻辑。原因:共享 runner(尤其 Windows)上进程会被随机卡住 100ms 以上(新启动二进制的缺页、CPU 被抢占、杀软扫描),同一台 runner 上钩子 p50 仅约 3ms,而 bench 与端到端测试要求"零异常"。`scripts/fault.sh` 的 hang 用例会把它置空,继续断言产品自己的 150ms。
+- **看门狗** 150ms(产品默认值,不可经配置或环境变量改变);昂贵谓词(快照退回 git)的 deadline = 启动时刻 + 120ms。退回 git 超时 → unknown + 审计 diag。
+- **看门狗的测试覆盖开关**:环境变量 `BALLAST_TEST_WATCHDOG_MS=<毫秒>` **只在 `-tags ballast_test` 构建里存在**(`internal/hook/watchdog_on.go`);生产构建(无标签)既不读取也不认它(`watchdog_off.go` 恒返回 0),与 `BALLAST_FAULT` 同一原则——Agent 不能通过环境变量拉长 150ms 的 fail-open 期限。带标签的构建只能放宽(取值 150..60000 的整数,否则忽略)、不改变任何判定逻辑,仅 CI 使用:`go test -tags ballast_test`,`scripts/lib.sh` 与 `scripts/bench.sh` 在变量非空时才给被测二进制加标签。原因:共享 runner(尤其 Windows)上新启动的进程会被随机卡住 100ms 以上(缺页、CPU 被抢占、杀软扫描),同一台 runner 上钩子 p50 仅约 3ms,而端到端测试与 bench 要求"零异常"。守护:`TestProductionBuildIgnoresWatchdogEnv`(hook)与 `TestWireHookIgnoresWatchdogEnv`(cli)在无标签构建下断言生产构建忽略该变量,CI 单独有一步不带标签运行它们;`scripts/fault.sh` 的 hang 用例会把变量置空,继续断言产品自己的 150ms。
 - 原生快照的回退条件以 `internal/snapshot/doc.go` 为准;v1.3 把子模块相关条件(HEAD 无法原生解析、git 目录缺 `objects/`/`refs/`、gitlink 被非目录替换、已跟踪文件被含 `.git` 的目录替换)和 racy 判定中的 smudged 规则(索引中 size 为 0 且 id 不是空 blob)写入契约。
 - 状态文件**不 fsync**;evidence、manifest、备份 **fsync**(不在热路径)。
 - gob 规则缓存可选(M0c:12 条规则只省约 0.3ms);热更新所需的 stat 检测必须保留。
 - 输出协议:stdout 只写一次;GC 只在 SessionStart 以 detached 子进程触发,每天至多一次(`gc.stamp`)。
 
+
+**已知缺口(GitHub 托管 runner 实测,登记待跟踪,未改产品代码)**:
+
+- **Windows 钩子自身开销**:同一台 runner 上裸 `ballast version` 的 p95 约 12ms,而最轻的钩子场景(SessionStart、UserPromptSubmit)p50 就有约 40ms,10k 文件工作区的 S 快照 p50 130–150ms;Linux 同一二进制 p95 最大 28.5ms。多出的约 30ms 疑为 Defender 对每个文件操作(规则、状态、审计、缓存)的扫描,尚未用 profile 确认根因。需要单独的 issue 跟踪。
+- **CPU 超订时状态增量被大量丢弃**:状态锁等待预算 20ms(挂钟时间)不变。macOS 3 vCPU 上 N 个进程并发,N=3/4/6/8 时分别约 2%/43%/63%/75% 的增量因锁超时被丢弃,Windows(4 核)N=6/8 为 61%/66%,Linux(4 核)全程 0%。实测:同一 `Store.Commit` 在 8 进程下不带钩子自身的 CPU 突发时超时仅 0.4%(事务约 0.4ms,p95 约 2ms),预算放到 100ms 后 N=4/6/8 丢 4%/14%/35%,400ms 则不丢——即等锁的进程拿不到 CPU,而不是事务过长。正确性不变量(不丢更新:`event_seq == 调用数 − 审计到的超时数`,每次超时都有 `lock_timeout` 审计)在所有 N 上成立,所以这是可用性问题而非正确性问题。可选方向:内核通知式等待(flock 阻塞 / Windows 命名互斥量)、让超时的增量下次合并重放;需要单独的设计评审。`scripts/concurrency.sh` 对此的口径:N 不超过 CPU 数时超时 ≤ 50%,超订时 ≤ 90%。
+
 ---
+
 
 ## 10. 错误处理约定
 
@@ -507,6 +515,7 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 | 审计轮转 | 不重命名,按后缀递增创建新文件 | 并发写者无竞态 |
 | verify `--status` 扩展码 7 | superseded | 计划未定义该结果的码 |
 | 故障注入 | 仅 `ballast_fault` 构建标签 | 防止 Agent 通过环境变量关闭强制 |
+| 看门狗覆盖 | 仅 `ballast_test` 构建标签(`BALLAST_TEST_WATCHDOG_MS`),生产构建忽略 | 防止 Agent 通过环境变量拉长 150ms 的 fail-open 期限(CI 审核 major) |
 | Hermes `on_session_end` | 归一为 SessionEnd(不是 Stop) | 无法干预停止,且不带最终文本 |
 | Cursor `afterAgentResponse` | 归一为 AgentResponse,仅存最终文本供后续 `stop` 规则使用 | Cursor stop payload 可能缺 `last_assistant_message` |
 | shell 读取目标 | `CommandNode.Reads`(bashparse/psparse 提取),Bash/PowerShell 的 PostToolUse 把非动态目标并入已读集合 | Codex 没有 Read 工具;否则 `read-before-edit` 在 Codex 上对每个已存在文件的 `apply_patch` 都命中(审核 major 1) |

@@ -1,3 +1,5 @@
+//go:build ballast_test
+
 package hook
 
 import (
@@ -37,8 +39,5 @@ func TestWatchdogFromEnv(t *testing.T) {
 				t.Errorf("WatchdogFromEnv(%q) = %v, want %v", tc.val, got, tc.want)
 			}
 		})
-	}
-	if DefaultWatchdog != 150*time.Millisecond {
-		t.Errorf("the product default changed: %v", DefaultWatchdog)
 	}
 }

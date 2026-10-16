@@ -70,14 +70,18 @@ func TestParse100KBBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	limit := 5 * time.Millisecond
-	if raceEnabled {
+	switch {
+	case raceEnabled && os.Getenv("CI") != "":
+		// Race instrumentation on a shared runner (a Windows runner measured
+		// 79 ms best-of-30 under -race while other packages were testing in
+		// parallel): a data-derived bound of 100 ms, ~30x the 3 ms budget, so
+		// this only catches order-of-magnitude regressions there; the
+		// benchmark and scripts/bench.sh (scenario 5) are the real gates.
+		limit = 100 * time.Millisecond
+	case raceEnabled:
 		limit = 60 * time.Millisecond
-	}
-	if os.Getenv("CI") != "" {
-		// Shared CI runners are noisy (a Windows runner measured 79 ms best-of-30
-		// under -race while other packages were testing in parallel); the
-		// benchmark and scripts/bench.sh (scenario 5) are the real gates there.
-		limit *= 3
+	case os.Getenv("CI") != "":
+		limit *= 3 // shared CI runners are noisy; the benchmark is the real gate there
 	}
 	best := time.Hour
 	for i := 0; i < 30; i++ {

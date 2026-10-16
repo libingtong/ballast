@@ -31,11 +31,15 @@ concurrency:
 env:
   GOFLAGS: -mod=readonly
   GIT_CONFIG_NOSYSTEM: "1"
-  # 仅测试用:放宽 hook 的 150ms 看门狗(产品默认值不变,见 docs/architecture.md §9)。
+  # 仅测试用:放宽 hook 的 150ms 看门狗(产品默认值不变,生产构建不认该变量,见 docs/architecture.md §9)。
   # 共享 runner 上进程会被随机卡住 100ms 以上(新启动二进制的缺页、CPU 被抢占、杀软扫描),
   # 与钩子本身的耗时无关(同一台 runner 上 p50 约 3ms);bench 与测试要求"零异常",
   # 不放宽就会随机失败。scripts/fault.sh 的 hang 用例会把它置空,照样断言 150ms。
   # 15s:托管 Windows runner 上观察到单个钩子进程被整体卡住 4.6s(bench 的 10k 文件场景)。
+  # 只有 `-tags ballast_test` 的构建才认这个变量,生产构建忽略它(Agent 不能经环境变量拉长
+  # fail-open 期限,与 BALLAST_FAULT 同一原则)。所以下面 go test 带 -tags ballast_test,
+  # scripts/lib.sh 与 scripts/bench.sh 在变量非空时才给被测二进制加该标签;另有一步不带标签,
+  # 断言生产构建确实忽略它。
   BALLAST_TEST_WATCHDOG_MS: "15000"
 
 defaults:
@@ -79,6 +83,10 @@ jobs:
           GOOS=linux go vet ./...
           GOOS=windows go vet ./...
           GOOS=darwin go vet ./...
+          # 带测试标签的构建(CI 的 go test / 被测二进制)也要通过 vet
+          go vet -tags ballast_test ./...
+          GOOS=windows go vet -tags ballast_test ./...
+          go vet -tags ballast_fault ./...
 
       - name: go.mod / go.sum 不得变化
         run: git diff --exit-code -- go.mod go.sum
@@ -109,10 +117,11 @@ jobs:
     # Windows 实测 38 分钟(go test 6 + 验收脚本 20 + bench 11),45 分钟的余量太小。
     timeout-minutes: 60
     env:
-      # bench 的 p95 门槛:Linux 强制 30ms;托管 macOS(3 vCPU 虚拟机)与 Windows(Defender
-      # 扫描每个文件操作)上同一个二进制达不到,p95 只报告、不作门槛,其余条件(Bad == 0、
-      # 样本齐全、审计命中)照常。原因与实测数据见 scripts/bench/README.md。
-      BALLAST_BENCH_P95: ${{ matrix.os == 'ubuntu-latest' && 'enforce' || 'report' }}
+      # bench 的 p95 门槛:产品的 30ms 在 Linux 上强制;托管 macOS(3 vCPU 虚拟机)与 Windows
+      # (Defender 扫描每个文件操作)上同一个二进制实测达不到,CI 在那里用固定的平台上限
+      # (macOS 80ms、Windows 250ms,留约 40% 余量,只防数量级退化)。依据与数据见
+      # scripts/bench/README.md;这是临时措施,架构规格 §9 未改,待负责人确认。
+      BALLAST_BENCH_P95_MS: ${{ matrix.os == 'macos-latest' && '80' || matrix.os == 'windows-latest' && '250' || '30' }}
     strategy:
       fail-fast: false
       matrix:
@@ -154,7 +163,17 @@ jobs:
               echo "::notice title=Windows 跳过 -race::runner 上没有 gcc,-race 依赖 cgo,改用不带 -race 的测试"
             fi
           fi
-          go test $race -count=1 ./...
+          go test $race -tags ballast_test -count=1 ./...
+
+      # 生产构建(无 ballast_test 标签)必须忽略 BALLAST_TEST_WATCHDOG_MS:
+      # 这一步不带标签,只跑断言"忽略"的测试(即使 job 级环境里设了该变量)。
+      - name: 生产构建忽略看门狗覆盖变量(无标签)
+        if: ${{ !cancelled() }}
+        env:
+          GOPROXY: "off"
+        run: |
+          go test -count=1 -v -run 'TestProductionBuildIgnoresWatchdogEnv|TestDefaultWatchdogUnchanged' ./internal/hook/
+          go test -count=1 -v -run 'TestWireHookIgnoresWatchdogEnv' ./internal/cli/
 
       - name: 架构检查(internal/archtest)
         if: ${{ !cancelled() }}
@@ -191,7 +210,7 @@ jobs:
             exit 1
           fi
 
-      - name: bench 门槛(p95 不超过 30ms;macOS / Windows 仅报告 p95,见 job 级 env)
+      - name: bench 门槛(p95 Linux 30ms;macOS / Windows 为平台上限,见 job 级 env)
         if: ${{ !cancelled() }}
         env:
           GOPROXY: "off"

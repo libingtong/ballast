@@ -22,13 +22,22 @@ go run ./scripts/bench -list             # 列出场景 id
 2. 样本齐全:恰好得到 `n × 进程数` 个样本(spawn 全部失败时样本为 0,不会被报告为通过);
 3. `p95 <= 30ms`,p95 取最近秩 `ceil(0.95n)`;门槛 30ms 是常量,没有命令行开关。
 
-**托管 macOS / Windows runner 上 p95 只报告、不作门槛**(环境变量 `BALLAST_BENCH_P95=report`,默认与 Linux CI 都是 `enforce`):
-bench 每次运行开头先测一次裸 `ballast version` 的 p95(报告里的 `process_floor_p95_ms`),即还没进入钩子流水线前平台自己
-花掉的时间。GitHub 托管 runner 上实测:Linux 约 1.5ms,macOS(3 vCPU 虚拟机)约 13ms,Windows 约 12ms;钩子本身在
-Windows 上还要多付 30ms 左右(每个文件操作都被 Defender 扫描:状态事务持锁 p50 约 1.1ms,macOS 约 0.3ms),10k 文件工作树的 S 快照
-(场景 6d / 8c)在 macOS 上 p50 约 35ms、p95 约 50–57ms,在 Windows 上 p50 120–150ms。Linux 同样的二进制全部 22 个场景都在 30ms 内
-(p95 最大 28.5ms),所以 Linux 的 CI 仍然强制 30ms;其余条件(Bad == 0、样本齐全、审计命中)在所有平台照常适用。
-开发机(M 系列 Mac)上全部 22 个场景 p95 都在 16.3ms 以内(下限 2.8ms)。开发机上直接运行 `scripts/bench.sh` 始终强制 30ms。Windows 上钩子自身的开销是已知的性能缺口(记录在 summary 里),不是门槛放宽就能解决的。
+**托管 macOS / Windows runner 上的平台上限**(环境变量 `BALLAST_BENCH_P95_MS`,不设即产品的 30ms;只能抬高,值必须是 30..1000 的整数,否则 bench 以退出码 2 报错):
+CI 在 Linux 上强制 30ms,在托管 macOS 设 80、Windows 设 250。**这是 CI 修复期间的临时措施,是否接受待负责人确认,架构规格(§9 的 30ms 三平台门槛)没有改。**
+依据:bench 每次运行开头先测一次裸 `ballast version` 的 p95(报告里的 `process_floor_p95_ms`),即还没进入钩子流水线前平台自己
+花掉的时间。GitHub 托管 runner 上实测:Linux 约 1.7ms,macOS(3 vCPU 虚拟机)约 11–13ms,Windows 约 9–12ms。
+
+| 平台 | 22 个场景 p95 | 其中最大 | 上限 | 余量 |
+|---|---|---|---|---|
+| Linux(4 vCPU) | 全部在 30ms 内(最大 28.5ms) | 28.5ms | 30ms | 5% |
+| macOS(3 vCPU) | 20 个在 28ms 内;10k 文件 S 快照的 6d / 8c 为 51.0 / 50.2ms(此前观察到 50–57ms) | 约 57ms | 80ms | 约 40% |
+| Windows(4 vCPU) | 44.6–89.2ms;10k 文件 S 快照 6d / 8c 为 169.3 / 162.0ms | 约 170ms | 250ms | 约 45% |
+
+上限留出约 40% 的余量吸收 runner 间的波动,所以它只防数量级的退化(例如多出一次全量扫描或一次进程启动),不是性能目标;其余条件(Bad == 0、样本齐全、审计命中)在所有平台照常适用。
+CI 把看门狗放宽到 15s(`BALLAST_TEST_WATCHDOG_MS`),所以 Bad 基本不会因慢触发,p95 上限才是这里唯一的性能守卫。
+Windows 上钩子自身比进程创建下限多约 30ms(最轻的 SessionStart 场景 p50 约 40ms,而裸 `ballast version` 约 12ms;疑为 Defender 对每个文件操作的扫描,根因未用 profile 确认),
+状态事务持锁 p50 约 1.1ms(macOS 约 0.3ms)。这是产品性能缺口,登记在 `docs/architecture.md` §9 "已知缺口",需要单独跟踪,不是放宽门槛就能解决的。
+开发机(M 系列 Mac)上全部 22 个场景 p95 都在 16.3ms 以内(下限 2.8ms)。开发机上直接运行 `scripts/bench.sh` 始终强制 30ms。
 
 整次运行还要求:所有场景都在(完整运行)、每个 `--client`(claude-code、codex、cursor、hermes)至少有一个 PreToolUse 场景。
 带审计校验的场景还要求审计里确有预期规则的命中记录(证明走了预期的代码路径,而不是静默放行);

@@ -32,8 +32,12 @@ const (
 	lockInterval   = 200 * time.Microsecond
 
 	// queueWait bounds the wait in the kernel's FIFO queue of the per-directory
-	// mutex (see lockAppend).
-	queueWait = 500 * time.Millisecond
+	// mutex (see lockAppend). It must stay well under the hook's 150 ms
+	// watchdog: after a timeout the LockFileEx fallback (about
+	// lockAttempts*lockInterval = 50 ms) and the error path still have to run,
+	// and a wait longer than the watchdog would let the watchdog fire first and
+	// lose the record without any audit of why.
+	queueWait = 60 * time.Millisecond
 
 	waitObject0   = 0x00000000
 	waitAbandoned = 0x00000080

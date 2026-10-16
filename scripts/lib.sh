@@ -301,14 +301,27 @@ build_tools() {
   export ACCUTIL
 }
 
-# build_ballast: the production binary (BALLAST_BIN).
+# test_tag [BASE-TAGS]: the -tags value for a build. BALLAST_TEST_WATCHDOG_MS (CI
+# only) relaxes the hook's 150 ms watchdog, and only a binary built with
+# `-tags ballast_test` honours it; the production build ignores the variable.
+# So the tag is added if, and only if, the variable is set.
+test_tag() {
+  local tags=${1:-}
+  if [ -n "${BALLAST_TEST_WATCHDOG_MS:-}" ]; then
+    tags="${tags:+$tags }ballast_test"
+  fi
+  printf '%s' "$tags"
+}
+
+# build_ballast: the production binary (BALLAST_BIN); with
+# BALLAST_TEST_WATCHDOG_MS set (CI) built with -tags ballast_test, see test_tag.
 build_ballast() {
   if [ -n "${BALLAST_BIN:-}" ] && [ -x "$BALLAST_BIN" ]; then
     BL_BIN="$BALLAST_BIN"
     return 0
   fi
   BALLAST_BIN="$TMP_ROOT/bin/ballast$EXE"
-  (cd "$REPO_ROOT" && gocmd build -trimpath -o "$BALLAST_BIN" ./cmd/ballast) || die "cannot build ballast"
+  (cd "$REPO_ROOT" && gocmd build -trimpath -tags "$(test_tag)" -o "$BALLAST_BIN" ./cmd/ballast) || die "cannot build ballast"
   export BALLAST_BIN
   BL_BIN="$BALLAST_BIN"
 }
@@ -319,7 +332,7 @@ build_ballast_fault() {
     return 0
   fi
   BALLAST_FAULT_BIN="$TMP_ROOT/bin/ballast-fault$EXE"
-  (cd "$REPO_ROOT" && gocmd build -trimpath -tags ballast_fault -o "$BALLAST_FAULT_BIN" ./cmd/ballast) || die "cannot build the fault-injection ballast"
+  (cd "$REPO_ROOT" && gocmd build -trimpath -tags "$(test_tag ballast_fault)" -o "$BALLAST_FAULT_BIN" ./cmd/ballast) || die "cannot build the fault-injection ballast"
   export BALLAST_FAULT_BIN
 }
 

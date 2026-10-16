@@ -46,8 +46,12 @@ import (
 )
 
 const (
-	// budget is the fixed gate of plan B10. It is deliberately not a flag.
-	budget = 30 * time.Millisecond
+	// productBudget is the gate of plan B10 (architecture.md section 9). It is
+	// the default and what developer machines and the Linux CI job enforce.
+	// It is deliberately not a flag; the only way to move it is the
+	// BALLAST_BENCH_P95_MS environment variable (see parseBudget), which can
+	// only raise it, for CI platforms with a measured, documented floor.
+	productBudget = 30 * time.Millisecond
 
 	defaultN    = 300
 	defaultWarm = 20
@@ -56,6 +60,10 @@ const (
 	// 150ms, so this only fires when the process hangs for real.
 	runTimeout = 20 * time.Second
 )
+
+// budget is the p95 bound in force for this run: productBudget unless a CI
+// platform raised it through BALLAST_BENCH_P95_MS.
+var budget = productBudget
 
 // ---- scenario model ----
 
@@ -111,32 +119,49 @@ type result struct {
 	Notes    []string `json:"notes,omitempty"`
 	LoadFrom string   `json:"load_start"`
 	LoadTo   string   `json:"load_end"`
-	// Informational: the p95 is reported but not gated (BALLAST_BENCH_P95=report).
-	Informational bool `json:"p95_informational,omitempty"`
 }
 
 // processFloor is p95 of a bare `ballast version` run (process creation, Go
 // runtime and package initialisation, no hook pipeline), measured once per
 // run and written to the report. It documents how much of a scenario's time
 // the platform spends before the hook starts: ~1.5 ms on a Linux runner but
-// ~12-13 ms on the hosted macOS and Windows runners.
+// ~12-13 ms on the hosted macOS and Windows runners. It is informational: the
+// bound is budget, not floor-relative (a Windows hook costs ~30 ms more than
+// its floor, so a floor-relative bound would not fit there either).
 var processFloor time.Duration
 
-// BenchP95Env selects what the p95 bound does. Unset or "enforce" (the
-// default, and what a developer machine and the Linux CI job use): a scenario
-// over 30 ms fails. "report": the p95 is printed and recorded but does not fail
-// the scenario; CI sets it for the hosted macOS and Windows runners, where a
-// 3-vCPU virtual machine (macOS) or Defender scanning every file operation
-// (Windows) makes 30 ms unreachable independent of the code (see README).
-// Bad == 0, complete samples and the audit-hit checks always apply.
-const BenchP95Env = "BALLAST_BENCH_P95"
+// BenchP95MsEnv raises the p95 bound above the product's 30 ms. Unset or empty
+// means 30 ms. CI sets it per platform where the same binary measurably cannot
+// reach 30 ms on a hosted runner (3-vCPU macOS virtual machine; Windows with
+// Defender scanning every file operation), to a fixed number derived from the
+// measurements in README.md, so that an order-of-magnitude regression still
+// fails there. It can only relax (values below 30 are rejected, as is anything
+// that is not a whole number of milliseconds up to maxBudgetMs); a bad value is
+// a usage error rather than silently ignored.
+const BenchP95MsEnv = "BALLAST_BENCH_P95_MS"
 
-func p95ReportOnly() bool { return os.Getenv(BenchP95Env) == "report" }
+const maxBudgetMs = 1000
+
+func parseBudget(v string) (time.Duration, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return productBudget, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("%s=%q: not a whole number of milliseconds", BenchP95MsEnv, v)
+	}
+	d := time.Duration(n) * time.Millisecond
+	if d < productBudget || n > maxBudgetMs {
+		return 0, fmt.Errorf("%s=%d: must be %d..%d (it can only relax the product's %d ms bound)", BenchP95MsEnv, n, productBudget/time.Millisecond, maxBudgetMs, productBudget/time.Millisecond)
+	}
+	return d, nil
+}
 
 // budgetText describes the p95 bound for the reports.
 func budgetText() string {
-	if p95ReportOnly() {
-		return fmt.Sprintf("%dms(此环境仅报告,不作门槛;BALLAST_BENCH_P95=report)", budget/time.Millisecond)
+	if budget != productBudget {
+		return fmt.Sprintf("%dms(本环境的平台上限,产品门槛 %dms;%s)", budget/time.Millisecond, productBudget/time.Millisecond, BenchP95MsEnv)
 	}
 	return fmt.Sprintf("%dms", budget/time.Millisecond)
 }
@@ -155,7 +180,7 @@ func gate(r *result) {
 	if r.Samples != r.Want || r.Want == 0 {
 		r.Failures = append(r.Failures, fmt.Sprintf("samples=%d, expected %d", r.Samples, r.Want))
 	}
-	if !r.Informational && r.Samples > 0 && ms2dur(r.P95) > budget {
+	if r.Samples > 0 && ms2dur(r.P95) > budget {
 		r.Failures = append(r.Failures, fmt.Sprintf("p95=%.2fms > %dms", r.P95, budget/time.Millisecond))
 	}
 	r.Pass = len(r.Failures) == 0
@@ -518,7 +543,8 @@ func baseEnv(base, home, work string) []string {
 		"LANG=en_US.UTF-8", "GOPROXY=off",
 	}
 	// BALLAST_TEST_WATCHDOG_MS is the CI-only relaxation of the 150 ms
-	// watchdog (see hook.WatchdogEnv); the product default is unchanged.
+	// watchdog; only a binary built with -tags ballast_test honours it
+	// (scripts/bench.sh builds that way when the variable is set).
 	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP", "BALLAST_TEST_WATCHDOG_MS"} {
 		if v, ok := os.LookupEnv(k); ok {
 			env = append(env, k+"="+v)
@@ -553,7 +579,7 @@ func spawn(bin string, args []string, env []string, dir string, stdin []byte) (t
 }
 
 // measureFloor times a bare `ballast version` (see processFloor) and returns
-// its p95; 0 when the runs fail (the gate then simply has no allowance).
+// its p95; 0 when the runs fail. The value is only written to the report.
 func measureFloor(o *options) time.Duration {
 	home := filepath.Join(o.base, "homes", "floor")
 	if err := os.MkdirAll(home, 0o700); err != nil {
@@ -694,11 +720,8 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 			res.Notes = append(res.Notes, "问题: 预期规则 "+sc.hitRule+" 没有任何命中记录")
 		}
 	}
-	if p95ReportOnly() {
-		res.Informational = true
-		if ms2dur(res.P95) > budget {
-			res.Notes = append(res.Notes, fmt.Sprintf("p95 %.2fms 超过 %dms,但 BALLAST_BENCH_P95=report:仅报告、不作门槛", res.P95, budget/time.Millisecond))
-		}
+	if budget != productBudget && ms2dur(res.P95) > productBudget {
+		res.Notes = append(res.Notes, fmt.Sprintf("p95 %.2fms 超过产品门槛 %dms,在本环境的平台上限 %dms 之内(%s)", res.P95, productBudget/time.Millisecond, budget/time.Millisecond, BenchP95MsEnv))
 	}
 	gate(&res)
 	return res
@@ -1046,6 +1069,12 @@ func main() {
 	if err := preflightLint(&o, rules); err != nil {
 		fatal(err)
 	}
+	b, berr := parseBudget(os.Getenv(BenchP95MsEnv))
+	if berr != nil {
+		fmt.Fprintln(os.Stderr, "bench:", berr)
+		os.Exit(2)
+	}
+	budget = b
 	processFloor = measureFloor(&o)
 
 	all := scenarios()
@@ -1126,7 +1155,7 @@ func main() {
 
 	complete := o.only == nil
 	out := map[string]any{"env": info, "time": time.Now().Format(time.RFC3339), "complete": complete,
-		"budget_ms": int(budget / time.Millisecond), "pass": ok, "results": results, "coverage_problems": problems}
+		"budget_ms": int(budget / time.Millisecond), "product_budget_ms": int(productBudget / time.Millisecond), "pass": ok, "results": results, "coverage_problems": problems}
 	if o.jsonOut != "" {
 		b, _ := json.MarshalIndent(out, "", "  ")
 		if err := os.WriteFile(o.jsonOut, b, 0o644); err != nil {

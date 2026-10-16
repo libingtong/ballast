@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 var goos = runtime.GOOS
@@ -88,8 +89,21 @@ func (OSFS) MkdirAll(n string, perm fs.FileMode) error { return os.MkdirAll(n, p
 // which fails with "access denied" or a sharing violation while another
 // handle (a reader, another renamer) has the destination open; those are
 // retried for a bounded time (see retry.go). Other errors return at once.
-func (OSFS) Rename(o, n string) error {
-	return retryTransient(renameRetryBudget, isTransientRename, func() error { return os.Rename(o, n) })
+func (OSFS) Rename(o, n string) error { return OSFS{}.RenameWithin(o, n, renameRetryBudget) }
+
+// RenameBudgeter is implemented by file systems whose Rename can be given a
+// bound on the transient-collision retry (see WriteFileAtomicWithin).
+type RenameBudgeter interface {
+	RenameWithin(oldpath, newpath string, budget time.Duration) error
+}
+
+// RenameWithin is Rename with the retry bounded by budget. On Windows
+// "access denied" is retried only while the destination still exists (a reader
+// holds it open, or it is delete-pending after a rename-over); when the
+// destination is absent the denial is a real permission problem and is
+// reported at once.
+func (OSFS) RenameWithin(o, n string, budget time.Duration) error {
+	return retryTransient(budget, func(err error) bool { return isTransientRename(n, err) }, func() error { return os.Rename(o, n) })
 }
 
 // Remove implements FS.
@@ -135,6 +149,17 @@ func (f FaultFS) OpenFile(n string, flag int, perm fs.FileMode) (File, error) {
 func (f FaultFS) Rename(o, n string) error {
 	if f.hit("Rename", n) {
 		return f.Err
+	}
+	return f.FS.Rename(o, n)
+}
+
+// RenameWithin implements RenameBudgeter.
+func (f FaultFS) RenameWithin(o, n string, budget time.Duration) error {
+	if f.hit("Rename", n) {
+		return f.Err
+	}
+	if rb, ok := f.FS.(RenameBudgeter); ok {
+		return rb.RenameWithin(o, n, budget)
 	}
 	return f.FS.Rename(o, n)
 }
