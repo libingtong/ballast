@@ -3,6 +3,7 @@ package hook
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,39 @@ const (
 	MaxStdinBytes   = 16 << 20
 	GCInterval      = 24 * time.Hour
 )
+
+// WatchdogEnv names the TEST-ONLY override of the watchdog budget. Product
+// installations never set it and the product default (DefaultWatchdog, 150 ms)
+// is unchanged; CI sets it because a shared runner can stall a process for
+// more than 150 ms at random (file-backed page faults of a freshly started
+// binary, CPU steal, antivirus scans), which says nothing about the hook.
+const WatchdogEnv = "BALLAST_TEST_WATCHDOG_MS"
+
+// Bounds of the override: it can only relax the budget, never tighten it, and
+// it cannot turn the watchdog into an hour-long hang.
+const (
+	maxWatchdogOverride = 60 * time.Second
+)
+
+// WatchdogFromEnv returns the watchdog configured by BALLAST_TEST_WATCHDOG_MS
+// (milliseconds), or 0 (= DefaultWatchdog) when the variable is unset, not a
+// plain integer, below DefaultWatchdog or above one minute: a bad value is
+// ignored rather than trusted.
+func WatchdogFromEnv(getenv func(string) (string, bool)) time.Duration {
+	v, ok := getenv(WatchdogEnv)
+	if !ok {
+		return 0
+	}
+	ms, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil {
+		return 0
+	}
+	d := time.Duration(ms) * time.Millisecond
+	if d < DefaultWatchdog || d > maxWatchdogOverride {
+		return 0
+	}
+	return d
+}
 
 // Args are the parsed command-line arguments of `ballast hook`.
 type Args struct {

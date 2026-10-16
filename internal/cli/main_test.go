@@ -104,7 +104,9 @@ func newSandbox(t *testing.T) *sandbox {
 	// Only what child processes need to run: PATH (git, the shell) and, on
 	// Windows, the system root. Everything else of the caller's environment
 	// is dropped so no real configuration can leak in.
-	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP"} {
+	// BALLAST_TEST_WATCHDOG_MS lets CI relax the hook's 150 ms watchdog (the
+	// product default is unchanged, see hook.WatchdogEnv).
+	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP", "BALLAST_TEST_WATCHDOG_MS"} {
 		if v, ok := os.LookupEnv(k); ok {
 			s.env = append(s.env, k+"="+v)
 		}

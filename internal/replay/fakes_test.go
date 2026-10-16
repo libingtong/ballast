@@ -203,7 +203,7 @@ func fakeShellReadPaths(cl *model.CommandList) []string {
 	if hasCD {
 		var abs []string
 		for _, p := range out {
-			if strings.HasPrefix(p, "/") || strings.HasPrefix(p, "~/") {
+			if model.IsAbsShellPath(p) { // "/x", "~/x", "C:/x", UNC
 				abs = append(abs, p)
 			}
 		}

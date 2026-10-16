@@ -31,6 +31,11 @@ concurrency:
 env:
   GOFLAGS: -mod=readonly
   GIT_CONFIG_NOSYSTEM: "1"
+  # 仅测试用:放宽 hook 的 150ms 看门狗(产品默认值不变,见 docs/architecture.md §9)。
+  # 共享 runner 上进程会被随机卡住 100ms 以上(新启动二进制的缺页、CPU 被抢占、杀软扫描),
+  # 与钩子本身的耗时无关(同一台 runner 上 p50 约 3ms);bench 与测试要求"零异常",
+  # 不放宽就会随机失败。scripts/fault.sh 的 hang 用例会把它置空,照样断言 150ms。
+  BALLAST_TEST_WATCHDOG_MS: "3000"
 
 defaults:
   run:
@@ -145,14 +150,18 @@ jobs:
           go test $race -count=1 ./...
 
       - name: 架构检查(internal/archtest)
+        if: ${{ !cancelled() }}
         env:
           GOPROXY: "off"
         run: go test -count=1 -v ./internal/archtest/...
 
+      # 之后的步骤用 !cancelled() 而不是默认的 success():前面某一步失败时后面的
+      # 步骤仍然运行,一次 CI 能暴露全部问题;整个 job 仍然因为失败的那一步而失败。
       # accept-m0 .. m4 在三个平台上都跑。go test -race 与 bench 已有独立步骤,
       # 这里用开关让 accept-m1 显式 SKIP 这两段,避免在 45 分钟时限内重复执行
       # (尤其是 Windows runner)。
       - name: 验收脚本 accept-m0 .. accept-m4
+        if: ${{ !cancelled() }}
         env:
           GOPROXY: "off"
           BALLAST_ACCEPT_SKIP_GOTEST: "1"
@@ -170,6 +179,7 @@ jobs:
           done
 
       - name: bench 门槛(p95 不超过 30ms)
+        if: ${{ !cancelled() }}
         env:
           GOPROXY: "off"
         run: |
@@ -183,7 +193,7 @@ jobs:
       # 驱动真实二进制,断言 `Start-Sleep -Seconds 300` 被拒绝而短 sleep 放行。
       # 全部在临时目录里进行,环境变量全部重定向。
       - name: PowerShell 回归(仅 Windows)
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: pwsh
         env:
           GOPROXY: "off"

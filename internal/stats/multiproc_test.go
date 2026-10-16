@@ -84,7 +84,9 @@ func TestSampleAcrossProcesses(t *testing.T) {
 			}
 			finished++
 		default:
-			data, err := os.ReadFile(reviewFile)
+			// Read the way the product does (FILE_SHARE_DELETE on Windows), so the
+			// reader never blocks the children's rename-over.
+			data, err := sys.OSFS{}.ReadFile(reviewFile)
 			if err != nil {
 				continue
 			}

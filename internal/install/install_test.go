@@ -917,7 +917,8 @@ func TestReinstallWithNewBinaryReplacesInPlace(t *testing.T) {
 	}
 	for _, p := range []string{e.claudeSettings(), e.codexHooks(), e.cursorHooks(), e.hermesConfig()} {
 		got := e.read(p)
-		if strings.Contains(got, "/opt/ballast/bin/ballast") {
+		// The old binary appears raw (YAML, TOML) or JSON-escaped (backslashes doubled).
+		if old := fakeBinary(); strings.Contains(got, old) || strings.Contains(got, strings.ReplaceAll(old, `\`, `\\`)) {
 			t.Errorf("%s still references the old binary", p)
 		}
 		if strings.Count(got, "ballast-v2") == 0 {
@@ -925,7 +926,7 @@ func TestReinstallWithNewBinaryReplacesInPlace(t *testing.T) {
 		}
 	}
 	m, _ := LoadManifest(e.fs, e.lay.Manifest)
-	if m.Binary != "/opt/ballast-v2/ballast" {
+	if m.Binary != fakeBinaryIn("/opt/ballast-v2") {
 		t.Errorf("manifest binary = %q", m.Binary)
 	}
 	mustUninstall(t, v2)

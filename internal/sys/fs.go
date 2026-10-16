@@ -43,13 +43,15 @@ type OSFS struct{}
 
 // ReadFile implements FS.
 //
-// On Windows a read that collides with a concurrent replace of the same file
-// (MoveFileEx holds the target for an instant) fails with a sharing
-// violation; the read is retried for a few milliseconds (see retry.go).
+// On Windows the file is opened with FILE_SHARE_DELETE (readFile in
+// readfile_windows.go), so a reader never makes a concurrent rename-over of
+// the same file fail, and a read that collides with the instant in which
+// MoveFileEx holds the target (a sharing violation) is retried for a few
+// milliseconds (see retry.go).
 func (OSFS) ReadFile(n string) ([]byte, error) {
 	var data []byte
 	err := retryTransient(readRetryBudget, isTransientRead, func() (err error) {
-		data, err = os.ReadFile(n)
+		data, err = readFile(n)
 		return err
 	})
 	return data, err

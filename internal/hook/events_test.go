@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -194,7 +195,7 @@ func TestToolEvents(t *testing.T) {
 			if !in.Now.Equal(testNow) || in.Event.ReceivedAt != testNow {
 				t.Errorf("event time not stamped from the injected clock: %v / %v", in.Now, in.Event.ReceivedAt)
 			}
-			if in.Paths.Cwd != "/repo" || in.Paths.ProjectRoot != "/repo" || in.Paths.GOOS != h.deps.Env.GOOS() || in.Paths.Home != h.sb.Home {
+			if in.Paths.Cwd != "/repo" || in.Paths.ProjectRoot != "/repo" || in.Paths.GOOS != h.deps.Env.GOOS() || in.Paths.Home != filepath.ToSlash(h.sb.Home) {
 				t.Errorf("path context: %+v", in.Paths)
 			}
 		})

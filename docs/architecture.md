@@ -443,7 +443,8 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
   - 不得在包级变量中 `regexp.MustCompile`(惰性编译);不做重的 `init()`。**这两条适用于 cmd/ballast 链接进来的全部包**(`./internal/...` 与 `./cmd/...`,含 install、stats、replay、runner),因为每次 hook 调用都会执行所有包的初始化;`internal/archtest` 的 `TestNoHeavyPackageInit` 用 AST 检查包级 var 初始化中的 `regexp.(Must)Compile(POSIX)` 并禁止 `func init()`(白名单 `initAllowed`,当前为空)。
   - 时间、随机数、环境变量、文件系统一律经 `sys.Clock`/`sys.IDGen`/`sys.Env`/`sys.FS` 注入。
 - **分项预算**(进程内,p50 目标):读 stdin + 解析 ≤ 0.3ms;规则加载(缓存命中)≤ 0.5ms;冷编译 12 条 ≤ 1ms;状态无锁读 ≤ 0.2ms;求值(不含快照)≤ 0.5ms;100KB bash 解析 ≤ 3ms;原生 C 快照 10k 文件 ≤ 5ms;状态事务 ≤ 1ms(锁等待上限 20ms);审计写 ≤ 0.3ms。
-- **看门狗** 150ms;昂贵谓词(快照退回 git)的 deadline = 启动时刻 + 120ms。退回 git 超时 → unknown + 审计 diag。
+- **看门狗** 150ms(产品默认值,不可经配置改变);昂贵谓词(快照退回 git)的 deadline = 启动时刻 + 120ms。退回 git 超时 → unknown + 审计 diag。
+- **看门狗的测试覆盖开关**:环境变量 `BALLAST_TEST_WATCHDOG_MS=<毫秒>` 仅供 CI 与测试使用(`hook.WatchdogFromEnv`),只能放宽、不能收紧——取值必须是 150..60000 的整数,否则忽略并回到 150ms。产品安装从不设置它,默认值不变;它只放宽看门狗,不改变任何判定逻辑。原因:共享 runner(尤其 Windows)上进程会被随机卡住 100ms 以上(新启动二进制的缺页、CPU 被抢占、杀软扫描),同一台 runner 上钩子 p50 仅约 3ms,而 bench 与端到端测试要求"零异常"。`scripts/fault.sh` 的 hang 用例会把它置空,继续断言产品自己的 150ms。
 - 原生快照的回退条件以 `internal/snapshot/doc.go` 为准;v1.3 把子模块相关条件(HEAD 无法原生解析、git 目录缺 `objects/`/`refs/`、gitlink 被非目录替换、已跟踪文件被含 `.git` 的目录替换)和 racy 判定中的 smudged 规则(索引中 size 为 0 且 id 不是空 blob)写入契约。
 - 状态文件**不 fsync**;evidence、manifest、备份 **fsync**(不在热路径)。
 - gob 规则缓存可选(M0c:12 条规则只省约 0.3ms);热更新所需的 stat 检测必须保留。

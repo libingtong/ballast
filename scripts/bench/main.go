@@ -489,7 +489,9 @@ func baseEnv(base, home, work string) []string {
 		"GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0",
 		"LANG=en_US.UTF-8", "GOPROXY=off",
 	}
-	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP"} {
+	// BALLAST_TEST_WATCHDOG_MS is the CI-only relaxation of the 150 ms
+	// watchdog (see hook.WatchdogEnv); the product default is unchanged.
+	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP", "BALLAST_TEST_WATCHDOG_MS"} {
 		if v, ok := os.LookupEnv(k); ok {
 			env = append(env, k+"="+v)
 		}
@@ -1026,6 +1028,9 @@ func main() {
 	if len(o.extraEnv) > 0 {
 		info["extra_env"] = strings.Join(o.extraEnv, " ")
 	}
+	if v := os.Getenv("BALLAST_TEST_WATCHDOG_MS"); v != "" {
+		info["watchdog_override_ms"] = v
+	}
 	fmt.Printf("环境: %s | %s | %s | %s 核\n", info["model"], info["cpu"], info["os"], info["num_cpu"])
 	fmt.Printf("负载(开始): %s\n\n", info["load_start"])
 	fmt.Printf("| 场景 | 客户端/事件 | 样本 | p50 ms | p95 ms | max ms | Bad | 结果 |\n|---|---|---|---|---|---|---|---|\n")
@@ -1171,7 +1176,7 @@ func markdown(info map[string]string, rs []result, problems []string, complete, 
 	}
 	fmt.Fprintf(&b, "# ballast hook 性能报告\n\n结论: **%s**(门槛: 每个场景 p95 <= %dms,Bad == 0,样本齐全;完整运行: %v)\n\n", st, budget/time.Millisecond, complete)
 	b.WriteString("## 环境\n\n| 项 | 值 |\n|---|---|\n")
-	for _, k := range []string{"model", "cpu", "num_cpu", "memory_gb", "os", "goos", "goarch", "go", "git", "ballast", "binary_bytes", "extra_env", "n", "warm", "load_start", "load_end"} {
+	for _, k := range []string{"model", "cpu", "num_cpu", "memory_gb", "os", "goos", "goarch", "go", "git", "ballast", "binary_bytes", "extra_env", "watchdog_override_ms", "n", "warm", "load_start", "load_end"} {
 		if v := info[k]; v != "" {
 			fmt.Fprintf(&b, "| %s | %s |\n", k, v)
 		}

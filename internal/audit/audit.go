@@ -160,7 +160,7 @@ func writeAll(f sys.File, buf []byte) (err error) {
 func (w *Writer) activeSuffix(month time.Time) (int, error) {
 	ents, err := w.opt.FS.ReadDir(w.opt.Dir)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if missingDir(w.opt.FS, w.opt.Dir, err) {
 			return 0, nil
 		}
 		return 0, err

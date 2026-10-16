@@ -201,7 +201,9 @@ func TestSampleConcurrentWritersKeepFileValid(t *testing.T) {
 				return
 			default:
 			}
-			data, err := os.ReadFile(filepath.Join(lay.ReviewsDir, "rule-a.json"))
+			// Read the way the product does (FILE_SHARE_DELETE on Windows), so the
+			// reader never blocks the writers' rename-over.
+			data, err := sys.OSFS{}.ReadFile(filepath.Join(lay.ReviewsDir, "rule-a.json"))
 			if err != nil {
 				continue // not created yet
 			}

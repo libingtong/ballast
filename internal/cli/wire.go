@@ -141,6 +141,7 @@ func WireHook(env sys.Env) (*hook.Deps, error) {
 		Injector: inject.Builder{},
 		Spawner:  runner.Spawner{},
 		Faults:   hook.FaultsFromEnv(env.Getenv),
+		Watchdog: hook.WatchdogFromEnv(env.Getenv), // 0 (the 150 ms default) unless a CI test override is set
 		Self:     selfPath(),
 		Exit:     os.Exit,
 		Version:  version.Version,
