@@ -1,0 +1,1 @@
+{"ts":"2026-09-01T00:00:00Z","v":1,"type":"hit","client":"claude-code","session_id":"s-old","repo_inst":"repo-old","rule_id":"no-long-sleep","rule_layer":"user","action":"log","target":"deny","decision":"would_deny"}
