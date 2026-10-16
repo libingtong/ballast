@@ -27,7 +27,35 @@
 // -fuzztime 60s` finds no panic, no idempotency violation and no leak of a
 // planted secret; BenchmarkClean4K (4 KiB secret-free text) ≤ 10 µs/op on
 // the CI runners.
+//
+// Implementation notes (P2-REDACT):
+//   - Prefilter: one pass over the input hashes every lower-cased trigram
+//     into a small table of anchors (see scan.go); each anchor belongs to
+//     one rule family, so a clean input costs a single tight loop and no
+//     pattern is compiled or run. A "://" followed later by '@' enables the
+//     URL rule. MayContainSecret is exactly "some anchor or URL hint hit";
+//     every rule requires its anchor, which is what makes
+//     !MayContainSecret(s) ⇒ String(s) == s hold.
+//   - Rules produce VALUE spans only (rules.go). Spans of all rules are
+//     merged (touching spans too) and replaced by one Mask each.
+//   - key_value, flag and Authorization scanning are hand-written linear
+//     scanners (no backtracking, no quadratic behaviour on long lines);
+//     the remaining rules use lazily compiled RE2 patterns.
+//   - Values that are at most 6 decimal digits, or true/false/null, are
+//     left alone for key_value (max_tokens: 4096). Keys whose name contains
+//     "tokeniz" (tokenizer) do not count as token keys.
+//   - high_entropy is reserved and never produced: git hashes and uuids make
+//     it too noisy to enable by default.
+//
+// Known gaps (documented, by design): mysql -pPASSWORD (a short flag glued
+// to its value cannot be told from an ordinary -p); .netrc "password X"
+// with space separation; environment variables with arbitrary names
+// (FOO=<value>); a value that is itself a structure ([...], {...}, (...))
+// under a secret-looking key (its elements are masked only when they match
+// a rule of their own, such as a vendor token or a nested "password": ...).
 package redact
+
+import "strings"
 
 // Mask replaces a secret value.
 const Mask = "***"
@@ -56,19 +84,55 @@ type Match struct {
 	End   int
 }
 
+// maxPasses bounds the fixed-point iteration of String.
+const maxPasses = 16
+
 // String masks secrets in s with Mask. See the package contract.
+//
+// Masking is repeated until the text is stable (normally one pass finds
+// something and the second finds nothing new): replacing a value by Mask can
+// move a token boundary and expose a secret the first pass could not see
+// (for example "ghp_x-password y" once the vendor token is gone), and the
+// contract is that String is idempotent.
 func String(s string) string {
-	panic("unimplemented: redact.String (unit P2-REDACT)")
+	for pass := 0; pass < maxPasses; pass++ {
+		ms := detect(s)
+		if len(ms) == 0 {
+			return s
+		}
+		next := mask(s, ms)
+		if next == s {
+			return s
+		}
+		s = next
+	}
+	return s
+}
+
+func mask(s string, ms []Match) string {
+	var b strings.Builder
+	b.Grow(len(s) + 2*len(ms))
+	last := 0
+	for _, m := range ms {
+		b.WriteString(s[last:m.Start])
+		b.WriteString(Mask)
+		last = m.End
+	}
+	b.WriteString(s[last:])
+	return b.String()
 }
 
 // Find returns the spans String(s) would mask, in input order,
-// non-overlapping.
+// non-overlapping. They are the spans of String's first pass (String repeats
+// until the text is stable, so a later pass can mask slightly more in
+// pathological inputs). Values that are already Mask are reported as well,
+// which lets `ballast report` count the redactions recorded in audit text.
 func Find(s string) []Match {
-	panic("unimplemented: redact.Find (unit P2-REDACT)")
+	return detect(s)
 }
 
 // MayContainSecret is the cheap prefilter (lower-cased substring triggers
 // plus "://…@"); false ⇒ String(s) == s without compiling any pattern.
 func MayContainSecret(s string) bool {
-	panic("unimplemented: redact.MayContainSecret (unit P2-REDACT)")
+	return scanFlags(s) != 0 || urlHint(s)
 }

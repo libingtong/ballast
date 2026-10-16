@@ -1,0 +1,1541 @@
+{
+ "comment": "Placeholders {{NAME}} expand to the joined fragments in \"parts\" so that no token-shaped literal is stored; run `go test ./internal/redact -run TestSamples -update` after editing to refresh \"want\".",
+ "parts": {
+  "ANT": [
+   "sk",
+   "-",
+   "ant-api03-",
+   "Zx9Kq2Lm8Nv4Bt7Ry1Wc"
+  ],
+  "AWS": [
+   "AKIA",
+   "IOSFODNN7EXAMPLE"
+  ],
+  "AWS2": [
+   "ASIA",
+   "IOSFODNN7EXAMPLE"
+  ],
+  "AWS3": [
+   "AKIA",
+   "ABCDEFGHIJKLMNOP"
+  ],
+  "AWSSK": [
+   "wJalrXUtnFEMI/K7MDENG",
+   "/bPxRfiCYEXAMPLEKEY"
+  ],
+  "B": [
+   "-----BEGIN "
+  ],
+  "DO": [
+   "dop",
+   "_v1_",
+   "0123456789abcdef0123456789abcdef"
+  ],
+  "DOCK": [
+   "dckr",
+   "_pat_",
+   "abcdefghijklmnopqrstuvwx"
+  ],
+  "E": [
+   "-----END "
+  ],
+  "GAPI": [
+   "AI",
+   "za",
+   "SyA-abcdefghijklmnopqrstuvwxyz01234"
+  ],
+  "GHO": [
+   "gh",
+   "o_",
+   "a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2"
+  ],
+  "GHP": [
+   "gh",
+   "p_",
+   "a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2"
+  ],
+  "GHPAT": [
+   "github_",
+   "pat_",
+   "11ABCDEFG0abcdefghij_klmnopqrstuvwxyz0123456789"
+  ],
+  "GHPAT2": [
+   "github_",
+   "pat_",
+   "11ABCDEFGH0abcdefgh"
+  ],
+  "GHR": [
+   "gh",
+   "r_",
+   "a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2"
+  ],
+  "GHS": [
+   "gh",
+   "s_",
+   "a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2"
+  ],
+  "GHSHORT": [
+   "gh",
+   "p_",
+   "abcdefghijklmnop1234"
+  ],
+  "GHU": [
+   "gh",
+   "u_",
+   "a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2"
+  ],
+  "GLPAT": [
+   "glpat",
+   "-",
+   "abcdefghij0123456789"
+  ],
+  "HF": [
+   "hf",
+   "_",
+   "abcdefghijABCDEFGHIJ0123456789wxyz"
+  ],
+  "JWT": [
+   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+   ".",
+   "eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+   ".",
+   "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+  ],
+  "JWTSHORT": [
+   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+   ".",
+   "eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+   ".",
+   "abcdefghijklmnop"
+  ],
+  "JWTSIG": [
+   "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+  ],
+  "NPM": [
+   "npm",
+   "_",
+   "aB3aB3aB3aB3aB3aB3aB3aB3aB3aB3aB3aB3"
+  ],
+  "OAI": [
+   "sk",
+   "-",
+   "proj-abcdefghijklmnop"
+  ],
+  "OAI2": [
+   "sk",
+   "-",
+   "abcdefghijklmnopqrstuv"
+  ],
+  "OAI3": [
+   "sk",
+   "-",
+   "abcdefghijkl"
+  ],
+  "PEMB": [
+   "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7"
+  ],
+  "PEMB2": [
+   "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  ],
+  "PEMEC": [
+   "MHcCAQEEIIrYSSNQFaA2Hwf1duRSxKtLUvmFFjhpc0DTAUUdtRz1oAoGCCqGSM49"
+  ],
+  "PEMRSA": [
+   "MIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu"
+  ],
+  "PEMSSH": [
+   "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW"
+  ],
+  "PYPI": [
+   "pypi",
+   "-",
+   "AgEI",
+   "cHlwaS5vcmcCJGFiY2RlZjEyMzQ1Ng"
+  ],
+  "SG": [
+   "S",
+   "G.",
+   "abcdefghijklmnopqrstuv",
+   ".",
+   "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
+  ],
+  "SLA": [
+   "xox",
+   "a-",
+   "2-abcdefghijkl"
+  ],
+  "SLB": [
+   "xox",
+   "b-",
+   "123456789012-abcdefghijklmnop"
+  ],
+  "SLB2": [
+   "xox",
+   "b-",
+   "1234-5678-abcdefgh"
+  ],
+  "SLHOOK": [
+   "T0123ABCD",
+   "/B0123ABCD",
+   "/Xk3jd8Fh2Lp9Qw7Rt5Yu1Io0"
+  ],
+  "SLP": [
+   "xox",
+   "p-",
+   "123456789012-123456789012-abcdef0123"
+  ],
+  "SLS": [
+   "xox",
+   "s-",
+   "123456789012-abcdef"
+  ],
+  "STRL": [
+   "sk",
+   "_",
+   "live_",
+   "abcdefghijklmnop1234"
+  ],
+  "STRR": [
+   "rk",
+   "_",
+   "live_",
+   "abcdefghijklmnop1234"
+  ],
+  "STRT": [
+   "sk",
+   "_",
+   "test_",
+   "abcdefghijklmnop1234"
+  ],
+  "YA29": [
+   "ya",
+   "29.",
+   "a0AfH6SMBxQ12345"
+  ]
+ },
+ "positive": [
+  {
+   "name": "pem block",
+   "kind": "private_key",
+   "in": "before\n{{B}}PRIVATE KEY-----\n{{PEMB}}\n{{PEMB2}}\n{{E}}PRIVATE KEY-----\nafter",
+   "secrets": [
+    "{{PEMB}}",
+    "{{PEMB2}}"
+   ],
+   "want": "before\n{{B}}PRIVATE KEY-----\n***\n{{E}}PRIVATE KEY-----\nafter"
+  },
+  {
+   "name": "pem rsa",
+   "kind": "private_key",
+   "in": "{{B}}RSA PRIVATE KEY-----\n{{PEMRSA}}\n{{E}}RSA PRIVATE KEY-----",
+   "secrets": [
+    "{{PEMRSA}}"
+   ],
+   "want": "{{B}}RSA PRIVATE KEY-----\n***\n{{E}}RSA PRIVATE KEY-----"
+  },
+  {
+   "name": "pem openssh unterminated",
+   "kind": "private_key",
+   "in": "{{B}}OPENSSH PRIVATE KEY-----\n{{PEMSSH}}",
+   "secrets": [
+    "{{PEMSSH}}"
+   ],
+   "want": "{{B}}OPENSSH PRIVATE KEY-----\n***"
+  },
+  {
+   "name": "pem ec crlf",
+   "kind": "private_key",
+   "in": "head\r\n{{B}}EC PRIVATE KEY-----\r\n{{PEMEC}}\r\n{{PEMB2}}\r\n{{E}}EC PRIVATE KEY-----\r\ntail",
+   "secrets": [
+    "{{PEMEC}}",
+    "{{PEMB2}}"
+   ],
+   "want": "head\r\n{{B}}EC PRIVATE KEY-----\r\n***\r\n{{E}}EC PRIVATE KEY-----\r\ntail"
+  },
+  {
+   "name": "pem in json escaped newlines",
+   "kind": "private_key",
+   "in": "{\"key\": \"{{B}}PRIVATE KEY-----\\n{{PEMB}}\\n{{E}}PRIVATE KEY-----\\n\"}",
+   "secrets": [
+    "{{PEMB}}"
+   ],
+   "want": "{\"key\": \"{{B}}PRIVATE KEY-----\\n***\\n{{E}}PRIVATE KEY-----\\n\"}"
+  },
+  {
+   "name": "pem pgp block",
+   "kind": "private_key",
+   "in": "{{B}}PGP PRIVATE KEY BLOCK-----\n{{PEMB2}}\n{{E}}PGP PRIVATE KEY BLOCK-----",
+   "secrets": [
+    "{{PEMB2}}"
+   ],
+   "want": "{{B}}PGP PRIVATE KEY BLOCK-----\n***\n{{E}}PGP PRIVATE KEY BLOCK-----"
+  },
+  {
+   "name": "pem unterminated keeps rest masked",
+   "kind": "private_key",
+   "in": "cat key:\n{{B}}PRIVATE KEY-----\n{{PEMB}}\n{{PEMB2}}",
+   "secrets": [
+    "{{PEMB}}",
+    "{{PEMB2}}"
+   ],
+   "want": "cat key:\n{{B}}PRIVATE KEY-----\n***"
+  },
+  {
+   "name": "url https",
+   "kind": "url_password",
+   "in": "https://user:p4ssw0rd@example.com/x",
+   "secrets": [
+    "p4ssw0rd"
+   ],
+   "want": "https://user:***@example.com/x"
+  },
+  {
+   "name": "url postgres",
+   "kind": "url_password",
+   "in": "postgres://admin:s3cretpw@db:5432/app",
+   "secrets": [
+    "s3cretpw"
+   ],
+   "want": "postgres://admin:***@db:5432/app"
+  },
+  {
+   "name": "url git remote with token",
+   "kind": "url_password",
+   "in": "git clone https://x-access-token:{{GHS}}@github.com/o/r",
+   "secrets": [
+    "{{GHS}}"
+   ],
+   "want": "git clone https://x-access-token:***@github.com/o/r"
+  },
+  {
+   "name": "url redis empty user",
+   "kind": "url_password",
+   "in": "REDIS=redis://:Zx9Kq2Lm8Nv4@cache:6379/0",
+   "secrets": [
+    "Zx9Kq2Lm8Nv4"
+   ],
+   "want": "REDIS=redis://:***@cache:6379/0"
+  },
+  {
+   "name": "url in json",
+   "kind": "url_password",
+   "in": "{\"remote\": \"https://ci:Hq7Lm2Wc9Xr@git.example.com/a.git\", \"n\": 1}",
+   "secrets": [
+    "Hq7Lm2Wc9Xr"
+   ],
+   "want": "{\"remote\": \"https://ci:***@git.example.com/a.git\", \"n\": 1}"
+  },
+  {
+   "name": "url non-ascii context",
+   "kind": "url_password",
+   "in": "连接 mysql://root:Wc9Xr2Hq7@127.0.0.1/db 失败",
+   "secrets": [
+    "Wc9Xr2Hq7"
+   ],
+   "want": "连接 mysql://root:***@127.0.0.1/db 失败"
+  },
+  {
+   "name": "url multiline",
+   "kind": "url_password",
+   "in": "a\nftp://u:Hq7Lm2Wc9Xr@h/f\nb",
+   "secrets": [
+    "Hq7Lm2Wc9Xr"
+   ],
+   "want": "a\nftp://u:***@h/f\nb"
+  },
+  {
+   "name": "auth bearer",
+   "kind": "auth_header",
+   "in": "Authorization: Bearer abcdef1234567890abcdef",
+   "secrets": [
+    "abcdef1234567890abcdef"
+   ],
+   "want": "Authorization: Bearer ***"
+  },
+  {
+   "name": "auth basic",
+   "kind": "auth_header",
+   "in": "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+   "secrets": [
+    "dXNlcjpwYXNzd29yZA=="
+   ],
+   "want": "Authorization: Basic ***"
+  },
+  {
+   "name": "auth curl quoted",
+   "kind": "auth_header",
+   "in": "curl -H \"Authorization: Bearer {{JWT}}\" https://api.example.com",
+   "secrets": [
+    "{{JWT}}"
+   ],
+   "want": "curl -H \"Authorization: Bearer ***\" https://api.example.com"
+  },
+  {
+   "name": "auth lowercase single quoted",
+   "kind": "auth_header",
+   "in": "-H 'authorization: bearer xyzxyzxyzxyz'",
+   "secrets": [
+    "xyzxyzxyzxyz"
+   ],
+   "want": "-H 'authorization: bearer ***'"
+  },
+  {
+   "name": "auth proxy",
+   "kind": "auth_header",
+   "in": "Proxy-Authorization: Basic dXNlcjpwYXNzd29yZA==\r\nHost: x",
+   "secrets": [
+    "dXNlcjpwYXNzd29yZA=="
+   ],
+   "want": "Proxy-Authorization: Basic ***\r\nHost: x"
+  },
+  {
+   "name": "auth json value",
+   "kind": "auth_header",
+   "in": "{\"Authorization\": \"Token abc123def456ghi\", \"x\": 1}",
+   "secrets": [
+    "abc123def456ghi"
+   ],
+   "want": "{\"Authorization\": \"Token ***\", \"x\": 1}"
+  },
+  {
+   "name": "auth json escaped",
+   "kind": "auth_header",
+   "in": "{\\\"Authorization\\\": \\\"Bearer Zx9Kq2Lm8Nv4\\\"}",
+   "secrets": [
+    "Zx9Kq2Lm8Nv4"
+   ],
+   "want": "{\\\"Authorization\\\": \\\"Bearer ***\\\"}"
+  },
+  {
+   "name": "auth digest",
+   "kind": "auth_header",
+   "in": "Authorization: Digest username=Mufasa, response=6629fae49393a05397450978507c4ef1",
+   "secrets": [
+    "6629fae49393a05397450978507c4ef1"
+   ],
+   "want": "Authorization: Digest ***"
+  },
+  {
+   "name": "auth any scheme",
+   "kind": "auth_header",
+   "in": "Authorization: Negotiate YIIB6wYGKwYBBQUCoIIB3zCC",
+   "secrets": [
+    "YIIB6wYGKwYBBQUCoIIB3zCC"
+   ],
+   "want": "Authorization: Negotiate ***"
+  },
+  {
+   "name": "auth bare single token",
+   "kind": "auth_header",
+   "in": "Authorization: Zx9Kq2Lm8Nv4Bt7R",
+   "secrets": [
+    "Zx9Kq2Lm8Nv4Bt7R"
+   ],
+   "want": "Authorization: ***"
+  },
+  {
+   "name": "auth http request crlf",
+   "kind": "auth_header",
+   "in": "GET / HTTP/1.1\r\nHost: a\r\nAuthorization: Bearer Hq7Lm2Wc9Xr4\r\nAccept: */*\r\n",
+   "secrets": [
+    "Hq7Lm2Wc9Xr4"
+   ],
+   "want": "GET / HTTP/1.1\r\nHost: a\r\nAuthorization: Bearer ***\r\nAccept: */*\r\n"
+  },
+  {
+   "name": "auth short bearer in header",
+   "kind": "auth_header",
+   "in": "curl -H 'Authorization: Bearer abc.def' u",
+   "secrets": [
+    "abc.def"
+   ],
+   "want": "curl -H 'Authorization: Bearer ***' u"
+  },
+  {
+   "name": "auth no space",
+   "kind": "auth_header",
+   "in": "curl -H authorization:Basic dXNlcjpwdw== u",
+   "secrets": [
+    "dXNlcjpwdw=="
+   ],
+   "want": "curl -H authorization:Basic *** u"
+  },
+  {
+   "name": "auth non-ascii",
+   "kind": "auth_header",
+   "in": "请求头 Authorization: Bearer Hq7Lm2Wc9Xr4 已发送",
+   "secrets": [
+    "Hq7Lm2Wc9Xr4"
+   ],
+   "want": "请求头 Authorization: Bearer *** 已发送"
+  },
+  {
+   "name": "bearer bare",
+   "kind": "bearer",
+   "in": "got bearer tok_abcdefghijkl back",
+   "secrets": [
+    "tok_abcdefghijkl"
+   ],
+   "want": "got bearer *** back"
+  },
+  {
+   "name": "bearer in prose json",
+   "kind": "bearer",
+   "in": "sent {\"h\": \"Bearer Zx9Kq2Lm8Nv4Bt7R\"} ok",
+   "secrets": [
+    "Zx9Kq2Lm8Nv4Bt7R"
+   ],
+   "want": "sent {\"h\": \"Bearer ***\"} ok"
+  },
+  {
+   "name": "basic bare",
+   "kind": "bearer",
+   "in": "Basic dXNlcjpwdw==",
+   "secrets": [
+    "dXNlcjpwdw=="
+   ],
+   "want": "Basic ***"
+  },
+  {
+   "name": "bearer shell var assignment",
+   "kind": "bearer",
+   "in": "H=\"Bearer Zx9Kq2Lm8Nv4Bt7R\" curl",
+   "secrets": [
+    "Zx9Kq2Lm8Nv4Bt7R"
+   ],
+   "want": "H=\"Bearer ***\" curl"
+  },
+  {
+   "name": "password eq",
+   "kind": "key_value",
+   "in": "password=hunter2hunter2",
+   "secrets": [
+    "hunter2hunter2"
+   ],
+   "want": "password=***"
+  },
+  {
+   "name": "password quoted spaces",
+   "kind": "key_value",
+   "in": "PASSWORD=\"my secret pass\"",
+   "secrets": [
+    "my secret pass"
+   ],
+   "want": "PASSWORD=\"***\""
+  },
+  {
+   "name": "password single quotes",
+   "kind": "key_value",
+   "in": "password='it''s'",
+   "secrets": [
+    "it''s"
+   ],
+   "want": "password='***'"
+  },
+  {
+   "name": "passwd colon",
+   "kind": "key_value",
+   "in": "passwd: s3cr3tvalue",
+   "secrets": [
+    "s3cr3tvalue"
+   ],
+   "want": "passwd: ***"
+  },
+  {
+   "name": "password json",
+   "kind": "key_value",
+   "in": "{\"password\": \"p@ssw0rd!x\"}",
+   "secrets": [
+    "p@ssw0rd!x"
+   ],
+   "want": "{\"password\": \"***\"}"
+  },
+  {
+   "name": "password json escaped quote",
+   "kind": "key_value",
+   "in": "{\"password\": \"ab\\\"cd1234\"}",
+   "secrets": [
+    "cd1234"
+   ],
+   "want": "{\"password\": \"***\"}"
+  },
+  {
+   "name": "password mixed case",
+   "kind": "key_value",
+   "in": "Password=Abc12345",
+   "secrets": [
+    "Abc12345"
+   ],
+   "want": "Password=***"
+  },
+  {
+   "name": "db password",
+   "kind": "key_value",
+   "in": "db_password: abc123def",
+   "secrets": [
+    "abc123def"
+   ],
+   "want": "db_password: ***"
+  },
+  {
+   "name": "pgpassword prefix",
+   "kind": "key_value",
+   "in": "PGPASSWORD=pgpw123 psql -h db",
+   "secrets": [
+    "pgpw123"
+   ],
+   "want": "PGPASSWORD=*** psql -h db"
+  },
+  {
+   "name": "api key env",
+   "kind": "key_value",
+   "in": "API_KEY=abcdef0123456789",
+   "secrets": [
+    "abcdef0123456789"
+   ],
+   "want": "API_KEY=***"
+  },
+  {
+   "name": "apikey json",
+   "kind": "key_value",
+   "in": "{\"apikey\": \"k-1234abcd\"}",
+   "secrets": [
+    "k-1234abcd"
+   ],
+   "want": "{\"apikey\": \"***\"}"
+  },
+  {
+   "name": "x-api-key header",
+   "kind": "key_value",
+   "in": "X-Api-Key: abcdef123456",
+   "secrets": [
+    "abcdef123456"
+   ],
+   "want": "X-Api-Key: ***"
+  },
+  {
+   "name": "client secret",
+   "kind": "key_value",
+   "in": "client_secret=Zm9vYmFyYmF6",
+   "secrets": [
+    "Zm9vYmFyYmF6"
+   ],
+   "want": "client_secret=***"
+  },
+  {
+   "name": "secret colon",
+   "kind": "key_value",
+   "in": "secret: topsecretvalue",
+   "secrets": [
+    "topsecretvalue"
+   ],
+   "want": "secret: ***"
+  },
+  {
+   "name": "django secret key",
+   "kind": "key_value",
+   "in": "SECRET_KEY=django-insecure-abc123",
+   "secrets": [
+    "django-insecure-abc123"
+   ],
+   "want": "SECRET_KEY=***"
+  },
+  {
+   "name": "access token",
+   "kind": "vendor_token",
+   "in": "access_token=ya29.a0AfH6SMBxQ",
+   "secrets": [
+    "ya29.a0AfH6SMBxQ"
+   ],
+   "want": "access_token=***"
+  },
+  {
+   "name": "token spaced single quoted",
+   "kind": "key_value",
+   "in": "token = 'single quoted tok'",
+   "secrets": [
+    "single quoted tok"
+   ],
+   "want": "token = '***'"
+  },
+  {
+   "name": "token json compact",
+   "kind": "key_value",
+   "in": "{\"token\":\"abc.def.ghi\"}",
+   "secrets": [
+    "abc.def.ghi"
+   ],
+   "want": "{\"token\":\"***\"}"
+  },
+  {
+   "name": "private key field",
+   "kind": "key_value",
+   "in": "private_key: MIIEvQIBADANBg",
+   "secrets": [
+    "MIIEvQIBADANBg"
+   ],
+   "want": "private_key: ***"
+  },
+  {
+   "name": "credentials",
+   "kind": "key_value",
+   "in": "credentials=AbCdEf123",
+   "secrets": [
+    "AbCdEf123"
+   ],
+   "want": "credentials=***"
+  },
+  {
+   "name": "multiline second line",
+   "kind": "key_value",
+   "in": "line one\nsecret=second-line-secret\nline three",
+   "secrets": [
+    "second-line-secret"
+   ],
+   "want": "line one\nsecret=***\nline three"
+  },
+  {
+   "name": "aws secret key",
+   "kind": "key_value",
+   "in": "aws_secret_access_key = {{AWSSK}}",
+   "secrets": [
+    "{{AWSSK}}"
+   ],
+   "want": "aws_secret_access_key = ***"
+  },
+  {
+   "name": "aws secret json",
+   "kind": "key_value",
+   "in": "{\"secretAccessKey\": \"abc/def+ghi0123\"}",
+   "secrets": [
+    "abc/def+ghi0123"
+   ],
+   "want": "{\"secretAccessKey\": \"***\"}"
+  },
+  {
+   "name": "aws env export",
+   "kind": "aws",
+   "in": "export AWS_ACCESS_KEY_ID={{AWS}}",
+   "secrets": [
+    "{{AWS}}"
+   ],
+   "want": "export AWS_ACCESS_KEY_ID=***"
+  },
+  {
+   "name": "npmrc auth token",
+   "kind": "key_value",
+   "in": "//registry.npmjs.org/:_authToken=abcdefghijklmnop",
+   "secrets": [
+    "abcdefghijklmnop"
+   ],
+   "want": "//registry.npmjs.org/:_authToken=***"
+  },
+  {
+   "name": "azure connection string",
+   "kind": "key_value",
+   "in": "DefaultEndpointsProtocol=https;AccountName=acme;AccountKey=Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA==;EndpointSuffix=core.windows.net",
+   "secrets": [
+    "Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA=="
+   ],
+   "want": "DefaultEndpointsProtocol=https;AccountName=acme;AccountKey=***;EndpointSuffix=core.windows.net"
+  },
+  {
+   "name": "export shell",
+   "kind": "key_value",
+   "in": "export DB_PASSWORD=Hq7Lm2Wc9Xr4 && make",
+   "secrets": [
+    "Hq7Lm2Wc9Xr4"
+   ],
+   "want": "export DB_PASSWORD=*** && make"
+  },
+  {
+   "name": "pwd and auth keys",
+   "kind": "key_value",
+   "in": "pwd=Hq7Lm2Wc9 auth=Wc9Xr2Hq7",
+   "secrets": [
+    "Hq7Lm2Wc9",
+    "Wc9Xr2Hq7"
+   ],
+   "want": "pwd=*** auth=***"
+  },
+  {
+   "name": "db pass segment",
+   "kind": "key_value",
+   "in": "DB_PASS=Hq7Lm2Wc9",
+   "secrets": [
+    "Hq7Lm2Wc9"
+   ],
+   "want": "DB_PASS=***"
+  },
+  {
+   "name": "query string token",
+   "kind": "key_value",
+   "in": "GET /v1/x?token=Hq7Lm2Wc9Xr&page=2",
+   "secrets": [
+    "Hq7Lm2Wc9Xr"
+   ],
+   "want": "GET /v1/x?token=***&page=2"
+  },
+  {
+   "name": "yaml crlf",
+   "kind": "key_value",
+   "in": "name: svc\r\napi_key: Hq7Lm2Wc9Xr\r\nport: 80\r\n",
+   "secrets": [
+    "Hq7Lm2Wc9Xr"
+   ],
+   "want": "name: svc\r\napi_key: ***\r\nport: 80\r\n"
+  },
+  {
+   "name": "non-ascii context",
+   "kind": "key_value",
+   "in": "naïve=ünï password=päss",
+   "secrets": [
+    "päss"
+   ],
+   "want": "naïve=ünï password=***"
+  },
+  {
+   "name": "long digits are secrets",
+   "kind": "key_value",
+   "in": "password=1234567890",
+   "secrets": [
+    "1234567890"
+   ],
+   "want": "password=***"
+  },
+  {
+   "name": "json nested in json string",
+   "kind": "key_value",
+   "in": "{\"msg\": \"{\\\"password\\\": \\\"Hq7Lm2Wc9Xr\\\"}\"}",
+   "secrets": [
+    "Hq7Lm2Wc9Xr"
+   ],
+   "want": "{\"msg\": \"{\\\"password\\\": \\\"***\\\"}\"}"
+  },
+  {
+   "name": "hook basic export",
+   "kind": "key_value",
+   "in": "export PASSWORD=hunter2",
+   "secrets": [
+    "hunter2"
+   ],
+   "want": "export PASSWORD=***"
+  },
+  {
+   "name": "hook passwd short",
+   "kind": "key_value",
+   "in": "mysql --user=root --passwd=pw",
+   "secrets": [
+    "pw"
+   ],
+   "want": "mysql --user=root --passwd=***"
+  },
+  {
+   "name": "hook api key make",
+   "kind": "key_value",
+   "in": "API_KEY=abc123 make",
+   "secrets": [
+    "abc123"
+   ],
+   "want": "API_KEY=*** make"
+  },
+  {
+   "name": "hook api-key flag eq",
+   "kind": "key_value",
+   "in": "x --api-key=zzz",
+   "secrets": [
+    "zzz"
+   ],
+   "want": "x --api-key=***"
+  },
+  {
+   "name": "hook token colon no space",
+   "kind": "key_value",
+   "in": "TOKEN:abc",
+   "secrets": [
+    "abc"
+   ],
+   "want": "TOKEN:***"
+  },
+  {
+   "name": "hook author pwd auth",
+   "kind": "key_value",
+   "in": "author=bob pwd=x auth=y",
+   "secrets": [
+    "x",
+    "y"
+   ],
+   "want": "author=bob pwd=*** auth=***"
+  },
+  {
+   "name": "flag eq token",
+   "kind": "key_value",
+   "in": "cli --token=abcDEF123456",
+   "secrets": [
+    "abcDEF123456"
+   ],
+   "want": "cli --token=***"
+  },
+  {
+   "name": "flag eq password",
+   "kind": "key_value",
+   "in": "mysql -u root --password=rootpw123",
+   "secrets": [
+    "rootpw123"
+   ],
+   "want": "mysql -u root --password=***"
+  },
+  {
+   "name": "flag password space",
+   "kind": "flag",
+   "in": "tool --password hunter2xyz --verbose",
+   "secrets": [
+    "hunter2xyz"
+   ],
+   "want": "tool --password *** --verbose"
+  },
+  {
+   "name": "flag token space",
+   "kind": "flag",
+   "in": "cli --token abc123XYZ run",
+   "secrets": [
+    "abc123XYZ"
+   ],
+   "want": "cli --token *** run"
+  },
+  {
+   "name": "flag api-key space",
+   "kind": "flag",
+   "in": "cli --api-key kk-12345678 run",
+   "secrets": [
+    "kk-12345678"
+   ],
+   "want": "cli --api-key *** run"
+  },
+  {
+   "name": "flag secret quoted",
+   "kind": "flag",
+   "in": "deploy --secret \"my sec ret\" now",
+   "secrets": [
+    "my sec ret"
+   ],
+   "want": "deploy --secret \"***\" now"
+  },
+  {
+   "name": "flag single dash",
+   "kind": "flag",
+   "in": "tool -password Hq7Lm2Wc9 x",
+   "secrets": [
+    "Hq7Lm2Wc9"
+   ],
+   "want": "tool -password *** x"
+  },
+  {
+   "name": "flag passwd",
+   "kind": "flag",
+   "in": "login --passwd=\n--passwd Hq7Lm2Wc9",
+   "secrets": [
+    "Hq7Lm2Wc9"
+   ],
+   "want": "login --passwd=\n--passwd ***"
+  },
+  {
+   "name": "flag after pipe",
+   "kind": "flag",
+   "in": "cat f | tool --password 'Hq7 Lm2' | wc",
+   "secrets": [
+    "Hq7 Lm2"
+   ],
+   "want": "cat f | tool --password '***' | wc"
+  },
+  {
+   "name": "aws key id",
+   "kind": "aws",
+   "in": "{{AWS}}",
+   "secrets": [
+    "{{AWS}}"
+   ],
+   "want": "***"
+  },
+  {
+   "name": "aws temp key",
+   "kind": "aws",
+   "in": "creds {{AWS2}} done",
+   "secrets": [
+    "{{AWS2}}"
+   ],
+   "want": "creds *** done"
+  },
+  {
+   "name": "aws in json",
+   "kind": "aws",
+   "in": "{\"id\":\"{{AWS3}}\",\"n\":2}",
+   "secrets": [
+    "{{AWS3}}"
+   ],
+   "want": "{\"id\":\"***\",\"n\":2}"
+  },
+  {
+   "name": "aws hook",
+   "kind": "aws",
+   "in": "echo {{AWS3}}",
+   "secrets": [
+    "{{AWS3}}"
+   ],
+   "want": "echo ***"
+  },
+  {
+   "name": "github pat classic",
+   "kind": "vendor_token",
+   "in": "token {{GHP}}",
+   "secrets": [
+    "{{GHP}}"
+   ],
+   "want": "token ***"
+  },
+  {
+   "name": "github env",
+   "kind": "vendor_token",
+   "in": "GITHUB_TOKEN={{GHP}}",
+   "secrets": [
+    "{{GHP}}"
+   ],
+   "want": "GITHUB_TOKEN=***"
+  },
+  {
+   "name": "github oauth",
+   "kind": "vendor_token",
+   "in": "x {{GHO}} y",
+   "secrets": [
+    "{{GHO}}"
+   ],
+   "want": "x *** y"
+  },
+  {
+   "name": "github server",
+   "kind": "vendor_token",
+   "in": "{{GHS}}",
+   "secrets": [
+    "{{GHS}}"
+   ],
+   "want": "***"
+  },
+  {
+   "name": "github user",
+   "kind": "vendor_token",
+   "in": "{{GHU}}",
+   "secrets": [
+    "{{GHU}}"
+   ],
+   "want": "***"
+  },
+  {
+   "name": "github refresh",
+   "kind": "vendor_token",
+   "in": "{{GHR}}",
+   "secrets": [
+    "{{GHR}}"
+   ],
+   "want": "***"
+  },
+  {
+   "name": "github fine grained",
+   "kind": "vendor_token",
+   "in": "use {{GHPAT}} now",
+   "secrets": [
+    "{{GHPAT}}"
+   ],
+   "want": "use *** now"
+  },
+  {
+   "name": "github hook echo",
+   "kind": "vendor_token",
+   "in": "echo {{GHSHORT}}",
+   "secrets": [
+    "{{GHSHORT}}"
+   ],
+   "want": "echo ***"
+  },
+  {
+   "name": "github fine grained quoted",
+   "kind": "vendor_token",
+   "in": "echo '{{GHPAT2}}'",
+   "secrets": [
+    "{{GHPAT2}}"
+   ],
+   "want": "echo '***'"
+  },
+  {
+   "name": "gitlab pat",
+   "kind": "vendor_token",
+   "in": "glpat in {{GLPAT}} here",
+   "secrets": [
+    "{{GLPAT}}"
+   ],
+   "want": "glpat in *** here"
+  },
+  {
+   "name": "npm token",
+   "kind": "vendor_token",
+   "in": "try {{NPM}}.",
+   "secrets": [
+    "{{NPM}}"
+   ],
+   "want": "try ***."
+  },
+  {
+   "name": "slack bot",
+   "kind": "vendor_token",
+   "in": "bot {{SLB}}",
+   "secrets": [
+    "{{SLB}}"
+   ],
+   "want": "bot ***"
+  },
+  {
+   "name": "slack hook echo",
+   "kind": "vendor_token",
+   "in": "echo {{SLB2}}",
+   "secrets": [
+    "{{SLB2}}"
+   ],
+   "want": "echo ***"
+  },
+  {
+   "name": "slack user",
+   "kind": "vendor_token",
+   "in": "{{SLP}}",
+   "secrets": [
+    "{{SLP}}"
+   ],
+   "want": "***"
+  },
+  {
+   "name": "slack app",
+   "kind": "vendor_token",
+   "in": "{{SLA}}",
+   "secrets": [
+    "{{SLA}}"
+   ],
+   "want": "***"
+  },
+  {
+   "name": "slack session",
+   "kind": "vendor_token",
+   "in": "{{SLS}}",
+   "secrets": [
+    "{{SLS}}"
+   ],
+   "want": "***"
+  },
+  {
+   "name": "slack webhook",
+   "kind": "vendor_token",
+   "in": "curl -X POST https://hooks.slack.com/services/{{SLHOOK}} -d x",
+   "secrets": [
+    "{{SLHOOK}}"
+   ],
+   "want": "curl -X POST https://hooks.slack.com/services/*** -d x"
+  },
+  {
+   "name": "openai project",
+   "kind": "vendor_token",
+   "in": "run with {{OAI}} quickly",
+   "secrets": [
+    "{{OAI}}"
+   ],
+   "want": "run with *** quickly"
+  },
+  {
+   "name": "openai bare",
+   "kind": "vendor_token",
+   "in": "use {{OAI2}} now",
+   "secrets": [
+    "{{OAI2}}"
+   ],
+   "want": "use *** now"
+  },
+  {
+   "name": "openai hook",
+   "kind": "vendor_token",
+   "in": "echo {{OAI3}}",
+   "secrets": [
+    "{{OAI3}}"
+   ],
+   "want": "echo ***"
+  },
+  {
+   "name": "openai env quoted",
+   "kind": "vendor_token",
+   "in": "OPENAI_API_KEY=\"{{OAI}}\"",
+   "secrets": [
+    "{{OAI}}"
+   ],
+   "want": "OPENAI_API_KEY=\"***\""
+  },
+  {
+   "name": "anthropic env",
+   "kind": "vendor_token",
+   "in": "ANTHROPIC_API_KEY={{ANT}}",
+   "secrets": [
+    "{{ANT}}"
+   ],
+   "want": "ANTHROPIC_API_KEY=***"
+  },
+  {
+   "name": "anthropic",
+   "kind": "vendor_token",
+   "in": "key is {{ANT}}.",
+   "secrets": [
+    "{{ANT}}"
+   ],
+   "want": "key is ***."
+  },
+  {
+   "name": "stripe live",
+   "kind": "vendor_token",
+   "in": "stripe {{STRL}}",
+   "secrets": [
+    "{{STRL}}"
+   ],
+   "want": "stripe ***"
+  },
+  {
+   "name": "stripe test",
+   "kind": "vendor_token",
+   "in": "stripe {{STRT}}",
+   "secrets": [
+    "{{STRT}}"
+   ],
+   "want": "stripe ***"
+  },
+  {
+   "name": "stripe restricted",
+   "kind": "vendor_token",
+   "in": "stripe {{STRR}}",
+   "secrets": [
+    "{{STRR}}"
+   ],
+   "want": "stripe ***"
+  },
+  {
+   "name": "google api key",
+   "kind": "vendor_token",
+   "in": "key {{GAPI}}",
+   "secrets": [
+    "{{GAPI}}"
+   ],
+   "want": "key ***"
+  },
+  {
+   "name": "google oauth",
+   "kind": "vendor_token",
+   "in": "bearerless {{YA29}}",
+   "secrets": [
+    "{{YA29}}"
+   ],
+   "want": "bearerless ***"
+  },
+  {
+   "name": "huggingface",
+   "kind": "vendor_token",
+   "in": "hf {{HF}} end",
+   "secrets": [
+    "{{HF}}"
+   ],
+   "want": "hf *** end"
+  },
+  {
+   "name": "pypi",
+   "kind": "vendor_token",
+   "in": "twine {{PYPI}}",
+   "secrets": [
+    "{{PYPI}}"
+   ],
+   "want": "twine ***"
+  },
+  {
+   "name": "dockerhub",
+   "kind": "vendor_token",
+   "in": "docker {{DOCK}}",
+   "secrets": [
+    "{{DOCK}}"
+   ],
+   "want": "docker ***"
+  },
+  {
+   "name": "digitalocean",
+   "kind": "vendor_token",
+   "in": "do {{DO}}",
+   "secrets": [
+    "{{DO}}"
+   ],
+   "want": "do ***"
+  },
+  {
+   "name": "sendgrid",
+   "kind": "vendor_token",
+   "in": "mail {{SG}}",
+   "secrets": [
+    "{{SG}}"
+   ],
+   "want": "mail ***"
+  },
+  {
+   "name": "vendor non-ascii crlf",
+   "kind": "vendor_token",
+   "in": "令牌\r\n{{GHP}}\r\n结束",
+   "secrets": [
+    "{{GHP}}"
+   ],
+   "want": "令牌\r\n***\r\n结束"
+  },
+  {
+   "name": "jwt session",
+   "kind": "jwt",
+   "in": "session={{JWT}}",
+   "secrets": [
+    "{{JWT}}"
+   ],
+   "want": "session=***"
+  },
+  {
+   "name": "jwt bare",
+   "kind": "jwt",
+   "in": "got {{JWT}} ok",
+   "secrets": [
+    "{{JWTSIG}}"
+   ],
+   "want": "got *** ok"
+  },
+  {
+   "name": "jwt hook",
+   "kind": "jwt",
+   "in": "echo {{JWTSHORT}}",
+   "secrets": [
+    "{{JWTSHORT}}"
+   ],
+   "want": "echo ***"
+  },
+  {
+   "name": "jwt in json",
+   "kind": "jwt",
+   "in": "{\"id_token_value\":\"{{JWT}}\"}",
+   "secrets": [
+    "{{JWT}}"
+   ],
+   "want": "{\"id_token_value\":\"***\"}"
+  },
+  {
+   "name": "jwt multiline",
+   "kind": "jwt",
+   "in": "a\n{{JWT}}\nb",
+   "secrets": [
+    "{{JWT}}"
+   ],
+   "want": "a\n***\nb"
+  }
+ ],
+ "negative": [
+  {
+   "name": "empty",
+   "in": ""
+  },
+  {
+   "name": "git clone plain",
+   "in": "git clone https://github.com/x/y.git"
+  },
+  {
+   "name": "ls",
+   "in": "ls -la /tmp"
+  },
+  {
+   "name": "prose pass colon",
+   "in": "the build must pass: ok"
+  },
+  {
+   "name": "code pass assignment",
+   "in": "r.Pass = len(r.Failures) == 0"
+  },
+  {
+   "name": "git status",
+   "in": "git status"
+  },
+  {
+   "name": "go test",
+   "in": "ls -la /tmp && go test ./..."
+  },
+  {
+   "name": "commit msg",
+   "in": "Bash: git commit -m 'fix typo'"
+  },
+  {
+   "name": "edit path",
+   "in": "Edit: internal/state/store.go"
+  },
+  {
+   "name": "git hash 40",
+   "in": "commit a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+  },
+  {
+   "name": "uuid",
+   "in": "id 123e4567-e89b-12d3-a456-426614174000 ok"
+  },
+  {
+   "name": "task id",
+   "in": "task-1234567890abcdef"
+  },
+  {
+   "name": "max_tokens",
+   "in": "max_tokens: 4096"
+  },
+  {
+   "name": "token count prose",
+   "in": "token count is high"
+  },
+  {
+   "name": "tokenizer prose",
+   "in": "the tokenizer is fast"
+  },
+  {
+   "name": "tokenizer key",
+   "in": "tokenizer: bert-base-uncased"
+  },
+  {
+   "name": "keyboard",
+   "in": "keyboard: us layout"
+  },
+  {
+   "name": "passport",
+   "in": "passport: ABC123XYZ"
+  },
+  {
+   "name": "passenger",
+   "in": "passenger list"
+  },
+  {
+   "name": "authorize call",
+   "in": "authorize() then authenticate()"
+  },
+  {
+   "name": "author key",
+   "in": "author=bob"
+  },
+  {
+   "name": "url without creds",
+   "in": "https://example.com/path?q=1&r=2"
+  },
+  {
+   "name": "ssh git url",
+   "in": "ssh://git@github.com/o/r.git"
+  },
+  {
+   "name": "host port at",
+   "in": "http://host:8080/x?email=a@b.com"
+  },
+  {
+   "name": "email",
+   "in": "mail me@example.com"
+  },
+  {
+   "name": "chinese",
+   "in": "这是一个中文 描述,没有密钥"
+  },
+  {
+   "name": "max length",
+   "in": "max length 200 runes"
+  },
+  {
+   "name": "curl localhost",
+   "in": "curl -s localhost:8080/health"
+  },
+  {
+   "name": "export path",
+   "in": "export PATH=/usr/bin:/bin"
+  },
+  {
+   "name": "short sk",
+   "in": "sk-short"
+  },
+  {
+   "name": "short akia",
+   "in": "AKIA-not-a-key"
+  },
+  {
+   "name": "akia too short",
+   "in": "echo AKIAshort"
+  },
+  {
+   "name": "sk x",
+   "in": "echo sk-x"
+  },
+  {
+   "name": "dotted words",
+   "in": "echo a.b.c"
+  },
+  {
+   "name": "kv plain",
+   "in": "key=value other=thing"
+  },
+  {
+   "name": "whitespace kept",
+   "in": "a  \t b\nc"
+  },
+  {
+   "name": "empty token",
+   "in": "token="
+  },
+  {
+   "name": "equals token",
+   "in": "=token"
+  },
+  {
+   "name": "bool value",
+   "in": "password=true secret: false token=null"
+  },
+  {
+   "name": "small number",
+   "in": "token_count: 12 secret_len=4096 pass=1"
+  },
+  {
+   "name": "empty quoted",
+   "in": "password=\"\""
+  },
+  {
+   "name": "bearer prose",
+   "in": "the bearer of bad news"
+  },
+  {
+   "name": "basic prose",
+   "in": "Basic configuration steps and Basic usage"
+  },
+  {
+   "name": "basic word",
+   "in": "basic authentication"
+  },
+  {
+   "name": "base64 image",
+   "in": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+  },
+  {
+   "name": "flag without value",
+   "in": "cli --password"
+  },
+  {
+   "name": "flag next option",
+   "in": "cli --token --verbose"
+  },
+  {
+   "name": "sha256",
+   "in": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+  },
+  {
+   "name": "random word key",
+   "in": "monkey: banana"
+  },
+  {
+   "name": "go code",
+   "in": "for key, v := range m { fmt.Println(key, v) }"
+  }
+ ]
+}
