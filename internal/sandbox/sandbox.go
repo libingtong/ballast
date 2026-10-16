@@ -387,7 +387,9 @@ type Wrapped struct {
 	// same path (the child renames a non-pinned ancestor away and recreates
 	// the directory: the recreated entry has a Baseline path but another
 	// inode). Unexported: callers pass the Wrapped value they got from Wrap
-	// to PostCheck unchanged; without it PostCheck compares paths only.
+	// to PostCheck unchanged, in the same process; a hand-built or
+	// deserialized Wrapped has no fingerprints and PostCheck then compares
+	// paths only (that replacement attack is no longer detected).
 	ids map[string]fileKey
 }
 

@@ -125,6 +125,30 @@ func loaderUnsets(env sys.Env) []string {
 	return dedupe(out)
 }
 
+// runnerAllowWrite is the part of spec.AllowWrite that the administrator
+// listed (org.json runner_allow_write): AllowWrite minus the repo work trees,
+// the git dirs and the private tree. Only those may keep a cache variable
+// (docs/p2-design.md §3.4); a cache inside the repository is redirected,
+// otherwise a shared cache written by the test would live in the repository
+// and be reused by builds outside the sandbox.
+func runnerAllowWrite(spec Spec) []string {
+	skip := map[string]bool{}
+	for _, l := range [][]string{spec.RepoRoots, spec.GitDirs, {spec.Tree}} {
+		for _, p := range l {
+			if p != "" {
+				skip[filepath.Clean(p)] = true
+			}
+		}
+	}
+	var out []string
+	for _, a := range spec.AllowWrite {
+		if a != "" && !skip[filepath.Clean(a)] {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 // wrapEnv builds Wrapped.Env.
 func wrapEnv(opt Options, spec Spec, tmp string) []string {
 	env := opt.env()
@@ -135,7 +159,7 @@ func wrapEnv(opt Options, spec Spec, tmp string) []string {
 		v, _ := env.Getenv(k)
 		return v
 	}
-	out = append(out, CacheEnv(tmp, spec.AllowWrite, cur)...)
+	out = append(out, CacheEnv(tmp, runnerAllowWrite(spec), cur)...)
 	if spec.Tree != "" {
 		out = append(out, "GIT_CEILING_DIRECTORIES="+filepath.Dir(filepath.Clean(spec.Tree)))
 	}
@@ -236,8 +260,10 @@ func Wrap(opt Options, kind Kind, spec Spec, argv []string) (Wrapped, error) {
 //     ErrUnavailable; SandboxPrefer ⇒ avail (possibly KindNone);
 //     SandboxOff ⇒ KindNone.
 //
-// Fail-closed details beyond the table: an origin other than cli (and not
-// empty, which is how pre-P2 records spell cli) is treated like hook, and an
+// Fail-closed details beyond the table: any origin other than cli, the empty
+// string included, is treated like hook (a runner that forgot to set the
+// origin must not run an agent-writable test unwrapped; how a pre-P2 record
+// without origin is read is the reader's business, not Decide's), and an
 // unknown or empty policy like require.
 func Decide(policy model.SandboxPolicy, origin model.VerifyOrigin, avail Kind, availErr error) (Kind, error) {
 	usable := availErr == nil && avail != "" && avail != KindNone
@@ -247,7 +273,7 @@ func Decide(policy model.SandboxPolicy, origin model.VerifyOrigin, avail Kind, a
 		}
 		return KindNone, ErrUnavailable
 	}
-	if origin == model.OriginCLI || origin == "" {
+	if origin == model.OriginCLI {
 		switch policy {
 		case model.SandboxOff:
 			return KindNone, nil

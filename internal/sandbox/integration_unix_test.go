@@ -211,10 +211,34 @@ ln -s .git/config "$R/cfg" && echo x > "$R/cfg"; ln -s ../.git/hooks "$R/src/hk"
 			},
 			createdDarwin: func(f *fixture) []string { return []string{rp(f, "sub2/.git")} },
 		},
+		{
+			// PostCheck must not fail open: 4097 further matches exceed
+			// MaxMandatoryMatches, which only bounds the bwrap mounts.
+			name: "protected file followed by more matches than the mount limit",
+			script: `mkdir -p "$R/.claude" && echo '{}' > "$R/.claude/settings.local.json"
+i=0; while [ $i -le 4096 ]; do echo "$R/many/$i/.idea"; i=$((i+1)); done | xargs mkdir -p; true`,
+			absent: func(f *fixture) []string { return []string{rp(f, ".claude/settings.local.json")} },
+			created: func(f *fixture) []string {
+				return []string{rp(f, ".claude"), rp(f, "many/0/.idea"), rp(f, "many/4096/.idea")}
+			},
+		},
+		{
+			// ... and not on a directory the scan cannot enter.
+			name: "protected file followed by a directory without any permission",
+			script: `mkdir -p "$R/.claude" && echo '{}' > "$R/.claude/settings.local.json"
+mkdir -p "$R/locked/.vscode" "$R/locked/in" && echo '{}' > "$R/locked/.vscode/tasks.json" && chmod 000 "$R/locked"; true`,
+			absent: func(f *fixture) []string {
+				return []string{rp(f, ".claude/settings.local.json"), rp(f, "locked/.vscode/tasks.json")}
+			},
+			created: func(f *fixture) []string { return []string{rp(f, ".claude"), rp(f, "locked/.vscode")} },
+		},
 	}
 	be := requireBackend(t)
 	for _, a := range attempts {
 		t.Run(a.name, func(t *testing.T) {
+			if testing.Short() && strings.Contains(a.name, "mount limit") {
+				t.Skip("creates thousands of directories")
+			}
 			f := fix(t, model.NetworkDeny)
 			if a.guard != nil {
 				f.guard(a.guard(f)...)
@@ -431,6 +455,23 @@ func TestNetworkPolicies(t *testing.T) {
 			}
 			if !wantConnect && l.hits.Load() != 0 {
 				t.Errorf("the host listener was reached %d times", l.hits.Load())
+			}
+
+			// A non-loopback address (TEST-NET-1 and a public address): under
+			// deny nothing may leave. darwin: the profile refuses the
+			// connect(2) itself (EPERM), so it is not a mere timeout; linux:
+			// the empty network namespace, recorded only.
+			if network == model.NetworkDeny {
+				for _, addr := range []string{"192.0.2.1", "1.1.1.1"} {
+					res = f.sh(`python3 "`+py+`" `+addr+` 443`, runOpts{})
+					if strings.Contains(res.Out, "CONNECTED") {
+						t.Errorf("deny: connected to %s\n%s", addr, res.Out)
+					}
+					if runtime.GOOS == "darwin" && !strings.Contains(res.Out, "PermissionError") {
+						t.Errorf("darwin deny: connect to %s should be refused by the profile (EPERM), got\n%s", addr, res.Out)
+					}
+					t.Logf("%s deny: connect %s: %s", runtime.GOOS, addr, strings.TrimSpace(res.Out))
+				}
 			}
 
 			// Unix sockets outside W are unreachable under every policy

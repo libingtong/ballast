@@ -26,6 +26,15 @@ import (
 //     rmdir(2) refuse with EBUSY, so it cannot be replaced, while the index
 //     and objects inside stay writable and ".git/hooks", ".git/config" are
 //     ro-bound on top. A file matched by it (a gitfile) is ro-bound.
+//   - Residual (hardening, registered rather than fixed to keep the frozen
+//     mount order): "directory or not" is decided at Wrap time with Lstat and
+//     bwrap follows symlinks when it binds, so a writer OUTSIDE the sandbox
+//     that swaps a pinned ancestor (e.g. <repo>/.git) for a symlink between
+//     Wrap and exec could make the rw bind land on the link target, after the
+//     ro-binds of the D entries outside W. Linux origin=cli only; the later
+//     baseline ro-binds (hooks, config) must also exist in the target for
+//     bwrap to start. A fix would be --bind-fd on O_PATH|O_NOFOLLOW handles,
+//     or a second ro-bind of those D entries after the pins.
 //   - AncestorPins entries that are not directories are skipped (the
 //     top-level ".git" of a linked worktree is a gitfile).
 func BwrapArgs(spec Spec, existing map[string]bool) []string {

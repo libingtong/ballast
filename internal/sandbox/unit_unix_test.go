@@ -733,17 +733,124 @@ func TestPostCheck(t *testing.T) {
 	if !sort.StringsAreSorted(found) {
 		t.Error("found not sorted")
 	}
+}
 
-	// A scan failure is an error with found == nil, not ErrProtectedCreated.
-	bad := Spec{RepoRoots: []string{repo}}
-	if err := os.Chmod(filepath.Join(repo, "src"), 0); err == nil {
-		defer os.Chmod(filepath.Join(repo, "src"), 0o755)
-		if os.Geteuid() != 0 {
-			found, err := PostCheck(sys.OSFS{}, bad, Wrapped{})
-			if err == nil || found != nil || errors.Is(err, ErrProtectedCreated) {
-				t.Errorf("scan failure: %v %v", found, err)
+// noChmodFS is the OS file system without any way to change a mode.
+type noChmodFS struct{ sys.OSFS }
+
+func skipIfRoot(t *testing.T) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every directory")
+	}
+}
+
+// PostCheck fails closed: a directory the scan cannot enter does not hide a
+// protected path the child created (it used to return found == nil and an
+// error, so the runner never quarantined anything).
+func TestPostCheckFailsClosed(t *testing.T) {
+	skipIfRoot(t)
+	setup := func(t *testing.T) (repo string, spec Spec, w Wrapped) {
+		root := realTemp(t)
+		repo = filepath.Join(root, "repo")
+		mkfiles(t, repo, ".git/HEAD", "pkg/a.go", "pkg/in/b.go", "src/c.go")
+		spec = Spec{RepoRoots: []string{repo}, GitDirs: []string{filepath.Join(repo, ".git")}}
+		base, err := ScanMandatory(sys.OSFS{}, spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return repo, spec, Wrapped{Baseline: base}
+	}
+
+	t.Run("directory without permission is opened up and scanned", func(t *testing.T) {
+		repo, spec, w := setup(t)
+		mkfiles(t, repo, ".claude/settings.local.json", "pkg/in/.vscode/tasks.json")
+		if err := os.Chmod(filepath.Join(repo, "pkg"), 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Chmod(filepath.Join(repo, "pkg"), 0o755) })
+		found, err := PostCheck(sys.OSFS{}, spec, w)
+		if !errors.Is(err, ErrProtectedCreated) || errors.Is(err, ErrInvalidSpec) {
+			t.Fatalf("want ErrProtectedCreated only, got %v", err)
+		}
+		if g := rels(repo, found); strings.Join(g, "\n") != ".claude\npkg/in/.vscode" {
+			t.Errorf("found %v", g)
+		}
+	})
+
+	t.Run("directory that stays unreadable is itself reported", func(t *testing.T) {
+		repo, spec, w := setup(t)
+		mkfiles(t, repo, ".claude/settings.local.json", "pkg/in/.vscode/tasks.json")
+		if err := os.Chmod(filepath.Join(repo, "pkg"), 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Chmod(filepath.Join(repo, "pkg"), 0o755) })
+		w.MissingProtected = []string{filepath.Join(repo, "pkg", "locked")} // lstat fails with EACCES
+		found, err := PostCheck(noChmodFS{}, spec, w)
+		if !errors.Is(err, ErrProtectedCreated) {
+			t.Fatalf("want ErrProtectedCreated, got %v", err)
+		}
+		if g := rels(repo, found); strings.Join(g, "\n") != ".claude\npkg\npkg/locked" {
+			t.Errorf("found %v", g)
+		}
+	})
+
+	t.Run("more matches than MaxMandatoryMatches", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("creates thousands of directories")
+		}
+		repo, spec, w := setup(t)
+		mkfiles(t, repo, ".claude/settings.local.json")
+		for i := 0; i <= MaxMandatoryMatches; i++ {
+			if err := os.MkdirAll(filepath.Join(repo, "x", fmt.Sprint(i), ".idea"), 0o755); err != nil {
+				t.Fatal(err)
 			}
 		}
+		if _, err := ScanMandatory(sys.OSFS{}, spec); !errors.Is(err, ErrInvalidSpec) {
+			t.Fatalf("ScanMandatory keeps its bound, got %v", err)
+		}
+		found, err := PostCheck(sys.OSFS{}, spec, w)
+		if !errors.Is(err, ErrProtectedCreated) || errors.Is(err, ErrInvalidSpec) {
+			t.Fatalf("want ErrProtectedCreated only, got %v", err)
+		}
+		if len(found) != MaxMandatoryMatches+2 || rels(repo, found)[0] != ".claude" {
+			t.Errorf("found %d paths, first %v", len(found), rels(repo, found)[:1])
+		}
+	})
+}
+
+// A cache variable survives only inside runner_allow_write; a value inside the
+// repository (also an AllowWrite entry for origin=cli) is redirected.
+func TestWrapCacheEnvIgnoresRepoRoots(t *testing.T) {
+	spec, root := wrapFixture(t, model.NetworkDeny)
+	cache := filepath.Join(root, "shared-cache")
+	mkfiles(t, root, "shared-cache/")
+	spec.AllowWrite = append(spec.AllowWrite, cache)
+	repo := spec.RepoRoots[0]
+	env := sys.MapEnv{Vars: map[string]string{
+		"GOCACHE":          filepath.Join(repo, ".cache", "go"),
+		"XDG_CACHE_HOME":   filepath.Join(repo, ".git", "x"),
+		"npm_config_cache": filepath.Join(cache, "npm"),
+		"PIP_CACHE_DIR":    repo,
+	}}
+	w, err := Wrap(Options{Env: env, Bwrap: "/usr/bin/bwrap"}, KindSandboxExec, spec, []string{"go", "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kv := map[string]string{}
+	for _, e := range w.Env {
+		if k, v, ok := strings.Cut(e, "="); ok {
+			kv[k] = v
+		}
+	}
+	tmp := spec.TmpDir
+	for k, sub := range map[string]string{"GOCACHE": "go-build", "XDG_CACHE_HOME": "xdg", "PIP_CACHE_DIR": "pip", "YARN_CACHE_FOLDER": "yarn"} {
+		if kv[k] != tmp+"/cache/"+sub {
+			t.Errorf("%s = %q, want it redirected to %s/cache/%s", k, kv[k], tmp, sub)
+		}
+	}
+	if _, set := kv["npm_config_cache"]; set {
+		t.Errorf("npm_config_cache inside runner_allow_write was redirected: %q", kv["npm_config_cache"])
 	}
 }
 

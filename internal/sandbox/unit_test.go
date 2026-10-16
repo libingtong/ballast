@@ -219,8 +219,11 @@ func TestDecide(t *testing.T) {
 		{"weird", model.OriginCLI, KindBwrap, nil, KindBwrap, false},
 		{model.SandboxOff, "weird", KindNone, nil, KindNone, true},
 		{model.SandboxPrefer, "weird", KindBwrap, nil, KindBwrap, false},
-		// a pre-P2 record has no origin and means cli.
-		{model.SandboxOff, "", KindBwrap, nil, KindNone, false},
+		// an empty origin (a runner that forgot to set it) is treated like hook.
+		{model.SandboxOff, "", KindBwrap, nil, KindBwrap, false},
+		{model.SandboxPrefer, "", KindBwrap, nil, KindBwrap, false},
+		{model.SandboxOff, "", KindNone, nil, KindNone, true},
+		{model.SandboxPrefer, "", KindNone, boom, KindNone, true},
 	}
 	for i, r := range rows {
 		got, err := Decide(r.policy, r.origin, r.avail, r.err)

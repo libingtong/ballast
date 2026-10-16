@@ -13,15 +13,64 @@ import (
 	"github.com/libingtong/ballast/internal/sys"
 )
 
+// chmoder is implemented by file systems that can change a mode (sys.FS does
+// not expose it; sys.OSFS is handled explicitly).
+type chmoder interface {
+	Chmod(name string, mode fs.FileMode) error
+}
+
+func chmodPath(fsys sys.FS, p string, mode fs.FileMode) error {
+	if c, ok := fsys.(chmoder); ok {
+		return c.Chmod(p, mode)
+	}
+	if _, ok := fsys.(sys.OSFS); ok {
+		return os.Chmod(p, mode)
+	}
+	return errors.New("file system cannot change modes")
+}
+
+// makeScannable gives the owner r-x (plus w, so that Quarantine can move
+// things out) on a directory the child made unreadable or untraversable
+// (chmod 000). A failure (not the owner, no chmod) leaves the directory as it
+// was; the caller then finds the ReadDir error.
+func makeScannable(fsys sys.FS, dir string) {
+	fi, err := fsys.Lstat(dir)
+	if err != nil || !fi.IsDir() {
+		return
+	}
+	if fi.Mode().Perm()&0o500 == 0o500 {
+		return
+	}
+	_ = chmodPath(fsys, dir, fi.Mode().Perm()|0o700)
+}
+
 // scanRoot walks one tree completely (Lstat semantics, never following
 // symlinks) and appends every mandatory match to out.
-func scanRoot(fsys sys.FS, root string, pats []pattern, isRepo bool, out *[]string) error {
+//
+// strict (Wrap, ScanMandatory): more than MaxMandatoryMatches matches, or a
+// directory that cannot be read, is an error wrapping ErrInvalidSpec (the
+// match count bounds the number of bwrap mounts; an unreadable directory
+// would hide matches from the baseline).
+//
+// lenient (PostCheck): no match limit (it only constrains mounts, which no
+// longer matter once the child has exited) and no error. A directory the
+// child made unreadable is first opened up for its owner (chmod u+rwx) and
+// scanned; one that stays unreadable is itself reported as a match, so a
+// protected file hidden below it can never make the check fail open.
+func scanRoot(fsys sys.FS, root string, pats []pattern, isRepo, lenient bool, out *[]string) error {
 	var walk func(dirAbs, dirRel string) error
 	walk = func(dirAbs, dirRel string) error {
+		if lenient {
+			makeScannable(fsys, dirAbs)
+		}
 		ents, err := fsys.ReadDir(dirAbs)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil // vanished while scanning
+			}
+			if lenient {
+				*out = append(*out, dirAbs)
+				return nil
 			}
 			return fmt.Errorf("%w: scan %s: %v", ErrInvalidSpec, dirAbs, err)
 		}
@@ -35,7 +84,7 @@ func scanRoot(fsys sys.FS, root string, pats []pattern, isRepo bool, out *[]stri
 			matched, subtree, _ := matchInfo(pats, isRepo, rel)
 			if matched {
 				*out = append(*out, abs)
-				if len(*out) > MaxMandatoryMatches {
+				if !lenient && len(*out) > MaxMandatoryMatches {
 					return fmt.Errorf("%w: more than %d protected paths below %s", ErrInvalidSpec, MaxMandatoryMatches, root)
 				}
 				if subtree {
@@ -53,6 +102,10 @@ func scanRoot(fsys sys.FS, root string, pats []pattern, isRepo bool, out *[]stri
 	fi, err := fsys.Lstat(root)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if lenient {
+			*out = append(*out, root)
 			return nil
 		}
 		return fmt.Errorf("%w: scan %s: %v", ErrInvalidSpec, root, err)
@@ -76,22 +129,28 @@ func scanRoot(fsys sys.FS, root string, pats []pattern, isRepo bool, out *[]stri
 // below it, because other patterns apply there (".git/hooks/", ".git/config");
 // a match by a subtree pattern is reported once and not entered.
 func ScanMandatory(fsys sys.FS, spec Spec) ([]string, error) {
+	return scanMandatory(fsys, spec, false)
+}
+
+// scanMandatory is ScanMandatory (strict) or the unbounded, never-failing
+// scan PostCheck uses (lenient, see scanRoot).
+func scanMandatory(fsys sys.FS, spec Spec, lenient bool) ([]string, error) {
 	repoPats := parsePatterns(RepoMandatoryDeny)
 	gitPats := parsePatterns(GitDirMandatoryDeny)
 	var found []string
 	for _, r := range spec.RepoRoots {
-		if err := scanRoot(fsys, filepath.Clean(r), repoPats, true, &found); err != nil {
+		if err := scanRoot(fsys, filepath.Clean(r), repoPats, true, lenient, &found); err != nil {
 			return nil, err
 		}
 	}
 	for _, g := range spec.GitDirs {
-		if err := scanRoot(fsys, filepath.Clean(g), gitPats, false, &found); err != nil {
+		if err := scanRoot(fsys, filepath.Clean(g), gitPats, false, lenient, &found); err != nil {
 			return nil, err
 		}
 	}
 	sort.Strings(found)
 	found = dedupe(found)
-	if len(found) > MaxMandatoryMatches {
+	if !lenient && len(found) > MaxMandatoryMatches {
 		return nil, fmt.Errorf("%w: more than %d protected paths", ErrInvalidSpec, MaxMandatoryMatches)
 	}
 	return found, nil
@@ -99,24 +158,33 @@ func ScanMandatory(fsys sys.FS, spec Spec) ([]string, error) {
 
 // PostCheck runs after the child exited (both platforms; on darwin it is
 // defence in depth). It returns, absolute and sorted, every path that is
-// (a) one of w.MissingProtected and now exists, or (b) a ScanMandatory match
+// (a) one of w.MissingProtected and now exists, or (b) a mandatory match
 // of spec that is not in w.Baseline — i.e. a protected path the child
 // created, at any depth, including under a renamed ancestor. found non-empty
 // ⇒ err wraps ErrProtectedCreated; the runner then calls Quarantine on
-// found. A scan failure is returned as an error with found nil (the runner
-// records infra).
+// found.
+//
+// PostCheck fails closed (it never lets a scan problem hide a created
+// path): the re-scan is not bounded by MaxMandatoryMatches (the bound only
+// limits the number of bwrap mounts), and a directory that cannot be read is
+// opened up for its owner and scanned, or, failing that, reported itself.
+// A path whose existence cannot be determined counts as existing. found is
+// therefore nil only when nothing was found; the error is then nil too.
+//
+// The Wrapped value must be the one Wrap returned, in the same process: its
+// unexported fingerprints detect a Baseline entry that was replaced at its
+// own path. A hand-built or deserialized Wrapped makes PostCheck compare
+// paths only.
 func PostCheck(fsys sys.FS, spec Spec, w Wrapped) (found []string, err error) {
 	seen := map[string]bool{}
 	for _, p := range w.MissingProtected {
-		if _, lerr := fsys.Lstat(p); lerr == nil {
+		if _, lerr := fsys.Lstat(p); lerr == nil || !errors.Is(lerr, fs.ErrNotExist) {
 			seen[filepath.Clean(p)] = true
-		} else if !errors.Is(lerr, fs.ErrNotExist) {
-			return nil, fmt.Errorf("sandbox: post-check %s: %w", p, lerr)
 		}
 	}
-	matches, serr := ScanMandatory(fsys, spec)
-	if serr != nil {
-		return nil, serr
+	matches, serr := scanMandatory(fsys, spec, true)
+	if serr != nil { // not produced in lenient mode; kept so a future error cannot be dropped
+		return nil, fmt.Errorf("sandbox: post-check scan: %w", serr)
 	}
 	base := make(map[string]bool, len(w.Baseline))
 	for _, b := range w.Baseline {
@@ -131,10 +199,14 @@ func PostCheck(fsys sys.FS, spec Spec, w Wrapped) (found []string, err error) {
 	// moved a non-pinned ancestor away and recreated the entry (its contents
 	// are not scanned, so a path comparison alone would not see it).
 	for p, was := range w.ids {
-		if fi, lerr := fsys.Lstat(p); lerr == nil {
+		fi, lerr := fsys.Lstat(p)
+		switch {
+		case lerr == nil:
 			if now, ok := keyOf(fi); ok && now != was {
 				seen[filepath.Clean(p)] = true
 			}
+		case !errors.Is(lerr, fs.ErrNotExist):
+			seen[filepath.Clean(p)] = true // cannot be inspected: do not assume it is unchanged
 		}
 	}
 	if len(seen) == 0 {
