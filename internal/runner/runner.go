@@ -36,6 +36,11 @@ type Options struct {
 	// Output receives the verify command's combined output in Foreground
 	// (nil ⇒ os.Stdout). The output always goes to the job log as well.
 	Output io.Writer
+
+	// Test seams (unexported: the exported surface stays as frozen).
+	backend sandboxBackend     // nil ⇒ the real internal/sandbox
+	gitRun  snapshot.GitRunner // nil ⇒ snapshot.ExecGit
+	trace   func(step string)  // nil ⇒ no tracing of the wrap-up order
 }
 
 // Started describes one started job.
@@ -66,7 +71,9 @@ func Start(opt Options, cwd string, names []string) ([]Started, error) {
 		if err != nil {
 			return started, err
 		}
-		env := opt.Env.Environ()
+		// The detached child is Ballast itself: it never inherits loader
+		// variables (v1.4, docs/p2-design.md §3.4).
+		env := stripLoaderEnv(opt.Env.Environ())
 		pid, err := opt.Spawner.SpawnDetached([]string{opt.Self, "verify", "--run-job", js.JobID}, env, opt.Evidence.LogPath(js.RepoInst, js.Name, js.JobID))
 		if err != nil {
 			err = fmt.Errorf("start %s: %w", spec.Name, err)

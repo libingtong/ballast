@@ -57,7 +57,7 @@ type procTree struct {
 	killed bool
 }
 
-func (t *procTree) prepare(cmd *exec.Cmd) {
+func (t *procTree) prepare(cmd *exec.Cmd, newSession bool) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNewProcessGroup}
 }
 

@@ -75,6 +75,8 @@ type rawSpec struct {
 	Required bool     `json:"required"`
 	Env      []string `json:"env"`
 	Cwd      string   `json:"cwd"`
+	// InputsUntracked (P2 v1.5) is validated like exempt.
+	InputsUntracked []string `json:"inputs_untracked"`
 }
 
 type rawConfig struct {
@@ -123,7 +125,7 @@ func Decode(data []byte) (*model.ProjectConfig, error) {
 				return nil, fmt.Errorf("invalid project.json: verify %q: argv contains NUL", rs.Name)
 			}
 		}
-		spec := model.VerifySpec{Name: rs.Name, Argv: rs.Argv, TimeoutS: DefaultTimeoutS, Required: rs.Required, Env: rs.Env, Cwd: rs.Cwd}
+		spec := model.VerifySpec{Name: rs.Name, Argv: rs.Argv, TimeoutS: DefaultTimeoutS, Required: rs.Required, Env: rs.Env, Cwd: rs.Cwd, InputsUntracked: rs.InputsUntracked}
 		if rs.TimeoutS != nil {
 			t := *rs.TimeoutS
 			if t < 1 || t > MaxTimeoutS {
@@ -139,6 +141,11 @@ func Decode(data []byte) (*model.ProjectConfig, error) {
 		}
 		if err := validateCwd(rs.Cwd); err != nil {
 			return nil, fmt.Errorf("invalid project.json: verify %q: %w", rs.Name, err)
+		}
+		for i, g := range rs.InputsUntracked {
+			if err := validateExempt(g); err != nil {
+				return nil, fmt.Errorf("invalid project.json: verify %q: inputs_untracked[%d]: %w", rs.Name, i, err)
+			}
 		}
 		cfg.Verify = append(cfg.Verify, spec)
 	}

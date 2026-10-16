@@ -36,6 +36,7 @@ type target struct {
 	session  string
 	agent    string
 	toplevel string
+	origin   model.VerifyOrigin
 }
 
 // jobSpec is the sidecar next to a job file (evidence.Store.SpecPath): what
@@ -53,6 +54,31 @@ type jobSpec struct {
 	ProjectJSONHash string           `json:"project_json_hash"`
 	SessionID       string           `json:"session_id,omitempty"`
 	AgentID         string           `json:"agent_id,omitempty"`
+
+	// P2: who started the job ("" ⇒ cli, sidecars written before P2),
+	// StartRequest's request id and client, and the session's project
+	// directory (HookStartRequest.ProjectDir).
+	Origin     model.VerifyOrigin `json:"origin,omitempty"`
+	RequestID  string             `json:"request_id,omitempty"`
+	Client     model.ClientID     `json:"client,omitempty"`
+	ProjectDir string             `json:"project_dir,omitempty"`
+}
+
+// origin of the job; sidecars without one are origin=cli.
+func (s jobSpec) origin() model.VerifyOrigin {
+	if s.Origin == "" {
+		return model.OriginCLI
+	}
+	return s.Origin
+}
+
+// jobMeta is what createJob needs besides the resolved entry.
+type jobMeta struct {
+	ID         string // "" ⇒ a fresh job id
+	Origin     model.VerifyOrigin
+	RequestID  string
+	Client     model.ClientID
+	ProjectDir string
 }
 
 func timeoutOf(spec model.VerifySpec) time.Duration {
@@ -153,15 +179,26 @@ func argvHash(argv []string) string {
 // createJob supersedes running jobs of the same (repo_inst, name), then
 // writes the sidecar and a running JobStatus for a new job.
 func (o Options) createJob(t *target, spec model.VerifySpec) (*model.JobStatus, error) {
+	return o.createJobWith(t, spec, jobMeta{Origin: model.OriginCLI})
+}
+
+// createJobWith is createJob for a given job id and origin (StartRequest).
+func (o Options) createJobWith(t *target, spec model.VerifySpec, meta jobMeta) (*model.JobStatus, error) {
 	if err := o.supersedeRunning(t.repo.Inst, spec.Name); err != nil {
 		return nil, fmt.Errorf("%w: supersede %s: %w", ErrInfra, spec.Name, err)
 	}
 	now := o.Clock.Now()
+	id := meta.ID
+	if id == "" {
+		id = o.newJobID()
+	}
+	t.origin = meta.Origin
 	js := &model.JobStatus{
-		V: 1, JobID: o.newJobID(), Name: spec.Name, RepoInst: t.repo.Inst,
+		V: 1, JobID: id, Name: spec.Name, RepoInst: t.repo.Inst,
 		State: model.JobRunning, StartedAt: now, Deadline: now.Add(timeoutOf(spec) + evidence.JobDeadlineSlack),
 	}
-	side := jobSpec{V: 1, Toplevel: t.toplevel, Spec: spec, Exempt: t.cfg.Exempt, ProjectJSONHash: t.hash, SessionID: t.session, AgentID: t.agent}
+	side := jobSpec{V: 1, Toplevel: t.toplevel, Spec: spec, Exempt: t.cfg.Exempt, ProjectJSONHash: t.hash, SessionID: t.session, AgentID: t.agent,
+		Origin: meta.Origin, RequestID: meta.RequestID, Client: meta.Client, ProjectDir: meta.ProjectDir}
 	data, err := json.Marshal(&side)
 	if err == nil {
 		err = sys.WriteFileAtomic(o.FS, o.IDs, o.Evidence.SpecPath(js.RepoInst, js.Name, js.JobID), append(data, '\n'), 0o600, false)
@@ -206,6 +243,7 @@ func (o Options) supersedeRunning(repoInst, name string) error {
 			ArgvHash: argvHash(side.Spec.Argv), ProjectJSONHash: side.ProjectJSONHash,
 			BallastVersion: version.Version, Tier: model.TierT0,
 			TStart: js.StartedAt, TEnd: now, Outcome: model.OutcomeSuperseded,
+			Sandbox: string(sandboxNone), Origin: side.origin(), Workspace: workspaceOf(side.origin()),
 			SessionID: side.SessionID, AgentID: side.AgentID,
 			LogPath: o.Evidence.LogPath(js.RepoInst, js.Name, js.JobID),
 		}
@@ -341,6 +379,7 @@ func (o Options) failJob(js *model.JobStatus, t *target, spec model.VerifySpec, 
 		ArgvHash: argvHash(spec.Argv), ProjectJSONHash: t.hash,
 		BallastVersion: version.Version, Tier: model.TierT0,
 		TStart: js.StartedAt, TEnd: now, Outcome: model.OutcomeInfra, Error: cause.Error(),
+		Sandbox: string(sandboxNone), Origin: originOr(t.origin), Workspace: workspaceOf(originOr(t.origin)),
 		SessionID: t.session, AgentID: t.agent,
 		LogPath: o.Evidence.LogPath(js.RepoInst, js.Name, js.JobID),
 	}
@@ -375,3 +414,21 @@ func (o Options) markPID(js *model.JobStatus) error {
 }
 
 func isNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
+
+const sandboxNone = "none"
+
+func originOr(o model.VerifyOrigin) model.VerifyOrigin {
+	if o == "" {
+		return model.OriginCLI
+	}
+	return o
+}
+
+// workspaceOf is VerifyRecord.Workspace for an origin: hook jobs run in a
+// private copy, cli jobs in the work tree.
+func workspaceOf(o model.VerifyOrigin) string {
+	if originOr(o) == model.OriginHook {
+		return model.WorkspaceCopy
+	}
+	return model.WorkspaceWorktree
+}

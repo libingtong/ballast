@@ -1,9 +1,23 @@
 package runner
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"unicode"
 
 	"github.com/libingtong/ballast/internal/model"
+	"github.com/libingtong/ballast/internal/project"
+	"github.com/libingtong/ballast/internal/sandbox"
+	"github.com/libingtong/ballast/internal/snapshot"
 )
 
 // P2 contract v1.5 (docs/p2-design.md §3.4 "job 私有树"): an origin=hook job
@@ -72,6 +86,15 @@ const (
 	// blob read in step 1b (ErrProjectJSONChanged beyond it).
 	MaxIndexBytes       = int64(1) << 30
 	MaxProjectJSONBytes = int64(1) << 20
+)
+
+// The limits above are copied into variables so tests can lower them; the
+// constants stay the frozen values.
+var (
+	maxIndexBytes       = MaxIndexBytes
+	maxProjectJSONBytes = MaxProjectJSONBytes
+	maxInputFiles       = MaxUntrackedInputFiles
+	maxInputBytes       = MaxUntrackedInputBytes
 )
 
 // PinnedEntry (v1.5.2) is what StartRequest resolved from the work tree's
@@ -225,7 +248,408 @@ type Tree struct {
 // On any error Root is removed before returning (CleanupTree semantics: never
 // following symlinks). Not hot path.
 func Materialize(opt Options, repo model.RepoInfo, jobID string, pin PinnedEntry) (Tree, error) {
-	panic("unimplemented: runner.Materialize (unit P2-RUNNER)")
+	opt = opt.withDefaults()
+	var t Tree
+	bad := func(sentinel error, format string, a ...any) (Tree, error) {
+		err := fmt.Errorf("%w: %s", sentinel, fmt.Sprintf(format, a...))
+		if t.Root != "" {
+			_ = removeTreeRoot(opt, t.Root)
+		}
+		return Tree{}, err
+	}
+	if jobID == "" || jobID == "." || jobID == ".." || strings.ContainsAny(jobID, `/\`+"\x00") {
+		return bad(ErrMaterialize, "bad job id %q", jobID)
+	}
+	if opt.Layout.WorkDir == "" {
+		return bad(ErrMaterialize, "layout has no work directory")
+	}
+	filter, err := snapshot.CompileExempt(pin.Exempt)
+	if err != nil {
+		return bad(ErrMaterialize, "exempt: %v", err)
+	}
+	_ = filter
+
+	// Step 0: provenance of the git dirs, before any git child runs.
+	gd, cd, gerr := opt.sbx().ResolveGitDirs(opt.FS, repo.Toplevel)
+	if gerr != nil {
+		return bad(ErrMaterialize, "%v", gerr)
+	}
+	if !sameDir(opt, gd, repo.GitDir) || !sameDir(opt, cd, repo.CommonDir) {
+		return bad(ErrMaterialize, "sandbox_spec_invalid: git dirs of %s differ from the located repository", repo.Toplevel)
+	}
+
+	// The work area is resolved once: Dir must have no symlink on its path
+	// (sandbox.ValidateSpec), and everything below is addressed through it.
+	if err := opt.FS.MkdirAll(opt.Layout.WorkDir, 0o700); err != nil {
+		return bad(ErrMaterialize, "work dir: %v", err)
+	}
+	workDir, err := opt.FS.EvalSymlinks(opt.Layout.WorkDir)
+	if err != nil {
+		return bad(ErrMaterialize, "work dir: %v", err)
+	}
+	root := filepath.Join(workDir, jobID)
+	if _, err := opt.FS.Lstat(root); err == nil {
+		return bad(ErrMaterialize, "%s already exists", root)
+	}
+	if err := opt.FS.MkdirAll(root, 0o700); err != nil {
+		return bad(ErrMaterialize, "create %s: %v", root, err)
+	}
+	t = Tree{Root: root, Dir: filepath.Join(root, "tree")}
+	idx, idxTree := filepath.Join(root, "index"), filepath.Join(root, "index.tree")
+
+	// Step 1: the real index, copied through one fd.
+	if err := copyRealIndex(opt, repo.IndexPath, idx); err != nil {
+		return bad(ErrMaterialize, "%v", err)
+	}
+	git := func(index, workTree, dir string, args ...string) ([]byte, error) {
+		return runGit(opt, repo.GitDir, workTree, index, dir, args...)
+	}
+	if _, err := git(idx, repo.Toplevel, repo.Toplevel, "add", "-u"); err != nil {
+		return bad(ErrMaterialize, "git add -u: %v", err)
+	}
+	full, err := gitWriteTree(git, idx, repo.Toplevel)
+	if err != nil {
+		return bad(ErrMaterialize, "%v", err)
+	}
+	t.Full = full
+	out, err := git(idx, repo.Toplevel, repo.Toplevel, "ls-files", "-s", "-z")
+	if err != nil {
+		return bad(ErrMaterialize, "git ls-files: %v", err)
+	}
+	entries, err := parseIndexEntries(out)
+	if err != nil {
+		return bad(ErrMaterialize, "%v", err)
+	}
+	for _, e := range entries {
+		if e.mode == "160000" {
+			return bad(ErrTreeSubmodule, "gitlink %q", e.path)
+		}
+	}
+	// 1a: path layout pre-check, before any checkout.
+	if err := checkTreeLayout(entries); err != nil {
+		return bad(ErrTreeUnsafePath, "%v", err)
+	}
+	if len(pin.Exempt) > 0 {
+		if _, err := git(idx, repo.Toplevel, repo.Toplevel, rmExemptArgs(pin.Exempt)...); err != nil {
+			return bad(ErrMaterialize, "git rm --cached: %v", err)
+		}
+	}
+	sStart, err := gitWriteTree(git, idx, repo.Toplevel)
+	if err != nil {
+		return bad(ErrMaterialize, "%v", err)
+	}
+	t.SStart = sStart
+
+	// 1b: the command comes from the same read as S_start.
+	if err := checkPinned(opt, git, idx, repo.Toplevel, sStart, pin); err != nil {
+		if errors.Is(err, ErrProjectJSONChanged) || errors.Is(err, ErrProjectJSONUntracked) {
+			_ = removeTreeRoot(opt, t.Root)
+			return Tree{}, err
+		}
+		return bad(ErrMaterialize, "%v", err)
+	}
+
+	// Step 2: checkout of T_full into Dir (no .git).
+	if _, err := git(idxTree, repo.Toplevel, repo.Toplevel, "read-tree", string(full)); err != nil {
+		return bad(ErrMaterialize, "git read-tree: %v", err)
+	}
+	if err := opt.FS.MkdirAll(t.Dir, 0o700); err != nil {
+		return bad(ErrMaterialize, "create %s: %v", t.Dir, err)
+	}
+	if _, err := git(idxTree, repo.Toplevel, repo.Toplevel, "-c", "core.protectHFS=true", "-c", "core.protectNTFS=true",
+		"checkout-index", "-a", "-f", "--prefix="+t.Dir+string(filepath.Separator)); err != nil {
+		return bad(ErrMaterialize, "git checkout-index: %v", err)
+	}
+
+	// Step 3: whitelisted untracked inputs.
+	if len(pin.Spec.InputsUntracked) > 0 {
+		tracked := make(map[string]string, len(entries))
+		for _, e := range entries {
+			tracked[e.path] = e.mode
+		}
+		hash, n, err := copyInputs(opt, repo.Toplevel, t.Dir, tracked, pin.Spec.InputsUntracked)
+		if err != nil {
+			_ = removeTreeRoot(opt, t.Root)
+			return Tree{}, err
+		}
+		t.InputsHash, t.Inputs = hash, n
+	}
+	return t, nil
+}
+
+// gitFn runs git with explicit GIT_INDEX_FILE / GIT_WORK_TREE in dir.
+type gitFn func(index, workTree, dir string, args ...string) ([]byte, error)
+
+// runGit runs one git child outside the sandbox: environment filtered by
+// sandbox.HostEnv, GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE explicit, and
+// -c core.fsmonitor=false (docs/p2-design.md §3.4).
+func runGit(opt Options, gitDir, workTree, index, dir string, args ...string) ([]byte, error) {
+	env := append(sandbox.HostEnv(opt.Env.Environ()),
+		"GIT_DIR="+gitDir, "GIT_WORK_TREE="+workTree, "GIT_INDEX_FILE="+index, "GIT_OPTIONAL_LOCKS=0")
+	full := append([]string{"-c", "core.fsmonitor=false"}, args...)
+	return opt.gitRunner().Run(gitCtx(), dir, env, full...)
+}
+
+func rmExemptArgs(exempt []string) []string {
+	args := []string{"rm", "--cached", "-r", "-q", "-f", "--ignore-unmatch", "--"}
+	for _, g := range exempt {
+		args = append(args, ":(glob)"+g)
+	}
+	return args
+}
+
+func gitWriteTree(git gitFn, index, top string) (model.TreeID, error) {
+	out, err := git(index, top, top, "write-tree")
+	if err != nil {
+		return "", fmt.Errorf("git write-tree: %w", err)
+	}
+	id := strings.TrimSpace(string(out))
+	if !isHexID(id) {
+		return "", fmt.Errorf("git write-tree printed %q", id)
+	}
+	return model.TreeID(id), nil
+}
+
+func isHexID(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// sameDir compares two directory paths the way the located repository and
+// ResolveGitDirs may differ in form (symlinks resolved or not).
+func sameDir(opt Options, a, b string) bool {
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	ra, ea := opt.FS.EvalSymlinks(a)
+	rb, eb := opt.FS.EvalSymlinks(b)
+	return ea == nil && eb == nil && ra == rb
+}
+
+// copyRealIndex copies the agent-writable real index to dst through ONE fd:
+// O_RDONLY|O_NOFOLLOW|O_NONBLOCK, fstat must be a regular file of at most
+// maxIndexBytes, at most maxIndexBytes+1 bytes are read from that fd. A
+// missing index is an empty one (the snapshot fallback's semantics); the
+// copy keeps the original mtime (git's racy-timestamp logic needs it).
+func copyRealIndex(opt Options, src, dst string) error {
+	f, err := opt.FS.OpenFile(src, os.O_RDONLY|openFlagsSource, 0)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("open index: %w", err)
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat index: %w", err)
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("index is not a regular file (%s)", fi.Mode().Type())
+	}
+	if fi.Size() > maxIndexBytes {
+		return fmt.Errorf("index is %d bytes, more than %d", fi.Size(), maxIndexBytes)
+	}
+	out, err := opt.FS.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("create index copy: %w", err)
+	}
+	n, cerr := io.Copy(out, io.LimitReader(f, maxIndexBytes+1))
+	if err := out.Close(); cerr == nil {
+		cerr = err
+	}
+	if cerr != nil {
+		return fmt.Errorf("copy index: %w", cerr)
+	}
+	if n > maxIndexBytes {
+		return fmt.Errorf("index grew beyond %d bytes while it was read", maxIndexBytes)
+	}
+	_ = os.Chtimes(dst, fi.ModTime(), fi.ModTime())
+	return nil
+}
+
+// indexEntry is one `git ls-files -s -z` record.
+type indexEntry struct {
+	mode string
+	path string
+}
+
+func parseIndexEntries(out []byte) ([]indexEntry, error) {
+	var entries []indexEntry
+	for len(out) > 0 {
+		rec := out
+		if i := bytes.IndexByte(out, 0); i >= 0 {
+			rec, out = out[:i], out[i+1:]
+		} else {
+			out = nil
+		}
+		if len(rec) == 0 {
+			continue
+		}
+		meta, p, ok := bytes.Cut(rec, []byte{'\t'})
+		fields := strings.Fields(string(meta))
+		if !ok || len(fields) != 3 {
+			return nil, fmt.Errorf("unexpected ls-files record %q", rec)
+		}
+		entries = append(entries, indexEntry{mode: fields[0], path: string(p)})
+	}
+	return entries, nil
+}
+
+// foldKey maps a path to a representative that is equal for exactly the
+// strings strings.EqualFold treats as equal (smallest rune of each simple
+// folding orbit).
+func foldKey(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		m := r
+		for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
+			if f < m {
+				m = f
+			}
+		}
+		b.WriteRune(m)
+	}
+	return b.String()
+}
+
+// checkTreeLayout is the pure step 1a pre-check (see Materialize): (i) a
+// symlink entry that is, under EqualFold, a proper prefix of another entry's
+// path; (ii) a path component that is empty, ".", ".." or equals ".git"
+// under EqualFold.
+func checkTreeLayout(entries []indexEntry) error {
+	dirs := map[string]bool{} // fold keys of every proper directory prefix
+	for _, e := range entries {
+		parts := strings.Split(e.path, "/")
+		for _, c := range parts {
+			if c == "" || c == "." || c == ".." || strings.EqualFold(c, ".git") {
+				return fmt.Errorf("path %q has the component %q", e.path, c)
+			}
+		}
+		for i := 1; i < len(parts); i++ {
+			dirs[foldKey(strings.Join(parts[:i], "/"))] = true
+		}
+	}
+	for _, e := range entries {
+		if e.mode == "120000" && dirs[foldKey(e.path)] {
+			return fmt.Errorf("symlink %q is a path prefix of another entry", e.path)
+		}
+	}
+	return nil
+}
+
+// checkPinned is step 1b: the project.json blob of S_start must be the file
+// StartRequest pinned.
+func checkPinned(opt Options, git gitFn, index, top string, sStart model.TreeID, pin PinnedEntry) error {
+	rel := filepath.ToSlash(filepath.Join(".ballast", "project.json"))
+	out, err := git(index, top, top, "ls-tree", "-z", string(sStart), "--", rel)
+	if err != nil {
+		return fmt.Errorf("git ls-tree: %w", err)
+	}
+	rec := strings.TrimRight(string(out), "\x00")
+	meta, p, ok := strings.Cut(rec, "\t")
+	fields := strings.Fields(meta)
+	if !ok || p != rel || len(fields) != 3 || fields[1] != "blob" || (fields[0] != "100644" && fields[0] != "100755") {
+		return fmt.Errorf("%w: %s is not a regular file of the start tree", ErrProjectJSONUntracked, rel)
+	}
+	blob := fields[2]
+	sz, err := git(index, top, top, "cat-file", "-s", blob)
+	if err != nil {
+		return fmt.Errorf("git cat-file -s: %w", err)
+	}
+	var n int64
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(sz)), "%d", &n); err != nil {
+		return fmt.Errorf("git cat-file -s printed %q", sz)
+	}
+	if n > maxProjectJSONBytes {
+		return fmt.Errorf("%w: %s is %d bytes", ErrProjectJSONChanged, rel, n)
+	}
+	data, err := git(index, top, top, "cat-file", "blob", blob)
+	if err != nil {
+		return fmt.Errorf("git cat-file: %w", err)
+	}
+	if got := project.Hash(data); got != pin.ProjectJSONHash {
+		return fmt.Errorf("%w: sha256 of %s in the start tree is %s, the job pinned %s", ErrProjectJSONChanged, rel, short(got), short(pin.ProjectJSONHash))
+	}
+	cfg, err := project.Decode(data)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrProjectJSONChanged, err)
+	}
+	var entry *model.VerifySpec
+	for i := range cfg.Verify {
+		if cfg.Verify[i].Name == pin.Spec.Name {
+			entry = &cfg.Verify[i]
+			break
+		}
+	}
+	if entry == nil {
+		return fmt.Errorf("%w: no entry %q in the start tree's %s", ErrProjectJSONChanged, pin.Spec.Name, rel)
+	}
+	if !jsonEqual(*entry, pin.Spec) {
+		return fmt.Errorf("%w: entry %q differs from the pinned one", ErrProjectJSONChanged, pin.Spec.Name)
+	}
+	if !jsonEqual(nonNil(cfg.Exempt), nonNil(pin.Exempt)) {
+		return fmt.Errorf("%w: exempt list differs from the pinned one", ErrProjectJSONChanged)
+	}
+	return nil
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+func jsonEqual(a, b any) bool {
+	ja, ea := json.Marshal(a)
+	jb, eb := json.Marshal(b)
+	return ea == nil && eb == nil && bytes.Equal(ja, jb)
+}
+
+func short(h string) string {
+	if len(h) > 12 {
+		return h[:12]
+	}
+	return h
+}
+
+// hashLines is the digest of VerifyRecord.InputsHash: sha256 over the lines
+// "<mode> <sha256> <path>\n" sorted by path.
+func hashLines(lines []inputLine) string {
+	sortInputLines(lines)
+	h := sha256.New()
+	for _, l := range lines {
+		fmt.Fprintf(h, "%s %s %s\n", l.mode, l.sum, l.path)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// removeTreeRoot removes root without following symlinks; directories the
+// test made unreadable or read-only are opened up first when the plain
+// removal fails.
+func removeTreeRoot(opt Options, root string) error {
+	if root == "" || root == "." || root == string(filepath.Separator) {
+		return fmt.Errorf("refusing to remove %q", root)
+	}
+	if err := opt.FS.RemoveAll(root); err == nil {
+		return nil
+	}
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if d != nil && d.IsDir() && d.Type()&fs.ModeSymlink == 0 {
+			_ = os.Chmod(p, 0o700)
+		}
+		return nil
+	})
+	return opt.FS.RemoveAll(root)
 }
 
 // TreeSEnd recomputes S on the copy after the run: with GIT_INDEX_FILE =
@@ -239,7 +663,23 @@ func Materialize(opt Options, repo model.RepoInfo, jobID string, pin PinnedEntry
 // already gone) → sandbox.PostCheck → sandbox.Quarantine (when found) →
 // TreeSEnd → record written with fsync → audit → CleanupTree.
 func TreeSEnd(opt Options, repo model.RepoInfo, t Tree, exempt []string) (model.TreeID, error) {
-	panic("unimplemented: runner.TreeSEnd (unit P2-RUNNER)")
+	opt = opt.withDefaults()
+	if t.Dir == "" || t.Root == "" {
+		return "", fmt.Errorf("%w: tree is not materialized", ErrMaterialize)
+	}
+	idx := filepath.Join(t.Root, "index.tree")
+	git := func(index, workTree, dir string, args ...string) ([]byte, error) {
+		return runGit(opt, repo.GitDir, workTree, index, dir, args...)
+	}
+	if _, err := git(idx, t.Dir, t.Dir, "add", "-u"); err != nil {
+		return "", fmt.Errorf("git add -u (end): %w", err)
+	}
+	if len(exempt) > 0 {
+		if _, err := git(idx, t.Dir, t.Dir, rmExemptArgs(exempt)...); err != nil {
+			return "", fmt.Errorf("git rm --cached (end): %w", err)
+		}
+	}
+	return gitWriteTree(git, idx, t.Dir)
 }
 
 // CleanupTree removes t.Root (RemoveAll, never following symlinks). A
@@ -247,5 +687,9 @@ func TreeSEnd(opt Options, repo model.RepoInfo, t Tree, exempt []string) (model.
 // <WorkDir>/<job_id> directories whose job is no longer running and that are
 // older than 24 hours (runner.GCRequests, §8 E2).
 func CleanupTree(opt Options, t Tree) error {
-	panic("unimplemented: runner.CleanupTree (unit P2-RUNNER)")
+	if t.Root == "" {
+		return nil
+	}
+	opt = opt.withDefaults()
+	return removeTreeRoot(opt, t.Root)
 }

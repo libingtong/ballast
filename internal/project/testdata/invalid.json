@@ -40,6 +40,13 @@
     {"id": "exempt-absolute", "why": "exempt globs are repo-relative", "json": "{\"verify\":[],\"exempt\":[\"/etc/**\"]}"},
     {"id": "exempt-dotdot", "why": "exempt globs stay inside the repo", "json": "{\"verify\":[],\"exempt\":[\"../x/**\"]}"},
     {"id": "exempt-bad-bracket", "why": "exempt globs valid doublestar", "json": "{\"verify\":[],\"exempt\":[\"[a\"]}"},
-    {"id": "exempt-bad-brace", "why": "exempt globs valid doublestar", "json": "{\"verify\":[],\"exempt\":[\"{a,b\"]}"}
+    {"id": "exempt-bad-brace", "why": "exempt globs valid doublestar", "json": "{\"verify\":[],\"exempt\":[\"{a,b\"]}"},
+    {"id": "inputs-untracked-not-array", "why": "inputs_untracked is an array", "json": "{\"verify\":[{\"name\":\"t\",\"argv\":[\"x\"],\"inputs_untracked\":\"node_modules/**\"}]}"},
+    {"id": "inputs-untracked-empty-glob", "why": "inputs_untracked globs valid", "json": "{\"verify\":[{\"name\":\"t\",\"argv\":[\"x\"],\"inputs_untracked\":[\"\"]}]}"},
+    {"id": "inputs-untracked-absolute", "why": "inputs_untracked globs are repo-relative", "json": "{\"verify\":[{\"name\":\"t\",\"argv\":[\"x\"],\"inputs_untracked\":[\"/etc/**\"]}]}"},
+    {"id": "inputs-untracked-dotdot", "why": "inputs_untracked globs stay inside the repo", "json": "{\"verify\":[{\"name\":\"t\",\"argv\":[\"x\"],\"inputs_untracked\":[\"../x/**\"]}]}"},
+    {"id": "inputs-untracked-bad-bracket", "why": "inputs_untracked globs valid doublestar", "json": "{\"verify\":[{\"name\":\"t\",\"argv\":[\"x\"],\"inputs_untracked\":[\"[a\"]}]}"},
+    {"id": "inputs-untracked-not-strings", "why": "inputs_untracked is a string array", "json": "{\"verify\":[{\"name\":\"t\",\"argv\":[\"x\"],\"inputs_untracked\":[1]}]}"},
+    {"id": "inputs-untracked-nul", "why": "inputs_untracked globs have no NUL", "json": "{\"verify\":[{\"name\":\"t\",\"argv\":[\"x\"],\"inputs_untracked\":[\"a\\u0000b\"]}]}"}
   ]
 }
