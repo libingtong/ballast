@@ -676,3 +676,12 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - **覆盖判定冻结为精确字符串包含**(`tier.ManagedForms` + 共享 golden),`org render` 与 `Detect` 不会各自实现出分歧。
 - **M0b 无凭据用例 14 个、需凭据 5 个**:`hooks-run-outside-sandbox`(A20)改为无凭据实测;它若失败,P2-RUNNER 与 P2-HOOK 暂停,走契约变更。
 - 单元划分不变(仍是 13 个),所有权补齐:`internal/dsl/lint.go` 归 P2-HERMES(只追加),`internal/layout/resolvewith.go` 归 P2-TIER,`verify --status` 回退归 P2-RUNNER,`.github/workflows/**` 等三平台 CI 修复分支合入后再由 P2-CLI 修改。
+
+### 6. v0.5.2 修订(2026-10-16,P2 设计第 2 轮独立审核)
+
+设计文档升至 v1.2、架构升至 v2.0.2,逐条处置见 `docs/p2-design.md` §13。计划层面的变化:
+
+- **已锁定主机的家目录**(major):passwd 查询冻结为 `sys.LookupHome`(darwin、linux 都用 `user.LookupId`,禁止会退回 `$HOME` 的 `user.Current`),归 P2-TIER;Linux 静态构建查不到 sssd/LDAP 用户时,只按 org.json 中 root 所有的 `home_root` 规则采信 `$HOME`。doctor `tier.locked_home`、`org render --home-root` 与 `--write` 预检、`boundary-t1.sh` 的 `t1-passwd-missing` 把这种失败变成可见的;bench 新增场景 `13` 覆盖查询本身。部署指南把 `home_root` 列为企业机群的默认步骤。
+- **`hook.Deps.RedirectsIgnored`** 冻结:CLI 填值,hook 在会话首个事件审计一次。
+- **`runner_allow_write` 是残余风险**,默认空;runner 把常见缓存变量指向每个 job 的临时目录(`sandbox.CacheEnv`)。
+- 单元划分不变(仍是 13 个);P2-TIER 增加 `internal/sys/passwd*.go`。

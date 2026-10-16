@@ -175,11 +175,36 @@ type Wrapped struct {
 	Argv []string
 	// Env are environment changes for the child: "K=V" sets K, a bare "K"
 	// (no '=') unsets it. Always sets TMPDIR; with network deny it unsets
-	// SSH_AUTH_SOCK and DOCKER_HOST.
+	// SSH_AUTH_SOCK and DOCKER_HOST; always includes CacheEnv(...).
 	Env []string
 	// MissingProtected are protected paths inside W that did not exist at
 	// wrap time and are only post-checked (linux).
 	MissingProtected []string
+}
+
+// CacheVars are the build-cache variables CacheEnv redirects, in order.
+// Append-only (P2-SANDBOX may add entries, never remove).
+var CacheVars = []string{
+	"GOCACHE",           // <TmpDir>/cache/go-build
+	"XDG_CACHE_HOME",    // <TmpDir>/cache/xdg
+	"npm_config_cache",  // <TmpDir>/cache/npm
+	"YARN_CACHE_FOLDER", // <TmpDir>/cache/yarn
+	"PIP_CACHE_DIR",     // <TmpDir>/cache/pip
+}
+
+// CacheEnv returns the "K=V" settings that point every CacheVars entry at
+// a subdirectory of tmpDir (the per-job temp dir; on linux the child's
+// private /tmp), so a sandboxed test never needs a writable shared cache
+// in the home directory. A variable is left alone only when its current
+// value (cur(K), the runner's own environment) is an absolute path inside
+// one of allowWrite — i.e. the administrator deliberately listed that
+// cache in runner_allow_write and accepted the residual risk
+// (docs/trust-model.md §2.3). Wrap appends the result to Wrapped.Env.
+// GOMODCACHE is not redirected: with the default network deny the module
+// cache is only read (ro-bind) 【未核验:go 在只读 GOMODCACHE 下的行为,
+// P2-SANDBOX 集成测试确认】.
+func CacheEnv(tmpDir string, allowWrite []string, cur func(key string) string) []string {
+	panic("unimplemented: sandbox.CacheEnv (unit P2-SANDBOX)")
 }
 
 // Options configures probing.

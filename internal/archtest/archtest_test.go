@@ -300,3 +300,42 @@ func TestNoHeavyPackageInit(t *testing.T) {
 		}
 	}
 }
+
+// TestOSUserConfined (P2, docs/p2-design.md §3.2 "重定向锁 · 家目录"):
+// os/user may be imported only by internal/sys/passwd*.go, and
+// user.Current is forbidden everywhere — in pure-Go mode it falls back to
+// $HOME/$USER when the passwd lookup fails, which would silently undo the
+// redirect lock. sys.LookupHome uses user.LookupId instead.
+func TestOSUserConfined(t *testing.T) {
+	root := repoRoot(t)
+	fset := token.NewFileSet()
+	for _, rel := range binaryGoFiles(t, root) {
+		f, err := parser.ParseFile(fset, filepath.Join(root, filepath.FromSlash(rel)), nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		userName := ""
+		for _, imp := range f.Imports {
+			if p, _ := strconv.Unquote(imp.Path.Value); p == "os/user" {
+				userName = "user"
+				if imp.Name != nil {
+					userName = imp.Name.Name
+				}
+				if !strings.HasPrefix(rel, "internal/sys/passwd") {
+					t.Errorf("%s imports os/user; only internal/sys/passwd*.go may (use sys.LookupHome)", rel)
+				}
+			}
+		}
+		if userName == "" {
+			continue
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if sel, ok := n.(*ast.SelectorExpr); ok {
+				if id, ok := sel.X.(*ast.Ident); ok && id.Name == userName && sel.Sel.Name == "Current" {
+					t.Errorf("%s:%d user.Current is forbidden (falls back to $HOME); use user.LookupId", rel, fset.Position(sel.Pos()).Line)
+				}
+			}
+			return true
+		})
+	}
+}

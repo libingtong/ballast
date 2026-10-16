@@ -102,7 +102,9 @@ type Options struct {
 //     level below "/home" or "/Users" (someone's home directory), nor any
 //     path under the protected org dir. The runner re-checks every
 //     expanded entry against the real home directory at wrap time
-//     (sandbox.ValidateSpec).
+//     (sandbox.ValidateSpec);
+//   - every HomeRoot entry is an absolute, Clean path other than "/"
+//     with no "~" and no glob characters.
 type OrgConfig struct {
 	V    int        `json:"v"` // 1
 	Tier model.Tier `json:"tier,omitempty"`
@@ -116,9 +118,21 @@ type OrgConfig struct {
 	// only).
 	RunnerNetwork model.NetworkPolicy `json:"runner_network,omitempty"`
 	// RunnerAllowWrite are extra writable locations for the sandboxed
-	// test command (build caches such as "~/.cache/go-build"), on top of
-	// the repo, its git dirs and the per-job temp dir.
+	// test command, on top of the repo, its git dirs and the per-job temp
+	// dir. RESIDUAL RISK (docs/trust-model.md §2.3, p2-design §11): every
+	// entry is handed to code the agent can rewrite, and anything written
+	// there outlives the job and lies outside the content snapshot C — a
+	// shared build cache listed here can be poisoned for later builds run
+	// outside the sandbox. The recommended default is an empty list: the
+	// runner already points GOCACHE, XDG_CACHE_HOME and the npm/yarn/pip
+	// caches at the per-job temp dir (sandbox.CacheEnv).
 	RunnerAllowWrite []string `json:"runner_allow_write,omitempty"`
+	// HomeRoot (optional) lists root-owned parent directories of user
+	// homes, e.g. "/home" or "/home/corp.example". It is consulted ONLY on
+	// a locked host and ONLY when the passwd database has no entry for the
+	// effective uid (sys.ErrNoPasswdEntry — sssd/LDAP users on a static
+	// linux build); see LockedHome for the exact acceptance rule.
+	HomeRoot []string `json:"home_root,omitempty"`
 	// ProtectedExtra are extra protected paths ("~/" allowed), appended to
 	// ProtectedPaths / ManagedForms for denyWrite, permissions.deny and the
 	// runner sandbox.
@@ -160,13 +174,72 @@ func LoadOrgConfig(fsys sys.FS, path string) (OrgConfig, error) {
 // layout and passes the result as layout.Options.IgnoreRedirects, so on a
 // locked host BALLAST_HOME / BALLAST_MANAGED_DIR / BALLAST_INSTALL_ROOT
 // are ignored and the home directory comes from the passwd database
-// instead of $HOME (docs/p2-design.md §3.2 "重定向锁"). The hook audits
-// diag "env_redirect_ignored" once per session when a variable was
-// present; doctor reports it as warn. Tests that need redirection never
+// (LockedHome) instead of $HOME (docs/p2-design.md §3.2 "重定向锁"). The
+// CLI fills hook.Deps.RedirectsIgnored with the variables that were set
+// and ignored; the hook audits diag "env_redirect_ignored" on the first
+// event of each session; doctor reports it as warn. Tests that need redirection never
 // create a root-owned org.json at the real managed dir, so they are
 // unaffected; tests of the lock itself use a fake FS and Owner.
 func Locked(fsys sys.FS, goos string, owner func(fi fs.FileInfo) (uid uint32, ok bool)) bool {
 	panic("unimplemented: tier.Locked (unit P2-TIER)")
+}
+
+// LockState is Locked that also returns the validated org.json it read
+// (zero value when not locked), so the CLI can pass OrgConfig.HomeRoot to
+// LockedHome without reading org.json twice. Locked(...) ==
+// second result of LockState(...).
+func LockState(fsys sys.FS, goos string, owner func(fi fs.FileInfo) (uid uint32, ok bool)) (OrgConfig, bool) {
+	panic("unimplemented: tier.LockState (unit P2-TIER)")
+}
+
+// Home sources reported by LockedHome (doctor prints them).
+const (
+	HomeFromPasswd   = "passwd"
+	HomeFromHomeRoot = "home_root"
+)
+
+// HomeOptions configures LockedHome.
+type HomeOptions struct {
+	FS  sys.FS
+	Env sys.Env // only Env.HomeDir ($HOME) is read, and only for the home_root rule
+	// Owner as in Options.Owner.
+	Owner func(fi fs.FileInfo) (uid uint32, ok bool)
+	// Euid is the effective uid (production: sys.Euid()).
+	Euid int
+	// Lookup is the passwd lookup; nil ⇒ sys.LookupHome.
+	Lookup func(uid int) (string, error)
+	// HomeRoot is OrgConfig.HomeRoot of the locked host.
+	HomeRoot []string
+}
+
+// LockedHome resolves <home> on a locked host. Production wiring
+// (internal/cli) passes it, closed over HomeOptions, as
+// layout.Options.PasswdHome. Frozen rule (docs/p2-design.md §3.2):
+//
+//  1. h, err := Lookup(Euid). err == nil ⇒ (h, HomeFromPasswd, nil).
+//     $HOME is not consulted even when it differs.
+//  2. err is not sys.ErrNoPasswdEntry, or HomeRoot is empty ⇒ error
+//     (layout resolution fails; the hook fails open per B7 with no side
+//     effects; doctor check tier.locked_home reports fail with the fix
+//     hints of §3.5).
+//  3. Otherwise $HOME (Env.HomeDir) is accepted iff ALL of (a)–(d) hold.
+//     (a) It is absolute and filepath.Clean($HOME) == $HOME. (b)
+//     filepath.Dir($HOME) is exactly one HomeRoot entry (direct child
+//     only; nested layouts list the deeper parent, e.g.
+//     "/home/corp.example"). (c) That entry and every ancestor up to "/"
+//     are directories (Lstat, no symlinks) owned by uid 0 and not
+//     group/other-writable, so only root can create or rename its
+//     children. (d) $HOME itself (Lstat) is a directory, not a symlink,
+//     owned by Euid, and not group/other-writable.
+//     Then ($HOME, HomeFromHomeRoot, nil); else an error naming the first
+//     failed clause.
+//
+// Cost: one passwd lookup, plus (rule 3 only) ≤ depth+1 Lstat calls.
+// BenchmarkLockedHome covers both paths with the real sys.LookupHome for
+// the current user (results discarded); the cold per-process cost is
+// covered by bench scenario 13 (§3.6).
+func LockedHome(opt HomeOptions) (home, source string, err error) {
+	panic("unimplemented: tier.LockedHome (unit P2-TIER)")
 }
 
 // ManagedForms returns the exact denyWrite and permissions.deny strings

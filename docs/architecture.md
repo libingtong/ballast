@@ -119,7 +119,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 
 ## 3. 磁盘布局与文件格式
 
-### 3.1 `~/.ballast/`(`BALLAST_HOME` 可重定向,仅供测试;Windows 为 `%USERPROFILE%\.ballast`。v2.0.1:在声明 T1 的已锁定主机上,生产构建忽略 `BALLAST_HOME`、`BALLAST_INSTALL_ROOT`、`BALLAST_MANAGED_DIR`,家目录取自 passwd,见 `docs/p2-design.md` §3.2)
+### 3.1 `~/.ballast/`(`BALLAST_HOME` 可重定向,仅供测试;Windows 为 `%USERPROFILE%\.ballast`。v2.0.1:在声明 T1 的已锁定主机上,生产构建忽略 `BALLAST_HOME`、`BALLAST_INSTALL_ROOT`、`BALLAST_MANAGED_DIR`,家目录取自 passwd(查不到时只按 org.json `home_root` 规则,`tier.LockedHome`),见 `docs/p2-design.md` §3.2)
 
 | 路径 | 所有者 | 格式 | 写入方式 |
 |---|---|---|---|
@@ -535,6 +535,19 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 ---
 
 ## 14. 修订记录
+
+### v2.0.2(2026-10-16,P2 设计第 2 轮独立审核修订)
+
+配套 `docs/p2-design.md` v1.2(其 §13 有逐条处置)。仍然全部是**追加**或对 v2.0 新增骨架的修改。
+
+| 项 | 处理 | 涉及文件 |
+|---|---|---|
+| 已锁定主机的家目录来源(major) | 新增 `sys.LookupHome(uid)`、`sys.Euid()`、`sys.ErrNoPasswdEntry`、`sys.ErrPasswdUnsupported`(darwin/linux 用 `os/user.LookupId`,禁止 `user.Current`);`tier.LockState`、`tier.LockedHome`/`HomeOptions`/`HomeFromPasswd`/`HomeFromHomeRoot`;`tier.OrgConfig.HomeRoot`(org.json `home_root`,只在 passwd 查不到时生效);`layout.Options.PasswdHome` 注释改为由 CLI 注入 `LockedHome` 闭包;实现全部归 P2-TIER,接线归 P2-CLI,doctor `tier.locked_home` 与 `org render --home-root`/`--write` 预检归 P2-INSTALL | `internal/sys/passwd*.go`、`internal/tier/tier.go`、`internal/layout/resolvewith.go` |
+| 被忽略的重定向变量传给 hook | `hook.Deps.RedirectsIgnored []string`(CLI 填值,hook 在会话首个事件审计 `env_redirect_ignored`,只记变量名) | `internal/hook/hook.go` |
+| runner 缓存与 `runner_allow_write` | `sandbox.CacheVars`/`sandbox.CacheEnv`:runner 把常见缓存变量指向 job 临时目录;`runner_allow_write` 登记为残余风险(trust-model §2.3),默认空 | `internal/sandbox/sandbox.go`、`internal/tier/tier.go`、`docs/trust-model.md` |
+| archtest | 新增 `TestOSUserConfined`:`os/user` 只能由 `internal/sys/passwd*.go` import,任何地方不得调用 `user.Current` | `internal/archtest/archtest_test.go` |
+
+骨架状态下 `go build ./...`、`go vet ./...`、`GOOS=windows go vet ./...`、`go test ./...` 均通过。
 
 ### v2.0.1(2026-10-16,P2 设计第 1 轮独立审核修订)
 

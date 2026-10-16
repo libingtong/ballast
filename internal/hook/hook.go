@@ -96,8 +96,19 @@ type Deps struct {
 	// Tier (P2, architecture v2.0) is consulted only for a canonical
 	// `ballast verify` PreToolUse (model.ParseVerifyRequest). nil ⇒ T0:
 	// the command is evaluated like any other. See docs/p2-design.md §3.3.
-	Tier   ports.TierProbe
-	Faults FaultInjector
+	Tier ports.TierProbe
+	// RedirectsIgnored (P2, docs/p2-design.md §3.2) lists, in the fixed
+	// order BALLAST_HOME, BALLAST_MANAGED_DIR, BALLAST_INSTALL_ROOT, the
+	// redirect variables that were set (non-empty) but ignored because the
+	// host is redirect-locked. Filled by internal/cli from tier.LockState
+	// and the real environment; nil ⇒ nothing ignored (unlocked host, or no
+	// variable set). When non-nil the hook writes one audit line
+	// {type:"diag", diag:"env_redirect_ignored", detail:{vars:[names]}}
+	// (names only, never values) on the first event of a session, i.e. when
+	// State.StartedAt() reports false for the scope; concurrent first
+	// events may each write one (acceptable). No other behaviour changes.
+	RedirectsIgnored []string
+	Faults           FaultInjector
 	// Self is the absolute path of the running binary (for detached children).
 	Self string
 	// Watchdog defaults to DefaultWatchdog when zero.

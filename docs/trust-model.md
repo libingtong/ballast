@@ -69,12 +69,13 @@ T1 完全依赖客户端的**托管设置**机制。设计中的组成如下(全
 - 托管值不能被低层覆盖,但"少数安全键例外:低层更严的值仍生效"(**未核验,待 M0b**)。
 - ConfigChange 事件只覆盖 Claude 设置与 skills,**不会**监视任意 Ballast 文件,部分托管刷新也不触发它(文档依据)。
 - 磁盘写满会使 hook 按"任何异常都放行"的设计失效强制。
+- **`runner_allow_write`(P2 设计)**:org.json 中的每一项都等价于把该目录交给 agent 可以改写的测试代码。hook 代起的沙箱测试可以写它,写入在 job 结束后仍然存在,而且不在内容快照 `C` 里;如果它是共享的构建缓存(例如家目录下的 Go 构建缓存),之后在沙箱外运行的人工构建会复用被投毒的条目,形成一条跨越边界、能持久存在的通道。默认建议保持为空:runner 会把常见缓存变量(`GOCACHE`、`XDG_CACHE_HOME`、npm/yarn/pip 缓存)指向每个 job 的临时目录;确需持久缓存时优先用仓库内被忽略的目录,并把这一项当作残余风险评估。
 
 ### 2.4 T1 设计中的两条特权链路(P2 设计,`docs/p2-design.md` §3)
 
 以下是 P2 设计冻结的防御,**当前版本尚未实现**:
 
-- **降级攻击**:agent 不需要伪造 T1,只要把 `BALLAST_HOME`、`BALLAST_MANAGED_DIR`、`BALLAST_INSTALL_ROOT` 塞进 Claude Code 进程的环境(例如先设法改写 shell 启动文件),判定就会落到 T0,org 规则和 `no-tamper` 也会改从 agent 可控的目录读取——"降到 T0"本身就是攻击目标,不是防御。P2 的对策是**重定向锁**:只要编译期默认托管目录下存在 root 所有、声明 `tier:"T1"` 的 `org.json`,生产构建就忽略这三个变量,家目录取自 passwd 而不是 `$HOME`,并审计 `env_redirect_ignored`。
+- **降级攻击**:agent 不需要伪造 T1,只要把 `BALLAST_HOME`、`BALLAST_MANAGED_DIR`、`BALLAST_INSTALL_ROOT` 塞进 Claude Code 进程的环境(例如先设法改写 shell 启动文件),判定就会落到 T0,org 规则和 `no-tamper` 也会改从 agent 可控的目录读取——"降到 T0"本身就是攻击目标,不是防御。P2 的对策是**重定向锁**:只要编译期默认托管目录下存在 root 所有、声明 `tier:"T1"` 的 `org.json`,生产构建就忽略这三个变量,家目录取自 passwd 而不是 `$HOME`,并审计 `env_redirect_ignored`。企业机群里 passwd 可能查不到 sssd/LDAP 用户(静态构建只读 `/etc/passwd`):此时只在 org.json 配置了 root 所有的 `home_root` 父目录、且 `$HOME` 是其下属于该用户、组和其他不可写的直接子目录时才采信;否则该用户的 hook 放行,`ballast doctor` 报 fail 并给出修复提示,`org render --write` 在预检失败时拒绝写入。
 - **hook 代起的 verify**:hook 在 Claude 沙箱之外启动 runner,runner 执行的测试代码是 agent 可以改写的。如果 runner 的沙箱弱于 Claude 自己的 Bash 沙箱,这条链路就是一个沙箱逃逸原语(写 shell 启动文件、git hooks、`~/.claude.json`,重命名受保护路径的祖先目录再重建,联网外传)。P2 的对策:runner 沙箱**默认拒写**(只放行仓库、git dir、job 临时目录与管理员给出的 `runner_allow_write`,其中仍拒受保护路径、git hooks/config 等,并固定这些路径的祖先目录),网络默认拒绝;hook 代起的 job **一律**必须在沙箱里运行,沙箱不可用就不执行。
 - 残余风险:Linux 上自定义位置的 unix socket(例如家目录下的 docker.sock)仍可从沙箱内连接;macOS 上经 LaunchServices、AppleEvents、launchd 的逃逸通道能否全部关闭待 P2 实测。
 
