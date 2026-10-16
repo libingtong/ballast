@@ -107,23 +107,7 @@ type VerifyAgg struct {
 
 // LatencyAgg is a fixed-bucket histogram of hook latency_us.
 type LatencyAgg struct {
-	BucketsMS []float64 `json:"buckets_ms"` // upper bounds: 1,2,5,10,20,30,50,100,+Inf
+	BucketsMS []float64 `json:"buckets_ms"` // finite upper bounds: 1,2,5,10,20,30,50,100; Counts has one more entry (overflow, +Inf is not JSON)
 	Counts    []int     `json:"counts"`
 	P95MS     float64   `json:"p95_ms"`
-}
-
-// Build aggregates the audit log.
-func Build(opt Options) (*Report, error) {
-	panic("unimplemented: report.Build (unit P2-REPORT)")
-}
-
-// Validate returns privacy violations (empty ⇒ OK).
-func Validate(r *Report) []string {
-	panic("unimplemented: report.Validate (unit P2-REPORT)")
-}
-
-// Write validates r and writes it atomically (0600) to path; it refuses to
-// overwrite an existing file unless force is true.
-func Write(fsys sys.FS, path string, r *Report, force bool) error {
-	panic("unimplemented: report.Write (unit P2-REPORT)")
 }

@@ -1,0 +1,153 @@
+{
+  "v": 1,
+  "generated_at": "2026-10-16T09:00:00Z",
+  "window_start": "2026-10-01T00:00:00Z",
+  "window_end": "2026-10-16T00:00:00Z",
+  "ballast_version": "2.0.0-golden",
+  "goos": "linux",
+  "sessions": 4,
+  "repos": 2,
+  "clients": {
+    "claude-code": 5,
+    "codex": 3,
+    "cursor": 1,
+    "other": 1
+  },
+  "tiers": {
+    "T0": 6,
+    "T1": 4,
+    "other": 2
+  },
+  "rules": [
+    {
+      "rule": "h:2bece648b98a",
+      "layer": "",
+      "action": "",
+      "evals": 0,
+      "hits": 0,
+      "would": 0,
+      "unknown": 0,
+      "sessions": 1
+    },
+    {
+      "rule": "h:587e03ec18ef",
+      "layer": "org",
+      "action": "warn",
+      "target": "deny",
+      "evals": 7,
+      "hits": 2,
+      "would": 0,
+      "unknown": 3,
+      "sessions": 1
+    },
+    {
+      "rule": "no-long-sleep",
+      "layer": "user",
+      "action": "deny",
+      "target": "deny",
+      "evals": 10,
+      "hits": 1,
+      "would": 0,
+      "unknown": 1,
+      "sessions": 1
+    },
+    {
+      "rule": "no-tamper",
+      "layer": "repo",
+      "action": "deny",
+      "target": "deny",
+      "evals": 0,
+      "hits": 1,
+      "would": 0,
+      "unknown": 0,
+      "sessions": 1
+    },
+    {
+      "rule": "read-before-edit",
+      "layer": "user",
+      "action": "log",
+      "target": "deny",
+      "evals": 10,
+      "hits": 0,
+      "would": 1,
+      "unknown": 2,
+      "sessions": 1
+    }
+  ],
+  "diags": {
+    "capability_degraded": 1,
+    "env_redirect_ignored": 1,
+    "evidence_open_failed": 1,
+    "gc_spawn_failed": 1,
+    "lock_timeout": 2,
+    "lower_sandbox_deny": 1,
+    "lower_sandbox_weakened": 1,
+    "not_a_repo": 1,
+    "other": 4,
+    "predicate_unknown": 1,
+    "repo_locate_failed": 1,
+    "sandbox_quarantine": 1,
+    "sandbox_unavailable": 1,
+    "snapshot_fallback": 1,
+    "state_corrupt": 1,
+    "state_unreadable": 1,
+    "tier_mismatch": 1,
+    "verify_hook_start": 1,
+    "verify_spawn_failed": 1
+  },
+  "verify": {
+    "outcomes": {
+      "fail": 1,
+      "infra": 1,
+      "other": 1,
+      "pass": 2,
+      "timeout": 1
+    },
+    "by_tier": {
+      "T0": 3,
+      "T1": 2,
+      "other": 1
+    },
+    "by_sandbox": {
+      "bwrap": 1,
+      "none": 2,
+      "other": 2,
+      "sandbox-exec": 1
+    },
+    "by_origin": {
+      "cli": 2,
+      "hook": 2,
+      "other": 2
+    }
+  },
+  "latency": {
+    "buckets_ms": [
+      1,
+      2,
+      5,
+      10,
+      20,
+      30,
+      50,
+      100
+    ],
+    "counts": [
+      2,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1
+    ],
+    "p95_ms": 100
+  },
+  "redactions": {
+    "auth_header": 1,
+    "key_value": 1,
+    "vendor_token": 2
+  },
+  "corrupt_lines": 1
+}

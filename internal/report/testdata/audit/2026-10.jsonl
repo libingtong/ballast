@@ -1,0 +1,40 @@
+{"ts":"2026-10-10T01:00:00Z","v":1,"type":"hit","client":"claude-code","session_id":"s-aaaa-1111","repo_inst":"repo-aaaa","repo_remote_hash":"0123456789abcdef","tool_use_id":"toolu_01SECRETID","event":"PreToolUse","tool":"Bash","rule_id":"no-long-sleep","rule_layer":"user","action":"deny","target":"deny","decision":"deny","matched":"sleep 300 in /Users/alice/work/secret-project","tier":"T0","latency_us":800}
+{"ts":"2026-10-10T01:05:00Z","v":1,"type":"hit","client":"claude-code","session_id":"s-aaaa-1111","repo_inst":"repo-aaaa","event":"PreToolUse","tool":"Edit","rule_id":"read-before-edit","rule_layer":"user","action":"log","target":"deny","decision":"would_deny","matched":"path: /Users/alice/work/secret-project/a.go","tier":"T0","latency_us":3200,"transcript_ref":"~/.claude/projects/p/abc.jsonl"}
+{"ts":"2026-10-10T01:06:00Z","v":1,"type":"hit","client":"codex","session_id":"s-bbbb-2222","repo_inst":"repo-bbbb","event":"PreToolUse","tool":"Bash","rule_id":"acme-no-prod-deploy","rule_layer":"org","action":"warn","target":"deny","decision":"warn","matched":"curl -H 'Authorization: Bearer ghp_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78' https://internal.example.com","tier":"T1","latency_us":12000}
+{"ts":"2026-10-10T01:07:00Z","v":1,"type":"hit","client":"codex","session_id":"s-bbbb-2222","repo_inst":"repo-bbbb","event":"PreToolUse","tool":"Bash","rule_id":"acme-no-prod-deploy","rule_layer":"org","action":"warn","target":"deny","decision":"warn","matched":"x","tier":"T1","latency_us":45000}
+{"ts":"2026-10-10T01:08:00Z","v":1,"type":"hit","client":"cursor","session_id":"s-cccc-3333","repo_inst":"repo-aaaa","event":"PreToolUse","tool":"Write","rule_id":"no-tamper","rule_layer":"repo","action":"deny","target":"deny","decision":"deny","matched":"[REDACTED] password=***","tier":"T0","latency_us":130000}
+{"ts":"2026-10-10T01:09:00Z","v":1,"type":"hit","client":"mystery-client-xyz","session_id":"s-dddd-4444","event":"PreToolUse","rule_id":"my-private-note-about-boss","rule_layer":"weird","action":"odd","decision":"log","latency_us":500,"tier":"T9"}
+{"ts":"2026-10-10T02:00:00Z","v":1,"type":"eval_summary","client":"claude-code","session_id":"s-aaaa-1111","repo_inst":"repo-aaaa","event":"Stop","evals":{"no-long-sleep":{"evals":10,"hits":1,"would":0,"unknown":1},"read-before-edit":{"evals":4,"hits":0,"would":1,"unknown":0},"acme-no-prod-deploy":{"evals":7,"hits":2,"would":0,"unknown":3}}}
+{"ts":"2026-10-11T02:30:00Z","v":1,"type":"eval_summary","client":"codex","session_id":"s-bbbb-2222","repo_inst":"repo-bbbb","event":"SessionEnd","evals":{"read-before-edit":{"evals":6,"hits":0,"would":1,"unknown":2}}}
+{"ts":"2026-10-11T03:00:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"capability_degraded","wait_us":20000}}
+{"ts":"2026-10-11T03:01:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"env_redirect_ignored","wait_us":20000}}
+{"ts":"2026-10-11T03:02:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"evidence_open_failed","wait_us":20000}}
+{"ts":"2026-10-11T03:03:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"gc_spawn_failed","wait_us":20000}}
+{"ts":"2026-10-11T03:04:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"lock_timeout","wait_us":20000}}
+{"ts":"2026-10-11T03:05:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"lower_sandbox_deny","wait_us":20000}}
+{"ts":"2026-10-11T03:06:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"lower_sandbox_weakened","wait_us":20000}}
+{"ts":"2026-10-11T03:07:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"not_a_repo","wait_us":20000}}
+{"ts":"2026-10-11T03:08:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"predicate_unknown","wait_us":20000}}
+{"ts":"2026-10-11T03:09:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"repo_locate_failed","wait_us":20000}}
+{"ts":"2026-10-11T03:10:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"sandbox_quarantine","wait_us":20000}}
+{"ts":"2026-10-11T03:11:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"sandbox_unavailable","wait_us":20000}}
+{"ts":"2026-10-11T03:12:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"snapshot_fallback","wait_us":20000}}
+{"ts":"2026-10-11T03:13:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"state_corrupt","wait_us":20000}}
+{"ts":"2026-10-11T03:14:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"state_unreadable","wait_us":20000}}
+{"ts":"2026-10-11T03:15:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"tier_mismatch","wait_us":20000}}
+{"ts":"2026-10-11T03:16:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"verify_hook_start","wait_us":20000}}
+{"ts":"2026-10-11T03:17:00Z","v":1,"type":"diag","session_id":"s-bbbb-2222","detail":{"diag":"verify_spawn_failed","wait_us":20000}}
+{"ts":"2026-10-11T04:00:00Z","v":1,"type":"diag","detail":{"diag":"lock_timeout"}}
+{"ts":"2026-10-11T04:01:00Z","v":1,"type":"diag","detail":{"diag":"brand_new_name /home/bob/x"}}
+{"ts":"2026-10-11T04:02:00Z","v":1,"type":"diag","detail":{"diag":42}}
+{"ts":"2026-10-11T04:03:00Z","v":1,"type":"diag","detail":{"note":"no diag key","token":"ghp_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78"}}
+{"ts":"2026-10-11T04:04:00Z","v":1,"type":"diag"}
+{"ts":"2026-10-12T01:00:00Z","v":1,"type":"verify","session_id":"s-aaaa-1111","repo_inst":"repo-aaaa","verify":{"v":1,"job_id":"job-1","name":"unit","repo_inst":"repo-aaaa","outcome":"pass","tier":"T1","log_path":"/Users/alice/.ballast/logs/job-1.log","sandbox":"bwrap","origin":"hook"}}
+{"ts":"2026-10-12T01:01:00Z","v":1,"type":"verify","session_id":"s-aaaa-1111","repo_inst":"repo-aaaa","verify":{"v":1,"job_id":"job-1","name":"unit","repo_inst":"repo-aaaa","outcome":"pass","tier":"T1","log_path":"/Users/alice/.ballast/logs/job-1.log","sandbox":"sandbox-exec","origin":"hook"}}
+{"ts":"2026-10-12T01:02:00Z","v":1,"type":"verify","session_id":"s-aaaa-1111","repo_inst":"repo-aaaa","verify":{"v":1,"job_id":"job-1","name":"unit","repo_inst":"repo-aaaa","outcome":"fail","tier":"T0","log_path":"/Users/alice/.ballast/logs/job-1.log","sandbox":"none","origin":"cli"}}
+{"ts":"2026-10-12T01:03:00Z","v":1,"type":"verify","session_id":"s-aaaa-1111","repo_inst":"repo-aaaa","verify":{"v":1,"job_id":"job-1","name":"unit","repo_inst":"repo-aaaa","outcome":"infra","tier":"T0","log_path":"/Users/alice/.ballast/logs/job-1.log","error":"clone /Users/alice/x failed token=ghp_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78"}}
+{"ts":"2026-10-12T01:04:00Z","v":1,"type":"verify","session_id":"s-aaaa-1111","repo_inst":"repo-aaaa","verify":{"v":1,"job_id":"job-1","name":"unit","repo_inst":"repo-aaaa","outcome":"timeout","tier":"T0","log_path":"/Users/alice/.ballast/logs/job-1.log","sandbox":"docker","origin":"robot"}}
+{"ts":"2026-10-12T01:05:00Z","v":1,"type":"verify","session_id":"s-aaaa-1111","repo_inst":"repo-aaaa","verify":{"v":1,"job_id":"job-1","name":"unit","repo_inst":"repo-aaaa","outcome":"weird-outcome","tier":"T7","log_path":"/Users/alice/.ballast/logs/job-1.log","sandbox":"x","origin":"y"}}
+{"ts":"2026-10-12T02:00:00Z","v":1,"type":"install","client":"claude-code","detail":{"action":"install","path":"/Users/alice/.claude/settings.json"}}
+{"ts":"2026-10-12T02:01:00Z","v":1,"type":"config_change","client":"claude-code","session_id":"s-aaaa-1111","detail":{"source":"user_settings","file":"~/.claude/settings.json","protected":true}}
+{this line is corrupt
