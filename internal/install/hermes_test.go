@@ -242,7 +242,7 @@ func TestHermesForeignModified(t *testing.T) {
 	}
 	// without a manifest nothing can be claimed
 	p3, _ := tg.Plan(p1.After, spec, nil)
-	if string(p3.After) != string(p1.After) || len(p3.Warnings) != 5 || len(p3.Entries) != 0 {
+	if string(p3.After) != string(p1.After) || len(p3.Warnings) != 6 || len(p3.Entries) != 0 {
 		t.Errorf("no manifest: warnings=%d entries=%d", len(p3.Warnings), len(p3.Entries))
 	}
 }

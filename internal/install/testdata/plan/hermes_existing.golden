@@ -25,6 +25,9 @@ hooks:
   post_tool_call:
     - command: "/opt/ballast/bin/ballast hook --client hermes --event post_tool_call"
       timeout: 30
+  pre_verify:
+    - command: "/opt/ballast/bin/ballast hook --client hermes --event pre_verify"
+      timeout: 30
 
 logging:
   level: info
