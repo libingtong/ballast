@@ -77,4 +77,50 @@
 // right outcome; supersede marks the old record; timeout kills the whole
 // process group; Spawner children survive the parent's exit (unix setsid,
 // windows DETACHED_PROCESS|CREATE_NEW_PROCESS_GROUP).
+//
+// P2 implementation notes (unit P2-RUNNER; docs/p2-design.md §3.3–§3.4, all
+// additive to the contract above):
+//
+//   - Origin. The sidecar records who started the job (jobSpec.Origin; a
+//     sidecar without one is origin=cli). Start and Foreground are origin=cli,
+//     StartRequest is origin=hook. RunJob reads it; nothing the hook passes
+//     except the sidecar's ProjectDir (extra, never lenient) changes the
+//     decision.
+//   - Policy table. execute asks Options.Tier, applies tier.RepoSandboxWeakened
+//     to the job repo and to HookStartRequest.ProjectDir (own judgement; a hit
+//     downgrades the record to T0 with tier_missing ["lower_sandbox_weakened"]
+//     and audits diag tier_mismatch), probes the backend only when the
+//     policy can use it, and lets sandbox.Decide choose: origin=hook never
+//     runs a command unwrapped (infra "sandbox_unavailable", diag
+//     sandbox_unavailable, Sandbox "none", Tier T0); origin=cli follows
+//     runner_sandbox. VerifyRecord.Tier is T1 iff the own judgement is T1,
+//     the command was started, and Sandbox != "none"; otherwise T0 with
+//     tier_missing ["runner_sandbox"] (T1 host, command unsandboxed) or the
+//     host's Missing list (T0 host whose org.json declares T1). Sandbox,
+//     Origin and Workspace are always filled.
+//   - Wrapped commands start with Setsid (procTree.prepare newSession) and
+//     stdin /dev/null; output goes to the job log or, in Foreground, through
+//     a pipe. The backend executable's environment is the child environment
+//     minus every LD_* / DYLD_*, plus Wrapped.Env (K=V sets, bare K unsets);
+//     the LD_* values the test may need travel in Spec.LoaderEnv. The
+//     detached --run-job child (Start, StartRequest) gets the environment
+//     minus LD_* / DYLD_* too, and every git child outside the sandbox
+//     (snapshots, Materialize, TreeSEnd) gets sandbox.HostEnv.
+//   - origin=hook: Materialize (tree.go, inputs.go) builds ~/.ballast/work/
+//     <job_id>/tree, the sandbox Spec has Tree = that directory as its only
+//     writable root besides TmpDir and runner_allow_write, S_start is
+//     Tree.SStart and S_end is TreeSEnd. origin=cli: Spec = work tree + the
+//     git dirs sandbox.ResolveGitDirs vouches for (checked before any git
+//     child runs).
+//   - Wrap-up order (also Options.trace in tests): child exit, darwin killpg,
+//     PostCheck, Quarantine (found ⇒ infra protected_path_created, diag
+//     sandbox_quarantine with relative paths), end snapshot, record (fsync),
+//     audit, CleanupTree.
+//   - StartRequest writes the request file after the jobs exist and before
+//     the first spawn, so `verify --status <request_id>` can always explain
+//     it; RequestStatus aggregates (ErrRequestNotFound when no file has the
+//     id); GCRequests removes old requests/, quarantine/ and work/ entries.
+//   - Test seams are unexported Options fields (sandbox backend, git runner,
+//     trace), so the exported surface is the frozen one plus ErrRequestNotFound,
+//     GCRequests, GCCounts and the retention constants.
 package runner

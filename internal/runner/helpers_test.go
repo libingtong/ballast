@@ -176,6 +176,8 @@ type specJSON struct {
 	Required bool     `json:"required,omitempty"`
 	Env      []string `json:"env,omitempty"`
 	Cwd      string   `json:"cwd,omitempty"`
+
+	InputsUntracked []string `json:"inputs_untracked,omitempty"`
 }
 
 // setProject writes .ballast/project.json and commits everything.

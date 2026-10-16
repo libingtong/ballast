@@ -11,9 +11,19 @@
 //	            "env":["CGO_ENABLED=0"],"cwd":"."}],
 //	 "exempt":["**/*.md","docs/**"]}
 //
+// A verify entry may carry "inputs_untracked" (P2 v1.5, default empty): an
+// array of repo-relative doublestar globs of UNTRACKED or IGNORED build
+// inputs (for example "node_modules/**") that a hook-started job copies into
+// its private tree in addition to the tracked content
+// (docs/p2-design.md §3.4 "job 私有树"). The globs are validated exactly like
+// "exempt" entries (non-empty, no NUL, repo-relative, no "..", valid
+// doublestar); the field is ignored by origin=cli runs and is part of the
+// bytes that project_json_hash covers.
+//
 // Validation: version absent or 1; names ^[a-z0-9][a-z0-9_-]{0,31}$ unique;
 // argv non-empty, argv[0] non-empty; timeout_s 1..86400 (default 1800);
-// cwd relative, no "..", inside the repo; exempt globs valid doublestar.
+// cwd relative, no "..", inside the repo; exempt and inputs_untracked globs
+// valid doublestar.
 // Unknown fields are errors. Invalid project.json ⇒ Load error ⇒ evidence
 // predicates unknown(no_project) + audit diag; `ballast verify` exits 2.
 //

@@ -16,15 +16,19 @@ type procTree struct{ pgid int }
 // prepare puts the command in a new process group so the whole tree can be
 // signalled.
 //
-// P2 contract (docs/p2-design.md §3.4 "终端", unit P2-RUNNER): when the
-// command is wrapped by internal/sandbox (Wrapped.NewSession), it must be
-// started with Setsid instead of Setpgid — a new session has no controlling
+// P2 contract (docs/p2-design.md §3.4 "终端", unit P2-RUNNER; implemented via
+// newSession): when the command is wrapped by internal/sandbox
+// (Wrapped.NewSession), it is started with Setsid instead of Setpgid — a new session has no controlling
 // terminal, so the sandboxed test can neither open /dev/tty nor inject
 // keystrokes into the human's shell with ioctl(TIOCSTI). The session leader
 // is also its process-group leader (pgid == pid), so terminate/kill below
 // are unchanged. stdin stays /dev/null and stdout/stderr stay the log file
 // or a pipe (never the terminal fds), including in Foreground.
-func (t *procTree) prepare(cmd *exec.Cmd) {
+func (t *procTree) prepare(cmd *exec.Cmd, newSession bool) {
+	if newSession {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		return
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 

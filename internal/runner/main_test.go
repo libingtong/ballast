@@ -138,7 +138,7 @@ func helperMain(mode string) int {
 		_ = os.WriteFile(file, []byte(wd+"\n"+os.Getenv("BALLAST_PROBE")+"\n"+os.Getenv("BALLAST_PROBE2")), 0o644)
 		return 0
 	}
-	return 96
+	return helperP2(mode)
 }
 
 func spawnParentMain(dir string) int {
