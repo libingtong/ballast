@@ -108,7 +108,35 @@ type Deps struct {
 	// State.StartedAt() reports false for the scope; concurrent first
 	// events may each write one (acceptable). No other behaviour changes.
 	RedirectsIgnored []string
-	Faults           FaultInjector
+	// IDs (P2, v2.0.4) pre-allocates the request_id of a hook-started verify
+	// (job-id format, together with Clock; docs/p2-design.md §3.3). Filled
+	// by internal/cli with the same sys.IDGen as the rest of the process.
+	// nil ⇒ the hook-start path is unavailable and a canonical verify under
+	// T1 is handled exactly like a spawn failure (deny + diag
+	// verify_spawn_failed).
+	IDs sys.IDGen
+	// ProjectSandbox (P2, v2.0.4; docs/p2-design.md §3.3 "项目层削弱")
+	// checks the session's Claude project layer. nil ⇒ off (internal/cli
+	// wires it only on a redirect-locked host). Frozen use, client
+	// claude-code only: the directories checked are $CLAUDE_PROJECT_DIR
+	// (Env) when it is absolute, otherwise the event cwd and, when it lies
+	// in a repo, the repo top level. On the first event of a session (the
+	// same moment as env_redirect_ignored: State.StartedAt() reports false)
+	// a non-empty result is audited once as diag "lower_sandbox_weakened",
+	// detail {entries:["<basename>:<key>"...]} (no paths, no values). No
+	// session-state field is written.
+	ProjectSandbox ports.ProjectSandboxChecker
+	// WeakenedProject is org.json "weakened_project" of the locked host
+	// ("" ⇒ model.WeakenedProjectAudit), filled by internal/cli from
+	// tier.LockState. Under model.WeakenedProjectDeny (and ProjectSandbox
+	// non-nil) the hook re-runs the check on EVERY claude-code PreToolUse
+	// (one Lstat when the project has no .claude directory) and, when it is
+	// non-empty, adds a synthetic deny merged like the hook-start deny,
+	// reason (frozen): "ballast(T1):本项目的 .claude/settings*.json 含削弱
+	// 托管沙箱的设置(<entries>),组织策略禁止在此项目中调用工具。请移除这些设置
+	// 或联系管理员。", and audits diag "lower_sandbox_deny" detail {tool}.
+	WeakenedProject model.WeakenedProjectPolicy
+	Faults          FaultInjector
 	// Self is the absolute path of the running binary (for detached children).
 	Self string
 	// Watchdog defaults to DefaultWatchdog when zero.

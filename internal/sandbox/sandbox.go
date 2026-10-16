@@ -30,8 +30,12 @@
 // A); linux makes A a mount point (--bind A A), which rename(2)/rmdir(2)
 // refuse with EBUSY. Mandatory patterns need no pins: darwin matches them by
 // regex at any depth (a renamed ancestor does not help), linux re-scans
-// after the run (PostCheck). Network follows Spec.Network
-// (model.NetworkPolicy, default deny).
+// after the run (PostCheck). IP network follows Spec.Network
+// (model.NetworkPolicy, default deny). Local unix sockets are isolated under
+// EVERY network policy (v1.4, docs/p2-design.md §3.4 "本地 socket"): a
+// socket outside W — a container daemon, the user's session bus, an SSH
+// agent — is a "run this for me outside the sandbox" service, so
+// runner_network:"allow" only opens outbound IP, never local sockets.
 //
 // Terminal (frozen, docs/p2-design.md §3.4 "终端"): the wrapped child must
 // never reach the human's terminal, or it could inject keystrokes with
@@ -54,25 +58,34 @@
 //     globs as (regex …), RepoMandatoryDeny / GitDirMandatoryDeny as
 //     anchored (regex …) that match at any depth>)
 //     (deny file-write* <AncestorPins as (literal …)>)
-//     network deny ⇒ (deny network-outbound)
-//     (allow network-outbound (remote ip "localhost:*"))
-//     (allow network-outbound (remote unix-socket (subpath <each W>)))
+//     (deny network-outbound) — always
+//     IP by policy: deny ⇒ nothing (NO loopback); loopback ⇒
+//     (allow network-outbound (remote ip "localhost:*")); allow ⇒
+//     (allow network-outbound (remote ip "*:*")) plus
+//     (allow network-outbound (remote unix-socket (path-literal
+//     "/private/var/run/mDNSResponder"))) for name resolution
+//     (allow network-outbound (remote unix-socket (subpath <each W>))) —
+//     always, the only other unix sockets reachable
 //     plus the escape-channel denials in DarwinEscapeDenials (LaunchServices,
 //     AppleEvents and other "ask a process outside the sandbox to run
 //     something" services). SBPL matches paths, so rules also hold for
 //     paths that do not exist yet (verified on macOS 26 at design time:
 //     writes outside W, writes/creates/renames/hard links into D, renaming
 //     W or an ancestor of D, symlink-then-write, and outbound TCP are all
-//     refused; `git add` inside W still works).
+//     refused; `git add` inside W still works). Note: at design time the
+//     profile still allowed localhost:* under deny; v1.4 removed that
+//     (host loopback services are outside the sandbox).
 //   - linux: bwrap --die-with-parent --new-session --unshare-pid
-//     [--unshare-net] --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp
-//     [--tmpfs /run --tmpfs /var/run when network deny]
+//     [--unshare-net unless network allow] --ro-bind / / --dev /dev
+//     --proc /proc --tmpfs /tmp --tmpfs /run --tmpfs /var/run (the two
+//     socket directories are masked under EVERY policy)
 //     then --bind A A for every W entry (existing), then --bind A A for
 //     every AncestorPins entry (existing), then --ro-bind P P for every
 //     existing D entry (globs expanded at wrap time; a glob whose directory
 //     lies inside W ro-binds that whole directory) and for every path of
 //     Wrapped.Baseline (the mandatory matches that already exist, found by
-//     ScanMandatory), then --chdir <cwd> --setenv TMPDIR /tmp -- argv.
+//     ScanMandatory), then --chdir <cwd> --setenv TMPDIR /tmp, one
+//     --setenv K V per Spec.LoaderEnv entry, -- argv.
 //     Later mounts override earlier ones. Protected paths inside W that do
 //     not exist at wrap time cannot be bound without creating a mount point
 //     on the host: Wrapped.MissingProtected lists the explicit ones, and
@@ -84,7 +97,11 @@
 //     Paths outside W need no entry: the root bind is read-only, and hard
 //     links across the bind mounts fail with EXDEV (verified in a Debian
 //     12 container at design time, with renames of non-pinned ancestors
-//     shown to succeed and pinned ones to fail with EBUSY).
+//     shown to succeed and pinned ones to fail with EBUSY). With network
+//     allow the host network namespace is shared, so ABSTRACT unix
+//     sockets of the host (not files, not maskable by tmpfs) stay
+//     reachable — registered residual risk of "allow" (docs/p2-design.md
+//     §11); deny and loopback use a private namespace where they are not.
 //   - windows / anything else: unavailable (native Windows is T0-only).
 //
 // Probe runs the backend once with a trivial command and a throw-away
@@ -103,7 +120,15 @@
 // including opening /dev/tty, ioctl(TIOCSTI) on inherited fds under a pty
 // controlling terminal, nested .git/config and modules/x/hooks writes, and
 // no residue on the host after creating .claude/settings.local.json — while
-// a write inside W and `git add` succeed.
+// a write inside W and `git add` succeed. v1.4 additions: under deny, a TCP
+// connect to a listener the TEST did not start on 127.0.0.1 fails on both
+// platforms (darwin: any loopback connect fails; linux: the test's own
+// loopback listener still works); under allow, connecting to a unix socket
+// outside W, reaching /run and /var/run, and seeing SSH_AUTH_SOCK /
+// DOCKER_HOST / DBUS_*_BUS_ADDRESS all fail or are absent, while outbound
+// TCP to a local test listener succeeds; the darwin escape channels are
+// proven closed by mach-lookup denial ALONE (see DarwinEscapeDenials); and
+// a LoaderEnv variable reaches the child but not the bwrap process itself.
 package sandbox
 
 import (
@@ -234,6 +259,16 @@ type Spec struct {
 	Home string
 	// Cwd is the child's working directory (must lie inside AllowWrite).
 	Cwd string
+	// LoaderEnv (v1.4) are the runner environment's dynamic-loader
+	// variables ("K=V", K matching LD_*) that the TEST may legitimately
+	// need (e.g. LD_LIBRARY_PATH). They must never reach the backend
+	// executable itself — a non-setuid bwrap would load LD_PRELOAD code
+	// before the namespaces exist, i.e. outside the sandbox — so the
+	// runner removes LD_* / DYLD_* from the backend environment (Wrapped.Env)
+	// and linux re-sets these inside the sandbox with --setenv. darwin ignores LoaderEnv:
+	// /usr/bin/sandbox-exec is a platform binary and dyld drops DYLD_*
+	// for it, so DYLD_* never reach darwin tests.
+	LoaderEnv []string
 }
 
 // Wrapped is the result of Wrap.
@@ -241,8 +276,14 @@ type Wrapped struct {
 	Kind Kind
 	Argv []string
 	// Env are environment changes for the child: "K=V" sets K, a bare "K"
-	// (no '=') unsets it. Always sets TMPDIR; with network deny it unsets
-	// SSH_AUTH_SOCK and DOCKER_HOST; always includes CacheEnv(...).
+	// (no '=') unsets it. The runner forms the BACKEND process environment
+	// (inherited by the child) as: its own environment minus every LD_* and
+	// DYLD_* variable (v1.4; LD_* reach the linux child via
+	// Spec.LoaderEnv), then Env applied. Under EVERY network policy (v1.4)
+	// Env sets TMPDIR, unsets SSH_AUTH_SOCK, DOCKER_HOST,
+	// DBUS_SESSION_BUS_ADDRESS and DBUS_SYSTEM_BUS_ADDRESS, and includes
+	// CacheEnv(...). Other variables (GIT_* included) pass through: inside
+	// the sandbox they are contained.
 	Env []string
 	// MissingProtected are explicit protected paths (Spec.DenyWrite and
 	// glob directories) inside W that did not exist at wrap time and are
@@ -283,6 +324,33 @@ var CacheVars = []string{
 // P2-SANDBOX 集成测试确认】.
 func CacheEnv(tmpDir string, allowWrite []string, cur func(key string) string) []string {
 	panic("unimplemented: sandbox.CacheEnv (unit P2-SANDBOX)")
+}
+
+// HostEnv returns environ minus every variable that would let the content of
+// lower settings layers (a project-layer "env", which reaches the hook and
+// the runner through Claude Code's environment) run code in a process the
+// runner starts OUTSIDE the sandbox (v1.4, docs/p2-design.md §3.4
+// "沙箱外进程的环境"). Frozen removal set: every GIT_* variable
+// (GIT_CONFIG_PARAMETERS / GIT_CONFIG_COUNT / GIT_CONFIG_KEY_n injection of
+// core.fsmonitor and friends, GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM pointing
+// at agent-written files, GIT_EXEC_PATH, GIT_SSH*, GIT_EXTERNAL_DIFF,
+// GIT_TRACE* which appends to arbitrary files, …); every LD_* and DYLD_*
+// variable (loader injection); BASH_ENV, ENV, SHELLOPTS, BASHOPTS, CDPATH
+// (git may run sh). Order is preserved. Pure; table-tested.
+//
+// The runner uses it for: every git child of its snapshots (it passes
+// snapshot/evidence a sys.Env whose Environ and Getenv are filtered by
+// HostEnv; snapshot then sets its own GIT_INDEX_FILE etc. as today). Processes
+// that are Ballast itself (the detached `ballast verify --run-job` child) and
+// the backend executable get the narrower loader-only removal (every LD_* and
+// DYLD_*; see Wrapped.Env), so the sandboxed child keeps its GIT_* variables.
+// It does NOT protect the hook or runner processes
+// themselves: they already run with Claude Code's environment, which is why
+// a project-layer "env" counts as weakening (tier.WeakenedSandboxKeys,
+// LayerRepo) and why darwin release binaries must be signed with the
+// hardened runtime (doctor tier.binary_hardening, docs/p2-design.md §3.5).
+func HostEnv(environ []string) []string {
+	panic("unimplemented: sandbox.HostEnv (unit P2-SANDBOX)")
 }
 
 // Options configures probing.
@@ -428,6 +496,15 @@ func AncestorPins(spec Spec) []string {
 // `launchctl submit` cannot write outside W; if any channel cannot be
 // closed this way the darwin profile switches to (deny default) plus an
 // explicit allowlist, which is an internal change of DarwinProfile only].
+//
+// The process-exec rules only match the standard paths, so they alone
+// prove nothing (v1.4): the integration tests must ALSO run each channel
+// in a way the process-exec rules cannot match — copies of open,
+// osascript and launchctl placed in Spec.TmpDir, and a python3 ctypes
+// call into LaunchServices / AppleEvents (LSOpenCFURLRef, AESendMessage)
+// and launchd job submission — and must pass with a test-only profile
+// variant that has the process-exec denials removed, so that the
+// mach-lookup denials are shown to work on their own.
 func DarwinEscapeDenials() string {
 	panic("unimplemented: sandbox.DarwinEscapeDenials (unit P2-SANDBOX)")
 }

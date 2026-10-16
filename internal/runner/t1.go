@@ -14,7 +14,15 @@ import "github.com/libingtong/ballast/internal/model"
 // model.VerifyRequestFile, supersedes running jobs of the same names, and
 // starts one job per name exactly like Start, except that the first job's id
 // is req.RequestID and every job is recorded with Origin "hook" (which makes
-// the OS sandbox mandatory, docs/p2-design.md §3.4). On a config error it
+// the OS sandbox mandatory, docs/p2-design.md §3.4). Before deciding each
+// record's tier it applies tier.RepoSandboxWeakened to the job repo AND to
+// req.ProjectDir when non-empty and different (v1.4; the session's project
+// layer can live in a monorepo subdirectory or a parent of the repo); any
+// entry ⇒ record tier T0, tier_missing ["lower_sandbox_weakened"], audit diag
+// "tier_mismatch". Every git child it runs outside the sandbox (snapshots)
+// gets a sys.Env filtered by sandbox.HostEnv; the detached --run-job child
+// and the sandbox backend get every LD_* / DYLD_* variable removed (v1.4,
+// docs/p2-design.md §3.4 "沙箱外进程的环境"). On a config error it
 // still writes the request file with Error set (so
 // `verify --status <request_id>` can explain) and returns ErrConfig.
 func StartRequest(opt Options, req model.HookStartRequest) ([]Started, error) {
@@ -50,8 +58,9 @@ type RequestStatusResult struct {
 // (searching every repo_inst directory when repoInst is ""), reads each
 // job's record or live state, and aggregates them. Owned by P2-RUNNER; the
 // CLI (P2-CLI) only prints the result line by line and exits with
-// ExitCode. Not found ⇒ ErrNotFound-style error chosen by P2-RUNNER and
-// documented in architecture §7.
+// ExitCode. Not found ⇒ ErrNotFound-style error chosen by P2-RUNNER; the
+// exit code is documented in architecture §7 by P2-CLI (v2.0.4: P2-CLI owns
+// the §7 and §3.1 rows it adds, docs/p2-design.md §9).
 func RequestStatus(opt Options, repoInst, requestID string) (RequestStatusResult, error) {
 	panic("unimplemented: runner.RequestStatus (unit P2-RUNNER)")
 }

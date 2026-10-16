@@ -25,11 +25,18 @@
 //  4. ManagedDirFor(GOOS)/ballast/org.json — the COMPILED-IN managed dir,
 //     never Layout.ManagedDir — is a root-owned, non-group/other-writable
 //     regular file that passes LoadOrgConfig validation and whose "tier"
-//     is "T1".
+//     is "T1"; and (v1.4) its parent chain — <managed>/ballast,
+//     <managed> and every ancestor up to "/", after EvalSymlinks of the
+//     managed dir (macOS /etc → /private/etc style links), each checked
+//     with Lstat — consists of directories owned by uid 0 that are not
+//     group/other-writable (a group-writable managed dir would let a
+//     non-root member replace org.json or managed settings).
 //  5. The merged Claude managed settings under ManagedDirFor(GOOS)
 //     (managed-settings.json plus managed-settings.d/*.json in the merge
 //     order established by M0b; each file root-owned and not
-//     group/other-writable) contain: allowManagedHooksOnly == true; at
+//     group/other-writable, and managed-settings.d itself plus the parent
+//     chain of condition 4 root-owned and not group/other-writable)
+//     contain: allowManagedHooksOnly == true; at
 //     least one hook entry whose command is an ABSOLUTE path with
 //     EvalSymlinks(command) == EvalSymlinks(Self) and args[0:2] ==
 //     ["hook","--client"]; sandbox.enabled == true,
@@ -53,15 +60,24 @@
 //     "npm" or "docker", which would let the agent run those outside the
 //     sandbox and write ~/.ballast directly. Until M0b case
 //     lower-sandbox-merge shows otherwise, Detect applies
-//     WeakenedSandboxKeys to every user-layer file
+//     WeakenedSandboxKeys(doc, LayerUser) to every user-layer file
 //     <claude dir>/settings*.json, where <claude dir> is $CLAUDE_CONFIG_DIR
 //     when set AND <home>/.claude in every case (both are checked).
-//     Detect cannot see the repo; the runner applies RepoSandboxWeakened to
-//     the job's repo (project layer <repo>/.claude/settings.json, which is
-//     committed with the repo and therefore not covered by in-session
-//     denyWrite, and the local layer settings.local.json) before deciding
-//     the record tier (docs/p2-design.md §3.4). An absent file is fine; an
+//     Detect cannot see projects. The project layer
+//     <dir>/.claude/settings.json (committed with the repo, so in-session
+//     denyWrite does not govern where it comes from) and the local layer
+//     settings.local.json are checked with RepoSandboxWeakened (LayerRepo)
+//     by the hook for the session's $CLAUDE_PROJECT_DIR on its first event
+//     (ports.ProjectSandboxChecker) and by the runner for the job repo AND
+//     HookStartRequest.ProjectDir before deciding the record tier
+//     (docs/p2-design.md §3.3, §3.4). An absent file is fine; an
 //     unreadable or unparsable one counts as weakening (fail closed).
+//     LIMIT (docs/trust-model.md §2.3): the runner's downgrade only labels
+//     honest records. A session whose project layer weakens the sandbox
+//     can write ~/.ballast/evidence directly, with any tier it likes, so
+//     T1 evidence on a host is only as good as the absence of weakened
+//     project layers in every Claude session on that host; org.json
+//     weakened_project:"deny" turns such sessions' tool calls into denies.
 //
 // Ownership checks go through Options.Owner so unit tests can fake uid 0
 // without root; production uses syscall.Stat_t (unix) and reports "not
@@ -72,17 +88,25 @@
 // on its own ⇒ T0 with exactly that Missing id — condition 6 once per
 // weakening key of WeakenedSandboxKeys, in user settings.json and in
 // settings.local.json, and once with CLAUDE_CONFIG_DIR pointing elsewhere
-// while <home>/.claude/settings.json weakens; all satisfied ⇒ T1; a row
-// where the managed hook command is a symlink to Self ⇒ T1; a row with a
-// relative command ⇒ managed_hooks); testdata/managed_forms.json golden
-// (shared with internal/install); Locked table (absent / non-root /
-// group-writable / tier T0 / invalid org.json ⇒ false); BenchmarkProbe
-// ≤ 200 µs and BenchmarkLocked ≤ 20 µs on a warm page cache; Probe
-// memoizes (second call does no I/O, asserted with a counting FS).
+// while <home>/.claude/settings.json weakens; a user-layer statusLine /
+// env / apiKeyHelper ⇒ still T1 (LayerUser); the managed dir or
+// <managed>/ballast group-writable ⇒ org_config (v1.4); all satisfied ⇒
+// T1; a row where the managed hook command is a symlink to Self ⇒ T1; a
+// row with a relative command ⇒ managed_hooks); testdata/weakened.json
+// (both layers); testdata/managed_forms.json golden (shared with
+// internal/install); Locked table (absent / non-root / group-writable /
+// group-writable parent dir / tier T0 / invalid org.json ⇒ false);
+// testdata/locked_home.json incl. a Lookup that blocks ⇒
+// ErrLockedHomeTimeout within Timeout + 5 ms; BenchmarkProbe ≤ 200 µs and
+// BenchmarkLocked ≤ 30 µs on a warm page cache (v1.4: the parent chain adds
+// a few Lstat calls); Probe memoizes (second call does no I/O, asserted
+// with a counting FS).
 package tier
 
 import (
+	"errors"
 	"io/fs"
+	"time"
 
 	"github.com/libingtong/ballast/internal/layout"
 	"github.com/libingtong/ballast/internal/model"
@@ -119,7 +143,8 @@ type Options struct {
 // TierMissingOrgConfig, and the host is not locked):
 //   - V must be 1; Tier must be "", "T0" or "T1";
 //   - RunnerSandbox must be "", require, prefer or off; RunnerNetwork must
-//     be "", deny or allow;
+//     be "", deny, loopback or allow; WeakenedProject must be "", audit or
+//     deny;
 //   - every RunnerAllowWrite / ProtectedExtra entry is absolute or starts
 //     with "~/"; RunnerAllowWrite must not contain "~" or "~/" (a writable
 //     home would let a sandboxed test persist through shell rc files), any
@@ -138,10 +163,17 @@ type OrgConfig struct {
 	// require the sandbox regardless of this value (docs/p2-design.md
 	// §3.4). Default "require" when Tier is T1, "off" otherwise.
 	RunnerSandbox model.SandboxPolicy `json:"runner_sandbox,omitempty"`
-	// RunnerNetwork is the sandboxed test command's network policy;
-	// default "deny" (loopback and unix sockets inside the writable set
-	// only).
+	// RunnerNetwork is the sandboxed test command's IP network policy;
+	// default "deny" (darwin: no outbound IP, loopback included; linux:
+	// private network namespace). "loopback" additionally lets darwin tests
+	// reach localhost:* — a RESIDUAL RISK, host loopback services become
+	// reachable (docs/p2-design.md §11). Unix-socket isolation is
+	// independent of this value (model.NetworkPolicy).
 	RunnerNetwork model.NetworkPolicy `json:"runner_network,omitempty"`
+	// WeakenedProject (v1.4) is what the hook does in a session whose
+	// project layer weakens the managed sandbox; default "audit"
+	// (model.WeakenedProjectPolicy).
+	WeakenedProject model.WeakenedProjectPolicy `json:"weakened_project,omitempty"`
 	// RunnerAllowWrite are extra writable locations for the sandboxed
 	// test command, on top of the repo, its git dirs and the per-job temp
 	// dir. RESIDUAL RISK (docs/trust-model.md §2.3, p2-design §11): every
@@ -191,9 +223,11 @@ func LoadOrgConfig(fsys sys.FS, path string) (OrgConfig, error) {
 // Locked reports whether the host is "redirect-locked": a regular file
 // ManagedDirFor(goos)/ballast/org.json exists, is owned by uid 0, is not
 // group/other-writable, passes LoadOrgConfig validation and declares
-// "tier":"T1". It costs one Lstat plus, only when that file exists, one
-// read of a few hundred bytes; it never fails (any doubt ⇒ false, i.e.
-// the current behaviour).
+// "tier":"T1", and (v1.4) its parent chain satisfies condition 4 (root-owned,
+// not group/other-writable directories up to "/"). It costs one Lstat plus,
+// only when that file exists, the parent-chain Lstat calls and one read of a
+// few hundred bytes; it never fails (any doubt ⇒ false, i.e. the current
+// behaviour).
 //
 // Production wiring (internal/cli) calls Locked before resolving the
 // layout and passes the result as layout.Options.IgnoreRedirects, so on a
@@ -235,12 +269,34 @@ type HomeOptions struct {
 	Lookup func(uid int) (string, error)
 	// HomeRoot is OrgConfig.HomeRoot of the locked host.
 	HomeRoot []string
+	// Timeout bounds the passwd lookup (v1.4); 0 ⇒ DefaultLockedHomeTimeout.
+	Timeout time.Duration
 }
+
+// DefaultLockedHomeTimeout bounds LockedHome's passwd lookup. LockedHome runs
+// inside layout resolution in internal/cli (WireHook), i.e. BEFORE the
+// hook's watchdog is armed, so it carries its own deadline: a darwin
+// directory account that is not cached locally or a blocking NSS backend
+// must not stall every tool call. 50 ms leaves the B10 budget intact.
+const DefaultLockedHomeTimeout = 50 * time.Millisecond
+
+// ErrLockedHomeTimeout is returned by LockedHome when the lookup did not
+// finish within the timeout. Layout resolution then fails and the hook fails
+// open per B7 (exit 1, empty stdout, one stderr line naming the timeout; no
+// audit is possible because the home directory is unknown); doctor
+// tier.locked_home times the same lookup and reports fail above the
+// timeout.
+var ErrLockedHomeTimeout = errors.New("tier: locked home lookup timed out")
 
 // LockedHome resolves <home> on a locked host. Production wiring
 // (internal/cli) passes it, closed over HomeOptions, as
 // layout.Options.PasswdHome. Frozen rule (docs/p2-design.md §3.2):
 //
+//  0. The lookup runs in a goroutine bounded by Timeout
+//     (DefaultLockedHomeTimeout); expiry ⇒ ("", "", ErrLockedHomeTimeout)
+//     at once, the goroutine is abandoned (the hook process exits soon
+//     after), and the home_root rule is NOT tried (a slow directory is not
+//     "no entry").
 //  1. h, err := Lookup(Euid). err == nil ⇒ (h, HomeFromPasswd, nil).
 //     $HOME is not consulted even when it differs.
 //  2. err is not sys.ErrNoPasswdEntry, or HomeRoot is empty ⇒ error
@@ -267,18 +323,57 @@ func LockedHome(opt HomeOptions) (home, source string, err error) {
 	panic("unimplemented: tier.LockedHome (unit P2-TIER)")
 }
 
+// SettingsLayer selects the WeakenedSandboxKeys rule set (v1.4).
+type SettingsLayer string
+
+const (
+	// LayerUser: <claude dir>/settings*.json. These files are in denyWrite
+	// and permissions.deny (agent-unwritable) and authored by the human, so
+	// keys that only run HUMAN-authored commands or set human-authored
+	// environment outside the sandbox are equivalent to the human's own
+	// tooling; only keys that let AGENT-controlled commands leave the
+	// sandbox are weakening.
+	LayerUser SettingsLayer = "user"
+	// LayerRepo: <dir>/.claude/settings.json and settings.local.json. Their
+	// content arrives with the repository (clone, pull, checkout of a
+	// third-party branch), so every key that runs commands or changes the
+	// environment of Claude, its hooks or the runner counts as weakening.
+	LayerRepo SettingsLayer = "repo"
+)
+
 // WeakenedSandboxKeys inspects ONE Claude settings document of a lower layer
-// (user, project or local) and returns, sorted and deduplicated, the dotted
-// keys whose value could weaken the managed sandbox (condition 6). Frozen,
-// conservative rule (docs/p2-design.md §3.2 condition 6) — an allowlist, so
-// sandbox keys Claude adds in the future count as weakening until they are
-// classified here:
+// and returns, sorted and deduplicated, the dotted keys whose value could
+// weaken the managed sandbox or run code outside it (condition 6). Frozen,
+// conservative rule (docs/p2-design.md §3.2 condition 6) — an allowlist at
+// EVERY level, so keys Claude adds in the future count as weakening until
+// they are classified here:
 //
-//   - top level: "permissions.additionalDirectories" with a non-empty array
-//     is reported (whether allowManagedPermissionRulesOnly also governs it
-//     is unverified; M0b lower-sandbox-merge). No other non-sandbox key is
-//     inspected (permissions rules are governed by
-//     allowManagedPermissionRulesOnly, hooks by allowManagedHooksOnly).
+//   - For any key, the values null, [], {} and false are harmless (they add
+//     nothing).
+//   - Top level, harmless in both layers: "$schema", "model",
+//     "includeCoAuthoredBy", "cleanupPeriodDays", "outputStyle",
+//     "spinnerTipsEnabled", "alwaysThinkingEnabled" (any value); "hooks"
+//     and "disableAllHooks" (any value: governed by allowManagedHooksOnly,
+//     condition 5); "permissions" and "sandbox" (descended, below).
+//   - Top level, harmless in LayerUser only: "env", "statusLine",
+//     "apiKeyHelper", "awsAuthRefresh", "awsCredentialExport",
+//     "otelHeadersHelper", "enabledPlugins", "extraKnownMarketplaces" (any
+//     value). In LayerRepo they are reported, notably "env" (it reaches the
+//     process environment of Claude, of the managed hook and of every
+//     process Ballast starts outside the sandbox: loader variables such as
+//     DYLD_INSERT_LIBRARIES / LD_PRELOAD, GIT_CONFIG_* injection) and every
+//     command-running helper; whether the project layer honours each of
+//     them is unverified (M0b lower-sandbox-merge).
+//   - Every other top-level key with a value other than null/[]/{}/false is
+//     reported by its name (e.g. "enableAllProjectMcpServers",
+//     "enabledMcpjsonServers").
+//   - "permissions": "allow", "deny", "ask" harmless (any value: rules are
+//     governed by allowManagedPermissionRulesOnly); "defaultMode" harmless
+//     when "default", "acceptEdits" or "plan"; "disableBypassPermissionsMode"
+//     harmless; "additionalDirectories" non-empty is reported (whether
+//     allowManagedPermissionRulesOnly governs it is unverified); any other
+//     key is reported as "permissions.<key>". "permissions" not an object ⇒
+//     ["permissions"].
 //   - "sandbox" absent, null or {} ⇒ nothing; "sandbox" not an object ⇒
 //     ["sandbox"].
 //   - harmless inside "sandbox" (can only make it stricter or equal):
@@ -298,24 +393,41 @@ func LockedHome(opt HomeOptions) (home, source string, err error) {
 //     descended, arrays are not).
 //
 // doc that is not a JSON object ⇒ error (callers treat it as weakening).
-// Pure; table-tested in testdata/weakened.json.
-func WeakenedSandboxKeys(doc []byte) ([]string, error) {
+// Pure; table-tested in testdata/weakened.json (every row run in both
+// layers with the expected difference).
+func WeakenedSandboxKeys(doc []byte, layer SettingsLayer) ([]string, error) {
 	panic("unimplemented: tier.WeakenedSandboxKeys (unit P2-TIER)")
 }
 
-// RepoSandboxWeakened applies WeakenedSandboxKeys to every regular file
-// matching <repo>/.claude/settings*.json (the project layer settings.json
-// and the local layer settings.local.json) and returns "<basename>:<key>"
-// entries, sorted; a matching file that cannot be read or parsed yields
+// RepoSandboxWeakened applies WeakenedSandboxKeys(doc, LayerRepo) to every
+// regular file matching <repo>/.claude/settings*.json (the project layer
+// settings.json and the local layer settings.local.json; repo is any
+// directory: a job repo or a session's project dir) and returns
+// "<basename>:<key>" entries, sorted; a matching file that cannot be read or parsed yields
 // "<basename>:unreadable"; a symlinked .claude directory or settings file
 // yields "<basename>:symlink" (the runner does not follow agent-made links
 // to decide trust). Empty result ⇒ the repo layer does not weaken the
 // sandbox. Callers: the runner, once per job before deciding the record
-// tier (non-empty ⇒ record tier T0 with tier_missing
-// ["lower_sandbox_weakened"] and audit diag "tier_mismatch"); doctor for the
-// repo of the current directory. Not hot path (the hook never calls it).
+// tier, for the job repo and HookStartRequest.ProjectDir (non-empty ⇒
+// record tier T0 with tier_missing ["lower_sandbox_weakened"] and audit
+// diag "tier_mismatch"); doctor for the current directory and its repo;
+// the hook through ProjectChecker (first event of a session; every
+// PreToolUse only under weakened_project:"deny"). Cost when <repo>/.claude
+// does not exist: one Lstat. No exec, no network.
 func RepoSandboxWeakened(fsys sys.FS, repo string) []string {
 	panic("unimplemented: tier.RepoSandboxWeakened (unit P2-TIER)")
+}
+
+// ProjectChecker implements ports.ProjectSandboxChecker with
+// RepoSandboxWeakened (internal/cli wires it into hook.Deps.ProjectSandbox
+// on a locked host).
+type ProjectChecker struct {
+	FS sys.FS
+}
+
+// Weakened implements ports.ProjectSandboxChecker.
+func (c ProjectChecker) Weakened(dir string) []string {
+	panic("unimplemented: tier.ProjectChecker.Weakened (unit P2-TIER)")
 }
 
 // ManagedForms returns the exact denyWrite and permissions.deny strings

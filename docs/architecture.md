@@ -1,6 +1,6 @@
-# Ballast 架构与接口契约(冻结版 v2.0)
+# Ballast 架构与接口契约(冻结版 v2.0.4)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3 为 P2 设计第 1、2、3 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4 为 P2 设计第 1、2、3、4 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -107,7 +107,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 关键约束:
 
 - `hook` **只**依赖契约包;所有能力通过 `hook.Deps` 中的 ports 接口注入,由 `cli.WireHook` 接线。U7 可以完全用假实现开发与测试。v2.0 唯一放宽:hook 可直接 import L0 叶子包 `redact`(纯函数、只用标准库);层级判定仍经 `ports.TierProbe`(`hook.Deps.Tier`)注入。
-- v2.0:整个 `cmd/ballast` 二进制不得链接 `net/*`(archtest `TestBinaryNoNet`);`sandbox` 只允许 `runner` import。
+- v2.0:整个 `cmd/ballast` 二进制不得链接 `net/*`(archtest `TestBinaryNoNet`);`sandbox` 只有 `runner` 与 `cli` 可以 import(allowlist 中 `runner` 列出它,`cli` 为 `*`;v2.0.4 修正此处与 archtest 的漂移),hook 的传递闭包里不可能出现它。
 - `dsl` 不 import `paths`/`bashparse`/`psparse`/`adapter`:通过 `dsl.Options` 注入 `ports.PathService`、`ports.BashParser`、`ports.PowerShellParser`、`ports.AdapterRegistry`。`dsl` 直接 import `github.com/bmatcuk/doublestar/v4`:名称 glob(`tool`、`cmd`、`pipe_from`、`pipe_to`、`agent_type`、`branch_glob`)用区分大小写的 `doublestar.Match`,只有路径类(`path`、`writes`、谓词路径参数)走 `PathService`(dsl-semantics §5.1)。
 - `evidence` 的 project.json 由 `evidence.Options.Project`(`ports.ProjectLoader`)**惰性**加载;`EvidenceProvider.Open(repo, deadline)` 不做 I/O,`hook.Deps` 不再含 ProjectLoader。`git -C <其他仓库> commit` 使用目标仓库的 project.json(required 与 exempt)。
 - `replay` 不 import `hook`/`state`:自行实现内存版 `model.SessionState`,更新规则与 hook 文档一致;`--initial-state` 格式在 `internal/replay/doc.go` 冻结(`model.Fixture` 的状态子集)。
@@ -166,7 +166,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | Windows | `C:\Program Files\ClaudeCode` |
 
 - org 规则:`<托管目录>/ballast/rules.json`。
-- org 配置(v2.0):`<托管目录>/ballast/org.json`(`layout.OrgConfig`,`tier.OrgConfig`:`v`、`tier`、`runner_sandbox`、`protected_extra`),root 所有才被采信,见 `docs/p2-design.md` §3.2。
+- org 配置(v2.0):`<托管目录>/ballast/org.json`(`layout.OrgConfig`,`tier.OrgConfig`:`v`、`tier`、`runner_sandbox`、`runner_network`(deny/loopback/allow,v2.0.4 增加 loopback)、`runner_allow_write`、`home_root`、`weakened_project`(v2.0.4,audit/deny)、`protected_extra`),本身及托管目录到 `/` 的父目录链都 root 所有、组和其他不可写才被采信(v2.0.4 增加父目录链),见 `docs/p2-design.md` §3.2。
 - Claude 托管设置:`managed-settings.json`、`managed-settings.d/*.json`(用于托管层已部署检测与 `org render --write`)。
 
 ### 3.4 客户端配置根
@@ -367,7 +367,7 @@ v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.Mana
 | `verify --check [--commit\|--worktree]` | 0 新鲜;10 过期;11 无证据;12 无法判定(非 git、参数无法解析、快照失败、project.json 缺失或非法);13 同名 job 运行中。用于 git pre-commit:`--commit`(默认)模式下若环境有 `GIT_INDEX_FILE`,CLI 把它(相对值按 cwd)解析为绝对路径,经 `evidence.CheckOptions.IndexFile` 传入,C = F(该索引)——`commit -a`/带路径提交时 git 此刻指向 `index.lock` 或临时 next-index,即真正要提交的树。仓库由 cwd 决定(git 在被提交仓库的顶层运行 hook,所以 `git -C ../other commit` 在 ../other 中检查)。热路径(hook)**永不**读取 `GIT_INDEX_FILE` |
 | `verify --foreground <name>` | 同 `--status`;2 配置错误 |
 | `verify --run-job <id>`(内部) | 同 `--status` |
-| `verify --hook-start --request <id> --cwd <dir> --client <c> [--session] [--agent] -- [names]`(内部,v2.0) | 0 已启动;2 配置错误(请求文件仍写入并带 error);5 基础设施错误。参数格式由 `model.HookStartArgv` 冻结 |
+| `verify --hook-start --request <id> --cwd <dir> --client <c> [--session] [--agent] [--project-dir <dir>] -- [names]`(内部,v2.0;`--project-dir` 为 v2.0.4) | 0 已启动;2 配置错误(请求文件仍写入并带 error);5 基础设施错误。参数格式由 `model.HookStartArgv` 冻结 |
 | `verify --status <request_id>`(v2.0 扩展) | 找不到同名 job 时回退读请求文件:单 job 同该 job;多 job 取最差结果(fail > timeout > signal > infra > 运行中 > pass) |
 | `report --out <file> [--since] [--force]`(v2.0) | 0 已写入;1 隐私自检失败(未写入);2 用法;4 文件已存在且无 `--force`;5 I/O |
 | `init [--yes] [--force] [--dry-run]` | 0 已写入/无需写入/dry-run;1 用户拒绝或未探测到栈;2 用法;3 已有 project.json 且无 `--force` |
@@ -406,7 +406,7 @@ v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.Mana
 
 各单元可以在自己目录内新增未导出代码、测试与 testdata;**修改已导出签名属于契约变更**(§12)。
 
-P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLIENTS、P2-RUNNER、P2-HOOK、P2-REPORT、P2-CC、P2-INSTALL、P2-CLI)的独占目录、共享文件的条目边界与依赖顺序见 `docs/p2-design.md` §9,与上表冲突时 P2 期间以 §9 为准。各包 `doc.go` 中的"Acceptance"段落是该单元的验收要点。
+P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLIENTS、P2-RUNNER、P2-HOOK、P2-REPORT、P2-CC、P2-INSTALL、P2-CLI)的独占目录、共享文件的条目边界与依赖顺序见 `docs/p2-design.md` §9,与上表冲突时 P2 期间以 §9 为准。v2.0.4:本文 §7 与 §3.1 中标注 v2.0 及之后的 P2 追加行归 P2-CLI(集成时写实 `RequestStatus` 未找到时的退出码等),其余章节与 §14 仍归架构师。各包 `doc.go` 中的"Acceptance"段落是该单元的验收要点。
 
 ### 8.2 跨单元只能依赖的接口
 
@@ -536,6 +536,20 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 ---
 
 ## 14. 修订记录
+
+### v2.0.4(2026-10-16,P2 设计第 4 轮独立审核修订)
+
+配套 `docs/p2-design.md` v1.4(其 §13 有逐条处置)。仍然全部是**追加**或对 v2.0 新增骨架的修改,未改动 v1.x 已实现的导出签名。
+
+| 项 | 处理 | 涉及文件 |
+|---|---|---|
+| 项目层削弱的会话可绕过 runner 直接写全局证据(major) | 新增 `ports.ProjectSandboxChecker`(`tier.ProjectChecker`)、`hook.Deps.ProjectSandbox`/`WeakenedProject`、`model.WeakenedProjectPolicy`、`tier.OrgConfig.WeakenedProject`(org.json `weakened_project`);hook 在会话首个事件对 `$CLAUDE_PROJECT_DIR` 检查并审计,deny 模式逐 PreToolUse 拒绝;`model.HookStartRequest.ProjectDir` 与 `--project-dir`,runner 同时检查 job 仓库与项目目录;T1 证据的全机前提写入 p2-design §3.3 与 trust-model §2.3 | `internal/ports/ports.go`、`internal/hook/hook.go`、`internal/model/tier.go`、`internal/model/verifyreq.go`、`internal/tier/tier.go`、`internal/runner/t1.go`、§3.3、§7 |
+| 低层顶层键(`env`、helper 命令键)与沙箱外 git 的环境(major) | `tier.WeakenedSandboxKeys(doc, layer)` 改签名,新增 `tier.SettingsLayer`(`LayerUser`/`LayerRepo`),顶层与 `permissions` 改为白名单;新增 `sandbox.HostEnv` 与 `sandbox.Spec.LoaderEnv` | `internal/tier/tier.go`、`internal/sandbox/sandbox.go` |
+| macOS deny 放行回环(major) | deny 不再放行回环;新增 `model.NetworkLoopback`(org.json `runner_network:"loopback"`,登记为残余风险);`DarwinEscapeDenials` 验收须脱离 process-exec 规则 | `internal/model/tier.go`、`internal/sandbox/sandbox.go` |
+| allow 策略撤掉本地 socket 隔离(major) | 本地 socket 隔离与网络策略脱钩、恒定执行;`Wrapped.Env` 恒定移除 `SSH_AUTH_SOCK`、`DOCKER_HOST`、`DBUS_SESSION_BUS_ADDRESS`、`DBUS_SYSTEM_BUS_ADDRESS` | `internal/sandbox/sandbox.go`、`internal/model/tier.go` |
+| 契约缺口与漂移(minor) | `hook.Deps.IDs`;`model.Diag*` 与闭合枚举 `model.DiagNames`、`report.DiagOther`;§7 与 §3.1 的 P2 追加行归 P2-CLI;§2.2、§3.3 漂移修正;`tier.HomeOptions.Timeout`、`DefaultLockedHomeTimeout`、`ErrLockedHomeTimeout`;条件 4、5 与 `tier.Locked` 增加托管目录父链检查 | `internal/hook/hook.go`、`internal/model/audit.go`、`internal/report/report.go`、`internal/tier/tier.go`、`internal/layout/resolvewith.go`、§2.2、§3.3、§8.1 |
+
+骨架状态下 `go build ./...`、`go vet ./...`、`GOOS=windows go vet ./...`、`go test ./...` 均通过。
 
 ### v2.0.3(2026-10-16,P2 设计第 3 轮独立审核修订)
 

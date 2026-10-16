@@ -47,7 +47,7 @@ T1 完全依赖客户端的**托管设置**机制。设计中的组成如下(全
 
 1. **托管 hook**:命令用 root 拥有的绝对路径(例如 `/usr/local/libexec/ballast/ballast`),不经过 `PATH`,也不调用 agent 能改的脚本。
 2. **`allowManagedHooksOnly: true`**:只运行托管层的 hook,阻止用户层、项目层、本地层和插件 hook(托管设置强制启用的插件 hook 例外)。文档称低层的 `disableAllHooks` 不能关闭托管 hook。
-3. **sandbox**:`enabled: true`、`allowUnsandboxedCommands: false`、`failIfUnavailable: true`、`excludedCommands: []`,并在 `filesystem.denyWrite` 里列出受保护路径。托管层写空列表**挡不住低层追加**(数组设置一般跨层合并,见 §2.3),所以 P2 的层级判定还要求用户层、项目层、本地层都没有削弱沙箱的键。
+3. **sandbox**:`enabled: true`、`allowUnsandboxedCommands: false`、`failIfUnavailable: true`、`excludedCommands: []`,并在 `filesystem.denyWrite` 里列出受保护路径。托管层写空列表**挡不住低层追加**(数组设置一般跨层合并,见 §2.3),所以 P2 的层级判定还要求用户层没有削弱沙箱的键,项目层与本地层则只能按会话检查(见 §2.3 的全机前提)。
 4. **`permissions.deny`**:对受保护路径禁止 `Edit`、`Write`、`NotebookEdit`,并设 `allowManagedPermissionRulesOnly: true` 使低层不能放宽。
 5. **MCP 白名单**:见下文"残余风险"。
 
@@ -69,7 +69,9 @@ T1 完全依赖客户端的**托管设置**机制。设计中的组成如下(全
 - 托管值不能被低层覆盖,但"少数安全键例外:低层更严的值仍生效"(**未核验,待 M0b**)。
 - ConfigChange 事件只覆盖 Claude 设置与 skills,**不会**监视任意 Ballast 文件,部分托管刷新也不触发它(文档依据)。
 - 磁盘写满会使 hook 按"任何异常都放行"的设计失效强制。
-- **低层削弱沙箱(P2 设计,`docs/p2-design.md` §3.2 条件 6)**:Claude 的数组设置一般跨层合并,托管层的 `excludedCommands: []` 挡不住用户层、项目层、本地层追加 `["npm"]` 或 `["docker"]`;`network.allowUnixSockets`(例如 `docker.sock`)、`filesystem.allowWrite`、`enableWeakerNestedSandbox`、`network.allowedDomains` 同理(**未核验,待 M0b `lower-sandbox-merge`**)。`allowManagedPermissionRulesOnly` 只约束 `permissions`,不约束 `sandbox`。项目层 `.claude/settings.json` 随仓库提交,会话内的 denyWrite 管不到它从 clone 或 pull 进来。只要有这样的值,agent 就能在沙箱外运行被排除的命令,直接写 `~/.ballast/evidence`。P2 的保守做法:用户层出现任何削弱值(白名单之外的 `sandbox` 键)就判 T0、doctor 报 fail;runner 对每个 job 的仓库检查项目层与本地层,出现削弱值就把证据记为 T0 并审计 `tier_mismatch`。部署时请确认用户与仓库都没有写这些键。
+- **低层削弱沙箱(P2 设计,`docs/p2-design.md` §3.2 条件 6)**:Claude 的数组设置一般跨层合并,托管层的 `excludedCommands: []` 挡不住用户层、项目层、本地层追加 `["npm"]` 或 `["docker"]`;`network.allowUnixSockets`(例如 `docker.sock`)、`filesystem.allowWrite`、`enableWeakerNestedSandbox`、`network.allowedDomains` 同理(**未核验,待 M0b `lower-sandbox-merge`**)。`allowManagedPermissionRulesOnly` 只约束 `permissions`,不约束 `sandbox`。项目层 `.claude/settings.json` 随仓库提交,会话内的 denyWrite 管不到它从 clone 或 pull 进来。只要有这样的值,agent 就能在沙箱外运行被排除的命令,直接写 `~/.ballast/evidence`。P2 的保守做法:用户层出现任何削弱值(白名单之外的 `sandbox` 键、非空的 `permissions.additionalDirectories` 等)就判 T0、doctor 报 fail;项目层与本地层的白名单更严——`env`(可带 `DYLD_INSERT_LIBRARIES`、`LD_PRELOAD`、`GIT_CONFIG_*` 进入托管 hook 与 runner 的环境)、会执行命令的 helper 键(`apiKeyHelper`、`statusLine`、`awsAuthRefresh` 等)、插件与 MCP 自动启用、任何未知顶层键都算削弱(这些键在项目层是否生效**未核验,待 M0b**)。
+- **T1 证据的保证是全机范围的(P2 设计)**:证据目录 `~/.ballast/evidence` 是全局的。只要主机上**任何一个** Claude 会话的项目目录(Claude 实际加载的 `CLAUDE_PROJECT_DIR`,在 monorepo 子目录或父目录启动时与仓库根不同)带削弱沙箱的 `.claude/settings*.json`,这个会话就能绕过 runner 在沙箱外直接写证据,而且写入者想填什么 tier、sandbox、origin 都行。所以**T1 证据可信的前提是主机上没有任何削弱沙箱的项目层**。Ballast 能做的是:hook 在会话首个事件检查项目目录并审计 `lower_sandbox_weakened`(审计行本身也可能被这样的会话事后改写);org.json `weakened_project:"deny"` 让这类会话的所有工具调用被拒(挡不住在工具调用之外起作用的设置,例如 Claude 启动时执行的 helper 命令);runner 对 job 仓库与项目目录再查,不通过时把**它自己写的**记录标为 T0——这只影响诚实记录,不能把伪造的记录变回可信。部署时请确认所有仓库都没有这类设置,并建议开启 `weakened_project:"deny"`;`ballast doctor` 在仓库内运行时会点名具体文件与键。
+- **托管 hook 进程的环境(P2 设计)**:项目层 `env` 会进入托管 hook 本身。未启用 hardened runtime 的 macOS 构建会加载 `DYLD_INSERT_LIBRARIES`,动态链接的 Linux 构建(例如管理员自建的 cgo 构建)会加载 `LD_PRELOAD`。macOS 发布构建须以 `codesign -o runtime` 签名(doctor `tier.binary_hardening` 检查);Linux 发布构建是静态链接,不受影响。runner 在沙箱外启动的 git 使用去掉 `GIT_*`、`LD_*`、`DYLD_*` 的环境。
 - **`runner_allow_write`(P2 设计)**:org.json 中的每一项都等价于把该目录交给 agent 可以改写的测试代码。hook 代起的沙箱测试可以写它,写入在 job 结束后仍然存在,而且不在内容快照 `C` 里;如果它是共享的构建缓存(例如家目录下的 Go 构建缓存),之后在沙箱外运行的人工构建会复用被投毒的条目,形成一条跨越边界、能持久存在的通道。默认建议保持为空:runner 会把常见缓存变量(`GOCACHE`、`XDG_CACHE_HOME`、npm/yarn/pip 缓存)指向每个 job 的临时目录;确需持久缓存时优先用仓库内被忽略的目录,并把这一项当作残余风险评估。
 
 ### 2.4 T1 设计中的两条特权链路(P2 设计,`docs/p2-design.md` §3)
@@ -78,7 +80,8 @@ T1 完全依赖客户端的**托管设置**机制。设计中的组成如下(全
 
 - **降级攻击**:agent 不需要伪造 T1,只要把 `BALLAST_HOME`、`BALLAST_MANAGED_DIR`、`BALLAST_INSTALL_ROOT` 塞进 Claude Code 进程的环境(例如先设法改写 shell 启动文件),判定就会落到 T0,org 规则和 `no-tamper` 也会改从 agent 可控的目录读取——"降到 T0"本身就是攻击目标,不是防御。P2 的对策是**重定向锁**:只要编译期默认托管目录下存在 root 所有、声明 `tier:"T1"` 的 `org.json`,生产构建就忽略这三个变量,家目录取自 passwd 而不是 `$HOME`,并审计 `env_redirect_ignored`。企业机群里 passwd 可能查不到 sssd/LDAP 用户(静态构建只读 `/etc/passwd`):此时只在 org.json 配置了 root 所有的 `home_root` 父目录、且 `$HOME` 是其下属于该用户、组和其他不可写的直接子目录时才采信;否则该用户的 hook 放行,`ballast doctor` 报 fail 并给出修复提示,`org render --write` 在预检失败时拒绝写入。
 - **hook 代起的 verify**:hook 在 Claude 沙箱之外启动 runner,runner 执行的测试代码是 agent 可以改写的。如果 runner 的沙箱弱于 Claude 自己的 Bash 沙箱,这条链路就是一个沙箱逃逸原语(写 shell 启动文件、git hooks、`~/.claude.json`,重命名受保护路径的祖先目录再重建,联网外传)。P2 的对策:runner 沙箱**默认拒写**(只放行仓库、git dir、job 临时目录与管理员给出的 `runner_allow_write`,其中仍拒受保护路径、git hooks/config 等,并固定这些路径的祖先目录),网络默认拒绝;hook 代起的 job **一律**必须在沙箱里运行,沙箱不可用就不执行。git hooks、git config、gitfile、`.claude/`、`.vscode/`、`.mcp.json` 等"之后会在沙箱外生效"的文件按**任意深度**拒写(嵌套仓库、submodule 也在内),Linux 上沙箱内新建的这类文件在 job 结束后被移出仓库隔离;被包装的测试命令新建会话、不持有人的终端,无法用 `TIOCSTI` 往人的 shell 注入按键。
-- 残余风险:Linux 上自定义位置的 unix socket(例如家目录下的 docker.sock)仍可从沙箱内连接;macOS 上经 LaunchServices、AppleEvents、launchd 的逃逸通道能否全部关闭待 P2 实测。
+- **网络与本地 socket**:`runner_network` 默认 `deny`——macOS 上沙箱内的测试连回环也被拒绝(SBPL 分不清测试自己绑定的端口与沙箱外监听在 127.0.0.1 的服务),Linux 使用私有网络命名空间。本地 unix socket(容器守护进程、用户会话总线、SSH agent)的隔离与网络策略无关、恒定执行;`allow` 只放开出站 IP。
+- 残余风险:Linux 上自定义位置的 unix socket(例如家目录下的 docker.sock)仍可从沙箱内连接;管理员显式选择 `runner_network:"loopback"` 时,macOS 上的测试可以连接主机回环上的任何服务(IDE 扩展服务、开发代理、容器守护进程的 TCP 端口);选择 `allow` 时,Linux 上主机的抽象命名空间 unix socket 仍可达;macOS 上经 LaunchServices、AppleEvents、launchd 的逃逸通道能否全部关闭待 P2 实测(验收要求脱离 process-exec 规则单独证明 mach-lookup 拒绝生效)。
 
 ## 3. verify 链路与信任
 
@@ -142,7 +145,7 @@ T1 完全依赖客户端的**托管设置**机制。设计中的组成如下(全
    ballast doctor
    ```
 
-   确认 `claude.managed_duplicate` 等检查为 ok,层级输出里不再缺失 T1 组件。
+   确认 `claude.managed_duplicate` 等检查为 ok,层级输出里不再缺失 T1 组件。P2 起还要在每个常用仓库(以及在其子目录启动 Claude 的目录)里运行一次 `ballast doctor`,确认 `tier.repo_sandbox_weakened` 为 ok——T1 证据的可信以主机上没有削弱沙箱的项目层为前提(§2.3)。
 
 ### 4.3 上线后的行为
 

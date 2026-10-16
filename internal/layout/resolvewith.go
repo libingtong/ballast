@@ -25,6 +25,10 @@ type Options struct {
 	// tier.locked_home reports fail with fix hints; a locked host whose
 	// home cannot be determined is misconfigured, not a reason to trust
 	// $HOME). Ignored when IgnoreRedirects is false (never called).
+	// Because it runs before the hook's watchdog is armed, the closure is
+	// bounded by tier.HomeOptions.Timeout (default
+	// tier.DefaultLockedHomeTimeout, 50 ms); expiry is an error like any
+	// other (v2.0.4).
 	PasswdHome func() (string, error)
 }
 

@@ -24,7 +24,8 @@
 // (testdata/audit → testdata/report.golden.json); Validate rejects
 // planted paths/ids/secrets (table test); a property test feeds random audit
 // records with planted secrets and paths and asserts none appears in the
-// serialized report; `ballast report --out f` exit codes per
+// serialized report; every model.DiagNames entry round-trips into Diags and
+// an unknown name lands in DiagOther (table test); `ballast report --out f` exit codes per
 // docs/p2-design.md §4.4.
 package report
 
@@ -38,6 +39,9 @@ import (
 
 // Version is Report.V.
 const Version = 1
+
+// DiagOther is the Report.Diags key for diag names outside model.DiagNames.
+const DiagOther = "other"
 
 // Options configures Build.
 type Options struct {
@@ -68,9 +72,12 @@ type Report struct {
 	Clients map[model.ClientID]int `json:"clients"` // records per client
 	Tiers   map[model.Tier]int     `json:"tiers"`   // records per tier
 	Rules   []RuleAgg              `json:"rules"`
-	Diags   map[string]int         `json:"diags"` // detail.diag name → count (names are a closed enum)
-	Verify  VerifyAgg              `json:"verify"`
-	Latency LatencyAgg             `json:"latency"`
+	// Diags maps detail.diag → count. Keys are only names from the frozen
+	// closed enumeration model.DiagNames; any other value (including a
+	// malformed one) is counted under DiagOther and never printed.
+	Diags   map[string]int `json:"diags"`
+	Verify  VerifyAgg      `json:"verify"`
+	Latency LatencyAgg     `json:"latency"`
 	// Redactions counts audit strings that contained a redacted secret, by
 	// redact.Kind (lets maintainers see detector coverage without content).
 	Redactions map[string]int `json:"redactions"`

@@ -84,13 +84,22 @@ type HookStartRequest struct {
 	Client    ClientID
 	SessionID string
 	AgentID   string
+	// ProjectDir (v1.4) is the session's project directory as Claude Code
+	// itself sees it — the hook's $CLAUDE_PROJECT_DIR when absolute, "" when
+	// unset — i.e. the directory whose .claude/settings*.json Claude loads
+	// as the project and local layers. It can differ from the job repo
+	// (Claude started in a monorepo subdirectory, or in a parent of the
+	// repo). The runner applies tier.RepoSandboxWeakened to it IN ADDITION
+	// to the job repo (docs/p2-design.md §3.4 "runner 自判 T1"); it never
+	// widens the sandbox's writable set.
+	ProjectDir string
 }
 
 // HookStartArgv renders the frozen child argv (self = absolute path of the
 // running ballast binary):
 //
 //	<self> verify --hook-start --request <id> --cwd <cwd> --client <c>
-//	       [--session <sid>] [--agent <aid>] -- [names...]
+//	       [--session <sid>] [--agent <aid>] [--project-dir <dir>] -- [names...]
 //
 // Pure. ParseHookStartArgv(HookStartArgv(s, r)[1:]) == r for every r with a
 // valid RequestID (round-trip test, incl. cwd with spaces and leading '-').
@@ -100,7 +109,7 @@ func HookStartArgv(self string, req HookStartRequest) []string {
 
 // ParseHookStartArgv parses the arguments after the binary path (starting
 // with "verify"). It rejects a RequestID that is not in job-id format, a
-// relative Cwd and names that ParseVerifyRequest would reject.
+// relative Cwd or ProjectDir and names that ParseVerifyRequest would reject.
 func ParseHookStartArgv(args []string) (HookStartRequest, error) {
 	panic("unimplemented: model.ParseHookStartArgv (unit P2-HOOK)")
 }

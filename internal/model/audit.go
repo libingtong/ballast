@@ -22,6 +22,45 @@ const (
 	AuditConfigChange  AuditType = "config_change"  // Claude ConfigChange event, audit only (P2, architecture v2.0)
 )
 
+// Diag names: the closed enumeration of Detail["diag"] values of AuditDiag
+// lines (v2.0.4; docs/p2-design.md §3.3 "诊断名清单"). Emitters must use
+// one of DiagNames; adding a name is an append-only contract change made
+// here first. internal/report counts names outside DiagNames under "other"
+// (report.DiagOther) and never prints them.
+const (
+	// pre-P2 (hook, runner)
+	DiagCapabilityDegraded = "capability_degraded"
+	DiagEvidenceOpenFailed = "evidence_open_failed"
+	DiagGCSpawnFailed      = "gc_spawn_failed"
+	DiagLockTimeout        = "lock_timeout"
+	DiagNotARepo           = "not_a_repo"
+	DiagPredicateUnknown   = "predicate_unknown"
+	DiagRepoLocateFailed   = "repo_locate_failed"
+	DiagSnapshotFallback   = "snapshot_fallback"
+	DiagStateCorrupt       = "state_corrupt"
+	DiagStateUnreadable    = "state_unreadable"
+	// P2 (docs/p2-design.md §3.2–§3.4)
+	DiagEnvRedirectIgnored   = "env_redirect_ignored"   // hook, first event of a session on a locked host
+	DiagVerifyHookStart      = "verify_hook_start"      // hook, canonical verify under T1
+	DiagVerifySpawnFailed    = "verify_spawn_failed"    // hook, hook-start spawn failed
+	DiagTierMismatch         = "tier_mismatch"          // hook (declared T1, detected T0) and runner (record downgraded)
+	DiagSandboxQuarantine    = "sandbox_quarantine"     // runner, PostCheck found created protected paths
+	DiagSandboxUnavailable   = "sandbox_unavailable"    // runner, mandatory sandbox missing
+	DiagLowerSandboxWeakened = "lower_sandbox_weakened" // hook, first event: project layer weakens the sandbox (v1.4)
+	DiagLowerSandboxDeny     = "lower_sandbox_deny"     // hook, PreToolUse denied under weakened_project:"deny" (v1.4)
+)
+
+// DiagNames lists every Diag* constant above, sorted. Table-tested by
+// internal/report (each name round-trips; an unknown name maps to "other").
+var DiagNames = []string{
+	DiagCapabilityDegraded, DiagEnvRedirectIgnored, DiagEvidenceOpenFailed,
+	DiagGCSpawnFailed, DiagLockTimeout, DiagLowerSandboxDeny,
+	DiagLowerSandboxWeakened, DiagNotARepo, DiagPredicateUnknown,
+	DiagRepoLocateFailed, DiagSandboxQuarantine, DiagSandboxUnavailable,
+	DiagSnapshotFallback, DiagStateCorrupt, DiagStateUnreadable,
+	DiagTierMismatch, DiagVerifyHookStart, DiagVerifySpawnFailed,
+}
+
 // AuditVersion is the current record schema version ("v").
 const AuditVersion = 1
 

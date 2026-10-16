@@ -190,3 +190,16 @@ type Spawner interface {
 type TierProbe interface {
 	Probe() model.TierInfo
 }
+
+// ProjectSandboxChecker (P2 unit P2-TIER, tier.ProjectChecker; v2.0.4,
+// docs/p2-design.md §3.3 "项目层削弱") reports whether the Claude project
+// and local settings layers of dir (<dir>/.claude/settings*.json) weaken the
+// managed sandbox: it returns tier.RepoSandboxWeakened(fs, dir), i.e.
+// sorted "<basename>:<key>" entries, empty ⇒ not weakened. It only
+// Lstats/reads those files (no exec, no network); an absent .claude costs
+// one Lstat. The hook calls it on the first event of a session (and, under
+// org.json weakened_project:"deny", on every PreToolUse); internal/cli wires
+// it only on a redirect-locked host (nil ⇒ the check is off).
+type ProjectSandboxChecker interface {
+	Weakened(dir string) []string
+}
