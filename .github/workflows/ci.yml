@@ -163,7 +163,9 @@ jobs:
               echo "::notice title=Windows 跳过 -race::runner 上没有 gcc,-race 依赖 cgo,改用不带 -race 的测试"
             fi
           fi
-          go test $race -tags ballast_test -count=1 ./...
+          # -timeout 30m:internal/snapshot 在托管 Windows runner 上要跑 3–9 分钟(git 与 Defender
+          # 处理数千个小文件),逼近 go test 默认的 10 分钟包超时,曾因此整包 panic。
+          go test $race -tags ballast_test -timeout 30m -count=1 ./...
 
       # 生产构建(无 ballast_test 标签)必须忽略 BALLAST_TEST_WATCHDOG_MS:
       # 这一步不带标签,只跑断言"忽略"的测试(即使 job 级环境里设了该变量)。

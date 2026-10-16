@@ -18,7 +18,9 @@ shared_binaries
 sandbox_new gotest
 section "unit tests"
 rc=0
-(cd "$REPO_ROOT" && gocmd test -count=1 ./internal/snapshot ./internal/evidence ./internal/project ./internal/runner) || rc=$?
+# -timeout 30m: the snapshot package takes 3-9 minutes on a hosted Windows runner
+# (git and Defender on thousands of small files), close to go test's 10 minute default.
+(cd "$REPO_ROOT" && gocmd test -timeout 30m -count=1 ./internal/snapshot ./internal/evidence ./internal/project ./internal/runner) || rc=$?
 if [ "$rc" = 0 ]; then ok "go test snapshot evidence project runner"; else bad "go test snapshot evidence project runner" "exit $rc"; fi
 
 run_child "freshness.sh" freshness.sh
