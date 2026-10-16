@@ -40,6 +40,30 @@ func TestVerifyHookStartArgs(t *testing.T) {
 	}
 }
 
+// TestVerifyHookStartHelpLikeValue: the frozen --hook-start grammar takes the
+// next token verbatim, so "-h" / "--help" as a session or agent id is a value,
+// not a help request: the request file is written (with the config error) and
+// the exit follows the argument result, never the usage text with exit 0.
+func TestVerifyHookStartHelpLikeValue(t *testing.T) {
+	s := newSandbox(t)
+	for i, flag := range [][]string{{"--session", "-h"}, {"--session", "--help"}, {"--agent", "-help"}} {
+		id := requestID(10 + i)
+		args := append([]string{"verify", "--hook-start", "--request", id, "--cwd", s.work, "--client", "claude-code"}, flag...)
+		args = append(args, "--")
+		r := s.run("", "", args...)
+		if r.code != 2 {
+			t.Errorf("%v: exit %d, want 2 (not the help exit 0)\n%s%s", flag, r.code, r.stdout, r.stderr)
+		}
+		if strings.Contains(r.stdout, "用法") {
+			t.Errorf("%v: printed the usage text: %q", flag, r.stdout)
+		}
+		st := s.run("", "", "verify", "--status", id)
+		if st.code != 5 || !strings.Contains(st.stdout, "error=") {
+			t.Errorf("%v: --status of the request: exit %d %q, want 5 with the recorded error", flag, st.code, st.stdout)
+		}
+	}
+}
+
 // TestVerifyStatusRequestFallback: with no job of that id,
 // `verify --status <request_id>` falls back to the request file the
 // hook-started verify wrote; an unknown id keeps the no-record exit (11).

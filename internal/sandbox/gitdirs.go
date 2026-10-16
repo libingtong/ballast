@@ -242,10 +242,26 @@ func dedupe(s []string) []string {
 	return out
 }
 
+// TreeTmp returns the job temp directory carve-out of an origin=hook spec: with
+// Spec.Tree set, a TmpDir equal to <job>/tmp (the sibling of Tree under
+// <WorkRoot>/<job>, so below the protected ~/.ballast subtree where the
+// agent's own sandbox cannot write) is the second and only other writable
+// root allowed inside a DenyWrite directory. "" when there is none.
+func TreeTmp(spec Spec) string {
+	if spec.Tree == "" || spec.TmpDir == "" {
+		return ""
+	}
+	if tmp := filepath.Clean(spec.TmpDir); tmp == filepath.Join(filepath.Dir(filepath.Clean(spec.Tree)), "tmp") {
+		return tmp
+	}
+	return ""
+}
+
 // ValidateSpec rejects specs that would make the sandbox meaningless:
 // an AllowWrite entry equal to "/", to Home or to an ancestor of Home, or
-// equal to / inside a DenyWrite directory (sole exception, v1.5: Spec.Tree
-// under the rules documented on Spec.Tree); a Cwd outside AllowWrite; a
+// equal to / inside a DenyWrite directory (the only exceptions, v1.5: Spec.Tree
+// under the rules documented on Spec.Tree, and the job temp directory next to
+// it, TreeTmp); a Cwd outside AllowWrite; a
 // relative path anywhere; and a GitDirs set that differs from what
 // ResolveGitDirs(fsys, r) returns for the RepoRoots entries r (re-checked
 // through fsys at wrap time, so W can never be widened to an arbitrary
@@ -315,6 +331,7 @@ func ValidateSpec(fsys sys.FS, spec Spec) error {
 		tree = filepath.Clean(spec.Tree)
 	}
 
+	tmpc := TreeTmp(spec)
 	roots := make([]string, 0, len(spec.AllowWrite))
 	for _, a := range spec.AllowWrite {
 		roots = append(roots, filepath.Clean(a))
@@ -336,7 +353,7 @@ func ValidateSpec(fsys sys.FS, spec Spec) error {
 					return invalid("writable root %q is the home directory or an ancestor of it", w)
 				}
 			}
-			if f == tree || (tree != "" && within(f, tree)) {
+			if f == tree || (tree != "" && within(f, tree)) || (tmpc != "" && within(f, tmpc)) {
 				continue // checked below
 			}
 			for _, d := range denyDirs {
@@ -414,6 +431,13 @@ func validateTree(fsys sys.FS, spec Spec, tree, cwd string) error {
 		return invalid("Tree %q: %v", tree, err)
 	} else if real != tree {
 		return invalid("Tree %q has a symlink on its path (resolves to %q)", tree, real)
+	}
+	if tmpc := TreeTmp(spec); tmpc != "" {
+		if real, err := fsys.EvalSymlinks(tmpc); err != nil {
+			return invalid("job temp dir %q: %v", tmpc, err)
+		} else if real != tmpc {
+			return invalid("job temp dir %q has a symlink on its path (resolves to %q)", tmpc, real)
+		}
 	}
 	if len(spec.RepoRoots) != 1 || filepath.Clean(spec.RepoRoots[0]) != tree {
 		return invalid("with Tree set RepoRoots must be exactly [Tree]")

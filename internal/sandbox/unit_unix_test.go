@@ -1084,6 +1084,72 @@ func TestWrapEnvAllPolicies(t *testing.T) {
 	}
 }
 
+// TestValidateSpecTreeTmp: with Tree set, the job temp dir may lie inside the
+// protected ~/.ballast subtree only as <WorkRoot>/<job>/tmp, the sibling of
+// the tree (no symlink on its path); any other temp dir inside a DenyWrite
+// directory is refused, and the darwin profile allows exactly that directory
+// after the ~/.ballast deny.
+func TestValidateSpecTreeTmp(t *testing.T) {
+	root := realTemp(t)
+	ballast := filepath.Join(root, "home", ".ballast")
+	work := filepath.Join(ballast, "work")
+	tree := filepath.Join(work, "j1", "tree")
+	mkfiles(t, tree, "src/a.go")
+	mkfiles(t, work, "j1/tmp/", "j2/tmp/", "j1/other/")
+	mkfiles(t, ballast, "evidence/")
+	base := Spec{
+		AllowWrite: []string{tree}, RepoRoots: []string{tree}, DenyWrite: []string{ballast},
+		Home: filepath.Join(root, "home"), Cwd: tree, Tree: tree, WorkRoot: work,
+	}
+	ok := base
+	ok.TmpDir = filepath.Join(work, "j1", "tmp")
+	if err := ValidateSpec(sys.OSFS{}, ok); err != nil {
+		t.Fatalf("<job>/tmp next to the tree must be accepted: %v", err)
+	}
+	if TreeTmp(ok) != ok.TmpDir {
+		t.Errorf("TreeTmp = %q", TreeTmp(ok))
+	}
+	for name, tmp := range map[string]string{
+		"other job's tmp":   filepath.Join(work, "j2", "tmp"),
+		"other dir of job":  filepath.Join(work, "j1", "other"),
+		"inside ~/.ballast": filepath.Join(ballast, "evidence"),
+		"the job dir":       filepath.Join(work, "j1"),
+		"inside the tree":   filepath.Join(tree, "src"),
+	} {
+		bad := base
+		bad.TmpDir = tmp
+		err := ValidateSpec(sys.OSFS{}, bad)
+		if name == "inside the tree" {
+			if err != nil {
+				t.Errorf("%s: %v", name, err)
+			}
+			continue
+		}
+		if !errors.Is(err, ErrInvalidSpec) {
+			t.Errorf("%s: want ErrInvalidSpec, got %v", name, err)
+		}
+	}
+	// A symlinked tmp is refused (the carve-out needs a plain directory).
+	link := filepath.Join(work, "j3")
+	mkfiles(t, link, "tree/src/a.go", "real/")
+	if err := os.Symlink(filepath.Join(link, "real"), filepath.Join(link, "tmp")); err != nil {
+		t.Fatal(err)
+	}
+	sl := base
+	sl.AllowWrite, sl.RepoRoots, sl.Cwd, sl.Tree = []string{filepath.Join(link, "tree")}, []string{filepath.Join(link, "tree")}, filepath.Join(link, "tree"), filepath.Join(link, "tree")
+	sl.TmpDir = filepath.Join(link, "tmp")
+	if err := ValidateSpec(sys.OSFS{}, sl); !errors.Is(err, ErrInvalidSpec) {
+		t.Errorf("symlinked tmp: want ErrInvalidSpec, got %v", err)
+	}
+	prof := DarwinProfile(ok)
+	if !strings.Contains(prof, "(allow file-write* (subpath "+sbplString(ok.TmpDir)+"))") {
+		t.Errorf("the profile lacks the temp dir carve-out:\n%s", prof)
+	}
+	if strings.Index(prof, "(subpath "+sbplString(ballast)+")") > strings.Index(prof, "(allow file-write* (subpath "+sbplString(ok.TmpDir)+"))") {
+		t.Errorf("the carve-out must come after the ~/.ballast deny:\n%s", prof)
+	}
+}
+
 func TestWrapTreeEnvAndLoaderEnv(t *testing.T) {
 	root := realTemp(t)
 	work := filepath.Join(root, "home", ".ballast", "work")

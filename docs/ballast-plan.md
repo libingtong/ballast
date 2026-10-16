@@ -52,13 +52,13 @@
 | A11 | PreCompact 不能注入上下文;compact 后用 SessionStart(compact) 恢复 [D] | UserPromptSubmit、PostToolBatch 等事件同样可以合法注入 | 已核验 |
 | A12 | command hook 支持 `type, command, args, timeout, async` [D] | 拦截类 hook 必须同步;用 `command` + `args` 作为安装归属标识(B12) | 已核验 |
 | A13 | 托管设置路径:macOS `/Library/Application Support/ClaudeCode/`、Linux/WSL `/etc/claude-code/`、Windows `C:\Program Files\ClaudeCode\`,另有 `managed-settings.d`/MDM 等 [D] | 托管值不能被低层覆盖,**但少数安全键例外**:低层更严的值仍生效。hook 另有合并语义(A15)。本机未部署 [L] | 已核验 |
-| A14 | `allowManagedHooksOnly` 会阻止 user / project / local / plugin hook,但托管设置强制启用的插件 hook 例外;**低层 `disableAllHooks` 不能关闭托管 hook** [D hooks 配置章节原文] | 尚未在真实托管环境实测 | 文档已核验,实测待 M0b |
+| A14 | `allowManagedHooksOnly` 会阻止 user / project / local / plugin hook,但托管设置强制启用的插件 hook 例外;**低层 `disableAllHooks` 不能关闭托管 hook** [D hooks 配置章节原文] | 已由 M0b 核验(Claude Code 2.1.300,Linux 容器),见 `facts/M0b-CONCLUSIONS.md`:`managed-only-blocks-lower`、`lower-disableallhooks-vs-managed` | 已核验(M0b) |
 | A15 | "Hook entries merge across settings levels rather than replacing each other" [D] | 托管 hook 与低层 hook 同时执行 → 托管部署时用户层**不得再装一份**(B12 安装检测) | 已核验 |
 | A16 | ConfigChange 的 matcher 只覆盖 Claude 设置和 skills [D] | **不监视任意 Ballast 文件**;部分托管刷新不触发该事件 | 已核验 |
 | A17 | transcript 为每行一个 JSON 的 jsonl,属内部格式,文档没有承诺稳定 | 2026-10-15 快照:顶层 1812 份,递归 2430 份(其中 618 份为子 agent);并非每类行都带全部元数据;有 708 条 `stop_hook_summary` [R E2] | 观察 |
 | A18 | 启动成本基线 [L][R E4] | `/usr/bin/true` p95 ≈ 2ms;`python3 -I` p95 ≈ 18.8ms;`node` p95 ≈ 56ms。**只说明启动成本**,不能推出完整 hook 的耗时;Go 未实测 | Go 待 M0c |
 | A19 | pinrule(HEAD 2aa78c3):恰好 8 个注册函数;`_TEST_CMD_RE` 不含 mvn / gradle / dotnet / swift;`_FAIL_RE` 会把 "0 failed" 判为失败;只有 deny 一档;单层配置 [R E3] | 正常路径的 100–180ms 耗时**未核验**(审核测的是损坏输入的路径) | 部分核验 |
-| A20 | **沙箱只覆盖 Bash**,文件工具、MCP server 和 hook 都在沙箱外运行;**原生 Windows 没有沙箱**;可托管的键有 `sandbox.enabled`、`sandbox.filesystem.denyWrite`、`allowUnsandboxedCommands:false`、`sandbox.failIfUnavailable:true`、`permissions.deny`、`allowManagedPermissionRulesOnly` [D sandboxing/settings/managed-settings] | 这是 T1 边界的基础(B0) | 文档已核验,实测待 M0b |
+| A20 | **沙箱只覆盖 Bash**,文件工具、MCP server 和 hook 都在沙箱外运行;**原生 Windows 没有沙箱**;可托管的键有 `sandbox.enabled`、`sandbox.filesystem.denyWrite`、`allowUnsandboxedCommands:false`、`sandbox.failIfUnavailable:true`、`permissions.deny`、`allowManagedPermissionRulesOnly` [D sandboxing/settings/managed-settings] | 这是 T1 边界的基础(B0);**hook 在沙箱外运行已由 M0b 核验**(`hooks-run-outside-sandbox` pass),见 `facts/M0b-CONCLUSIONS.md`;文件工具与 MCP 在沙箱外是 mock 佐证,真实模型调用下的效果【需凭据】 | 已核验(M0b;部分需凭据) |
 | A21 | 并行工具调用时 PostToolUse **并发触发**;PostToolBatch 每批只触发一次 [D] | → B6 需要跨进程锁 | 已核验 |
 | A22 | 子 agent 的工具事件触发同一套 hook,并携带 `agent_id/agent_type`;SubagentStop 额外提供 `agent_transcript_path`、`last_assistant_message` [D] | → B6 按 agent 划分作用域 | 已核验 |
 | A23 | Windows 上文件工具给出的路径一律是带反斜杠的绝对路径(即使 hook 跑在 Git Bash 里);存在 PowerShell 工具,matcher 写作 `Bash\|PowerShell`;没有 Git Bash 时 hook 经 PowerShell 运行 [D] | → B11 | 已核验 |

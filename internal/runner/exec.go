@@ -250,7 +250,15 @@ func (o Options) execute(js *model.JobStatus, side jobSpec, rec *model.VerifyRec
 	var wrapped sandbox.Wrapped
 	var roots []string
 	if kind != sandbox.KindNone {
-		tmp, terr := o.newJobTmp()
+		// origin=hook: the temp dir lives next to the private tree under
+		// ~/.ballast/work/<job>/ (the agent's own sandbox cannot write there);
+		// the inherited $TMPDIR comes from the agent's client and its directory
+		// may be writable by the agent, so it is never the base (trust-model 2.3).
+		tmpBase := ""
+		if origin == model.OriginHook {
+			tmpBase = tree.Root
+		}
+		tmp, terr := o.newJobTmp(tmpBase)
 		if terr != nil {
 			fail(fmt.Errorf("sandbox temp dir: %w", terr))
 			return

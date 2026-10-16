@@ -39,7 +39,9 @@ func Main(argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ballast: unknown command %q\n\n%s", name, topUsage)
 		return ExitUsage
 	}
-	if wantsHelp(args) {
+	// `verify --hook-start` has a frozen argv grammar in which a flag's value is
+	// the next token verbatim (even "-h"); help detection must not eat it.
+	if wantsHelp(args) && !(name == "verify" && hasHookStart(args)) {
 		fmt.Fprint(stdout, cmd.usage)
 		return ExitOK
 	}

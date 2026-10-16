@@ -187,9 +187,10 @@ func darwinProfile(spec Spec, procExec bool) string {
 	}
 	// W: AllowWrite then TmpDir.
 	w := clean(append(append([]string(nil), spec.AllowWrite...), spec.TmpDir))
+	tmpc := TreeTmp(spec) // the job temp dir next to Tree (second carve-out)
 	var wNoTree []string
 	for _, r := range w {
-		if r != tree {
+		if r != tree && r != tmpc {
 			wNoTree = append(wNoTree, r)
 		}
 	}
@@ -270,6 +271,9 @@ func darwinProfile(spec Spec, procExec bool) string {
 	writeDeny(dBefore, gBefore, false)
 	if tree != "" {
 		line("(allow file-write* (subpath " + sbplString(tree) + "))")
+	}
+	if tmpc != "" {
+		line("(allow file-write* (subpath " + sbplString(tmpc) + "))")
 	}
 	writeDeny(dAfter, gAfter, true)
 

@@ -180,9 +180,9 @@ func TestHygienePatterns(t *testing.T) {
 		"private key":         `-----BEGIN RSA PRIVATE KEY-----`,
 		"bearer":              `Authorization: Bearer abcdefghijklmnopqrstuvwxyz`,
 		"directory structure": `x [~]/NewCode`,
-		"session id":          `{"session_id": "9ea44634-b4c0-4890-b35e-cfa9fd6251c2"}`,
-		"prompt id":           `{"prompt_id":"daa1a19b-ae63-4f0b-8e5b-5445558f5be1"}`,
-		"transcript name":     `{"transcript_path":"~/x/9ea44634-b4c0-4890-b35e-cfa9fd6251c2.jsonl"}`,
+		"session id":          `{"session_id": "00000000-0000-4000-8000-0000000000a1"}`,
+		"prompt id":           `{"prompt_id":"00000000-0000-4000-8000-0000000000a2"}`,
+		"transcript name":     `{"transcript_path":"~/x/00000000-0000-4000-8000-0000000000a1.jsonl"}`,
 	}
 	for name, content := range bad {
 		if name == "directory structure" {

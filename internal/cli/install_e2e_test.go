@@ -374,6 +374,16 @@ func TestDoctorFreshHomeOnlyWarns(t *testing.T) {
 	}
 }
 
+// TestOrgRenderBinaryUsageNamesOrgRender: a bad --binary is exit 2 and the
+// message names `org render`, not `install`.
+func TestOrgRenderBinaryUsageNamesOrgRender(t *testing.T) {
+	s := newSandbox(t)
+	r := s.mustExit(2, "", "", "org", "render", "--binary", "rel")
+	if !strings.Contains(r.stderr, "org render") || strings.Contains(r.stderr, "install") {
+		t.Errorf("stderr should name org render and not install: %q", r.stderr)
+	}
+}
+
 func TestOrgRender(t *testing.T) {
 	s := newSandbox(t)
 	r := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast")

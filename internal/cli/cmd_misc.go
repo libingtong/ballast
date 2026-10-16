@@ -33,6 +33,8 @@ func runGC(a *app, c *command, args []string) int {
 	// Expired state may still hold eval counts that no Stop/SessionEnd ever
 	// flushed; they are written as eval_summary(cause=gc) so the stats
 	// denominators stay whole. State GC runs before audit GC on purpose.
+	// Tier is left unset: this process never probes it, and the audit contract
+	// (architecture §14 v2.0.9) forbids claiming T0 for a host it never looked at.
 	var flushed []model.AuditRecord
 	now := a.clock.Now()
 	_, err := a.stateStore().GCFlush(0, func(k model.ScopeKey, evals map[string]model.EvalCount) {
@@ -42,7 +44,6 @@ func runGC(a *app, c *command, args []string) int {
 			Type:           model.AuditEvalSummary,
 			SessionID:      k.Session,
 			RepoInst:       k.RepoInst,
-			Tier:           model.TierT0,
 			BallastVersion: version.Version,
 			Evals:          evals,
 			Detail:         json.RawMessage(`{"cause":"gc"}`),

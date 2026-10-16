@@ -51,7 +51,7 @@ local/excludedCommands(托管层未设该键): outside=no protected=no sock=no p
 托管变体:sandbox-minimal/project/excludedCommandsPrefix: outside=no protected=no sock=no pid1=3 proc_pids=6 http=403 npm_protected=no npm_outside=no write_tool_outside=no steps=3
 托管变体:sandbox-minimal/local/allowWrite: outside=no protected=no sock=no pid1=3 proc_pids=6 http=403 npm_protected=no npm_outside=no write_tool_outside=no steps=3
 托管变体:sandbox-minimal/local/allowAllUnixSockets: outside=no protected=no sock=no pid1=3 proc_pids=6 http=403 npm_protected=no npm_outside=no write_tool_outside=no steps=3
-托管变体:sandbox-minimal/local/excludedCommandsPrefix: outside=no protected=no sock=no pid1=3 proc_pids=6 http=403 npm_protected=no npm_outside=no write_tool_outside=no steps=3
+托管变体:sandbox-minimal/local/excludedCommandsPrefix: outside=no protected=no sock=no pid1=3 proc_pids=5 http=403 npm_protected=no npm_outside=no write_tool_outside=no steps=3
 托管变体:only-enabled/project/allowWrite: outside=yes protected=yes sock=no pid1=3 proc_pids=6 http=403 npm_protected=yes npm_outside=yes write_tool_outside=no steps=3
 托管变体:only-enabled/project/allowAllUnixSockets: outside=no protected=no sock=yes pid1=bwrap proc_pids=8 http=403 npm_protected=no npm_outside=no write_tool_outside=no steps=3
 托管变体:only-enabled/project/excludedCommandsPrefix: outside=no protected=no sock=no pid1=3 proc_pids=6 http=403 npm_protected=yes npm_outside=yes write_tool_outside=no steps=3

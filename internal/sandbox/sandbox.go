@@ -16,7 +16,8 @@
 //	    org.json runner_allow_write; origin=cli: the repo work tree, its
 //	    git dir / common dir when outside the work tree — provenance-checked
 //	    by ResolveGitDirs —, and org.json runner_allow_write
-//	  ∪ Spec.TmpDir (per-job, created 0700 by the runner, removed after)
+//	  ∪ Spec.TmpDir (per-job, created 0700 by the runner, removed after;
+//	    origin=hook: <WorkRoot>/<job>/tmp, never under the inherited $TMPDIR)
 //	  ∪ a fixed device set: /dev/null, /dev/zero, /dev/fd/* — and nothing
 //	    else (in particular NO /dev/tty*, see "terminal" below)
 //
@@ -56,12 +57,14 @@
 //     Profile, in this order (SBPL: the last matching rule wins):
 //     (version 1)(allow default)
 //     (deny file-write*)
-//     (allow file-write* <W except Spec.Tree as (subpath …), devices as
+//     (allow file-write* <W except Spec.Tree and TreeTmp as (subpath …), devices as
 //     (literal …)/(regex …)>)
 //     (deny file-write* <D entries NOT inside Spec.Tree: DenyWrite as
 //     (subpath …)/(literal …), globs as (regex …)>)
 //     (allow file-write* (subpath <Spec.Tree>)) — v1.5, only when Tree is
-//     set: the one carve-out of W inside a D directory (~/.ballast)
+//     set: the carve-out of W inside a D directory (~/.ballast)
+//     (allow file-write* (subpath <TreeTmp>)) — the job temp dir next to
+//     Tree, the only other such carve-out
 //     (deny file-write* <D entries inside Spec.Tree or another W root, and
 //     RepoMandatoryDeny / GitDirMandatoryDeny as anchored (regex …) that
 //     match at any depth>)
@@ -195,8 +198,9 @@
 // wildcard / a non-loopback address is only RECORDED in the test log (the
 // design-time result is "succeeds", registered as residual risk; NOT a
 // failure condition); with Spec.Tree set, a
-// write into the tree succeeds while writes to the real work tree, its .git
-// and the rest of ~/.ballast fail. The linux half of every integration
+// write into the tree and into the job temp dir next to it succeeds while
+// writes to the real work tree, its .git and the rest of ~/.ballast (the job
+// directory itself included) fail. The linux half of every integration
 // case runs in scripts/sandbox-docker.sh (Debian 12 container, the three
 // --security-opt of docs/p2-design.md §3.4, BALLAST_REQUIRE_BWRAP=1) — a
 // mandatory acceptance of the unit that needs Docker only, run as
@@ -330,9 +334,15 @@ type Spec struct {
 	// DenyWriteGlobs are protected paths whose last element contains '*'
 	// (e.g. ~/.claude/settings*.json).
 	DenyWriteGlobs []string
-	// TmpDir is the per-job temp dir (darwin: under os.TempDir(), created
-	// 0700 by the runner; linux: ignored, the child gets a private tmpfs
-	// /tmp). TMPDIR is set to it.
+	// TmpDir is the per-job temp dir (created 0700 by the runner, removed
+	// after; linux: not bound, the child gets a private tmpfs /tmp). TMPDIR
+	// and the cache variables point into it. For origin=hook (Tree set) the
+	// runner puts it at <WorkRoot>/<job>/tmp, next to Tree, NOT under the
+	// inherited $TMPDIR: that variable comes from the agent's client, and its
+	// directory may be writable from the agent's own sandbox, which would let
+	// the agent alter the build products of a running job. TreeTmp is the
+	// second (and only other) writable root ValidateSpec accepts inside a
+	// DenyWrite directory.
 	TmpDir string
 	// Network is the child's network policy ("" ⇒ NetworkDeny).
 	Network model.NetworkPolicy

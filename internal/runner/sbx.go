@@ -253,7 +253,17 @@ func (o Options) homeDir() string {
 }
 
 // newJobTmp creates the per-job temp directory (0700, removed afterwards).
-func (o Options) newJobTmp() (string, error) {
+// With jobDir non-empty (origin=hook) it is <jobDir>/tmp, the sibling of the
+// private tree below ~/.ballast/work (sandbox.TreeTmp). Otherwise (origin=cli,
+// the human's own terminal) it is a fresh directory under $TMPDIR / os.TempDir().
+func (o Options) newJobTmp(jobDir string) (string, error) {
+	if jobDir != "" {
+		dir := filepath.Join(jobDir, "tmp")
+		if err := o.FS.MkdirAll(dir, 0o700); err != nil {
+			return "", err
+		}
+		return dir, nil
+	}
 	base := ""
 	if v, ok := o.Env.Getenv("TMPDIR"); ok && filepath.IsAbs(v) {
 		if fi, err := o.FS.Stat(v); err == nil && fi.IsDir() {

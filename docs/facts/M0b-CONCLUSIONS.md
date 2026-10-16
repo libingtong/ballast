@@ -56,6 +56,10 @@
 | managed-denywrite-anydepth | needs_credentials | mock | mock 佐证:`**/` 形式对 Bash 不生效、对工具按会话目录锚定;任意深度形式未证明 |
 | mcp-write | needs_credentials | mock | mock 佐证:白名单内 MCP server 能写受保护路径;白名单外不可用 |
 
+## 夹具版本(第 2 轮系统审计补记)
+
+本文的取证在提交 3697422 时跑出,当时的 T1 夹具(`scripts/probe-m0b/fixtures/managed-t1.json`)的 `permissions.deny` 含单斜杠绝对路径和 `Write(...)`/`NotebookEdit(...)` 条目;提交 2aeafce 按契约问题 2 把夹具改成只含 `Edit(...)` 的 `//` 形式(与 `org render` 的 T1 模板一致),当时没有重跑。第 2 轮审计后已用**当前夹具**重跑 `permissions-deny-edit`、`managed-denywrite-anydepth`、`managed-denywrite-path-forms`(均 `needs_credentials`,mock)与 `lower-sandbox-merge`(pass):状态与归档一致;前三个用例的 payload 与归档逐字节相同;`lower-sandbox-merge` 的 `sandbox-matrix.txt` 与归档只差一行 `proc_pids` 计数(5 与 6,噪声),三份 `tui-gate-*.txt` 不再出现旧夹具引起的 "Write(...) is not matched by file permission checks" 警告(这正是 2aeafce 的修复),已用重跑的输出替换归档。`m0b-cases.json` 与各用例脚本里关于模板内容的描述("含 Edit/Write/NotebookEdit")同步更正为 `Edit(...)` 条目。这些仍是 mock 观察,真实模型调用下的结论仍【需凭据】。
+
 ## 对设计的影响
 
 ### 1. `tier` 条件 5:合并顺序(P2-TIER)

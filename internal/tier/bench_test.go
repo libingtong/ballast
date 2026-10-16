@@ -275,41 +275,55 @@ func BenchmarkLockedHome(b *testing.B) {
 	})
 }
 
-// bestPerOp is the per-call cost of fn as the best of several short rounds:
-// the figure the tier budgets are stated for (a warm page cache; one scheduler
-// hiccup on a busy runner must not fail it while a genuinely slower
-// implementation still does). A round is measured in process CPU time (user +
-// system) when the platform offers it and in wall time otherwise: on a warm
-// page cache the calls never block, so CPU time is the cost of the code, and
-// unlike wall time it does not grow when the test shares the machine with the
-// other packages of `go test ./...` (the budget is not relaxed).
-func bestPerOp(fn func(), budget time.Duration) time.Duration {
+// bestPerOp is the per-call cost of fn in wall time, the same basis as the
+// benchmark guard(): the best of several short rounds (a warm page cache; one
+// scheduler hiccup on a busy runner must not fail it while a genuinely slower
+// implementation still does), plus the average of the rounds that ran for the
+// log. Wall time is deliberate: CPU time would hide blocking I/O and run
+// systematically below wall time on a loaded host, which would loosen the
+// budget.
+func bestPerOp(fn func(), budget time.Duration) (best, avg time.Duration) {
 	for i := 0; i < 20; i++ { // warm up
 		fn()
 	}
 	// Rounds run until one meets the budget (then the best is already good
-	// enough) or the time is up.
-	const iters = 300
-	best := time.Duration(1 << 62)
+	// enough) or the time is up; at least minRounds so the average is real.
+	const iters, minRounds = 300, 5
+	best = time.Duration(1 << 62)
+	var sum time.Duration
+	rounds := 0
 	deadline := time.Now().Add(20 * time.Second)
 	for r := 0; r < 15 || (best > budget && time.Now().Before(deadline)); r++ {
-		wall0 := time.Now()
-		cpu0, cpuOK := processCPU()
+		start := time.Now()
 		for i := 0; i < iters; i++ {
 			fn()
 		}
-		per := time.Since(wall0) / iters
-		if cpu1, ok := processCPU(); cpuOK && ok {
-			per = (cpu1 - cpu0) / iters
-		}
+		per := time.Since(start) / iters
+		sum += per
+		rounds++
 		if per < best {
 			best = per
 		}
-		if best <= budget && r >= 2 {
+		if best <= budget && r+1 >= minRounds {
 			break
 		}
 	}
-	return best
+	return best, sum / time.Duration(rounds)
+}
+
+// checkBudget fails t when the best-of figure exceeds the budget. The average
+// of the rounds is logged but not judged here: in `go test ./...` the packages
+// run in parallel, so on a loaded host the average measures the neighbours
+// (a 170 us best next to a 400 us average was observed), not the code. The
+// "average within 1.5x the budget" rule stays where the benchmark runs alone
+// (guard(), `go test -bench`).
+func checkBudget(t *testing.T, what string, budget time.Duration, fn func()) {
+	t.Helper()
+	best, avg := bestPerOp(fn, budget)
+	t.Logf("%s: best of rounds %v, average %v (wall time, budget %v)", what, best, avg, budget)
+	if best > budget {
+		t.Errorf("%s took %v per call (best of rounds), budget %v", what, best, budget)
+	}
 }
 
 func skipBudget(t *testing.T) {
@@ -332,11 +346,7 @@ func TestProbeBudget(t *testing.T) {
 	if got := Detect(opt); got.Tier != model.TierT1 {
 		t.Fatalf("fixture is %s: %v", got.Tier, got.Missing)
 	}
-	best := bestPerOp(func() { Detect(opt) }, 200*time.Microsecond)
-	t.Logf("Detect (real fs, faked root) best of rounds (CPU time): %v", best)
-	if best > 200*time.Microsecond {
-		t.Errorf("Detect took %v per call, budget 200us", best)
-	}
+	checkBudget(t, "Detect (real fs, faked root)", 200*time.Microsecond, func() { Detect(opt) })
 }
 
 // TestLockedBudget: the redirect-lock check every hook invocation pays is
@@ -345,18 +355,10 @@ func TestProbeBudget(t *testing.T) {
 func TestLockedBudget(t *testing.T) {
 	skipBudget(t)
 	goos := runtime.GOOS
-	absent := bestPerOp(func() { Locked(sys.OSFS{}, goos, nil) }, 30*time.Microsecond)
-	t.Logf("Locked (absent, real fs) best of rounds: %v", absent)
-	if absent > 30*time.Microsecond {
-		t.Errorf("Locked (no org.json) took %v per call, budget 30us", absent)
-	}
+	checkBudget(t, "Locked (absent, real fs)", 30*time.Microsecond, func() { Locked(sys.OSFS{}, goos, nil) })
 	_, fsys, managed, owner := realFixture(t)
 	if st := readOrg(fsys, owner, managed); !lockedFrom(st) {
 		t.Fatalf("fixture not locked: file trusted %v, chain ok %v, tier %s", st.fileTrusted, st.chainOK, st.org.Tier)
 	}
-	locked := bestPerOp(func() { lockedFrom(readOrg(fsys, owner, managed)) }, 30*time.Microsecond)
-	t.Logf("Locked (org.json, real fs) best of rounds: %v", locked)
-	if locked > 30*time.Microsecond {
-		t.Errorf("Locked (org.json) took %v per call, budget 30us", locked)
-	}
+	checkBudget(t, "Locked (org.json, real fs)", 30*time.Microsecond, func() { lockedFrom(readOrg(fsys, owner, managed)) })
 }

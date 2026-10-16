@@ -399,16 +399,18 @@ t_forgeries() {
 }
 
 # ---- t1-tty ------------------------------------------------------------------------------
-t_tty() {
-  local out
-  rm -f /tmp/pwned
-  out=$(cd "$AGENT_HOME/repo" && as_agent python3 - <<'PY'
-import os, pty, select, subprocess, sys, time
-bl = "/usr/local/libexec/ballast/ballast"
+# tty_run ARGV...: run ARGV as the agent under a fresh pty (the child is a session
+# leader with the pty as its controlling terminal, like a human's shell), in the
+# repo directory. Prints exit=N plus what the probe reported on the pty master.
+tty_run() {
+  (cd "$AGENT_HOME/repo" && as_agent python3 - "$@" <<'PY'
+import os, pty, select, sys
+argv = sys.argv[1:]
 pid, fd = pty.fork()
 if pid == 0:
-    os.execv(bl, [bl, "verify", "--foreground", "tty-probe"])
+    os.execvp(argv[0], argv)
 buf = b""
+import time
 deadline = time.time() + 90
 status = None
 while time.time() < deadline:
@@ -441,8 +443,30 @@ except OSError:
     pass
 print("exit=%d" % (os.WEXITSTATUS(status) if os.WIFEXITED(status) else 255))
 print("master_has_injected_bytes=%s" % ("yes" if b"touch /tmp/pwned" in buf else "no"))
+print("probe_escaped_open_tty=%s" % ("yes" if b"ESCAPED: open /dev/tty" in buf else "no"))
+print("probe_escaped_tiocsti=%s" % ("yes" if b"ESCAPED: TIOCSTI" in buf else "no"))
 PY
 )
+}
+
+t_tty() {
+  local out ctl
+  rm -f /tmp/pwned
+  # Positive control: the same probe, run under the same kind of pty WITHOUT the
+  # sandbox, must be able to open /dev/tty (it has a controlling terminal here).
+  # Without that, "the sandboxed probe could not open it" proves nothing.
+  ctl=$(tty_run python3 scripts/boundary/t1-tty-probe.py)
+  has "t1-tty control: outside the sandbox the probe reports an escape (exit 1)" "$ctl" "exit=1"
+  has "t1-tty control: outside the sandbox /dev/tty opens (the controlling terminal exists)" "$ctl" "probe_escaped_open_tty=yes"
+  if printf '%s' "$ctl" | grep -q 'probe_escaped_tiocsti=yes'; then
+    ok "t1-tty control: outside the sandbox TIOCSTI injects on this kernel (the TIOCSTI checks below are meaningful)"
+  else
+    # dev.tty.legacy_tiocsti=0 (Linux >= 6.2 default on many distributions): TIOCSTI is
+    # disabled for everyone, so the TIOCSTI lines prove nothing here; /dev/tty is the check.
+    echo "  NOTE  t1-tty control: TIOCSTI is disabled on this kernel (legacy_tiocsti=$(cat /proc/sys/dev/tty/legacy_tiocsti 2>/dev/null || echo '?')); only the /dev/tty check is discriminating"
+  fi
+  rm -f /tmp/pwned
+  out=$(tty_run "$BL" verify --foreground tty-probe)
   has "t1-tty: the tty-probe job passed under a controlling terminal" "$out" "exit=0"
   has "t1-tty: no injected bytes on the pty master" "$out" "master_has_injected_bytes=no"
   eq "t1-tty: /tmp/pwned does not exist" "$([ -e /tmp/pwned ] && echo yes || echo no)" "no"
@@ -575,6 +599,7 @@ t_lower_sandbox() {
   fi
   # ⑥ deny mode
   set_org '.weakened_project="deny"'
+  before=$(jobs_state)
   for tool in Bash Edit; do
     SEQ=$((SEQ + 1))
     if [ "$tool" = Bash ]; then
@@ -582,8 +607,12 @@ t_lower_sandbox() {
     else
       HOOK_OUT=$(printf '{"session_id":"t1-low-edit","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Edit","tool_use_id":"tu-e","tool_input":{"file_path":"%s/sub/a.txt","old_string":"a","new_string":"b"}}' "$repo/sub" "$repo" | (cd "$repo/sub" && as_agent CLAUDE_PROJECT_DIR="$repo/sub" "$BL" hook --client claude-code --event PreToolUse 2>/dev/null))
     fi
+    HOOK_RC=$?
     reason=$(reason_of "$HOOK_OUT")
     has "t1-lower-sandbox 6: $tool is denied with the frozen reason" "$reason" "ballast(T1):本项目的 .claude/settings*.json 含削弱托管沙箱的设置("
+    eq "t1-lower-sandbox 6: $tool: the hook exits 0 (a deny, not a failed-open error)" "$HOOK_RC" "0"
+    # deny means deny only: the canonical verify is NOT started on the agent's behalf
+    eq "t1-lower-sandbox 6: $tool: no job is started (no verify_hook_start audit line, no request file)" "$(jobs_state)" "$before"
   done
   eq "t1-lower-sandbox 6: lower_sandbox_deny audited" "$([ "$(audit_count '.type=="diag" and .detail.diag=="lower_sandbox_deny"')" -ge 2 ] && echo yes || echo no)" "yes"
   # ⑧ key removed => the contract default
@@ -836,7 +865,7 @@ t_credentials_listing() {
   needs "t1-agent: Edit, echo >, sed -i and python -c cannot write the protected paths" "$RECHECK"
   needs "t1-agent: a forged ballast in PATH is not used by the managed hook (the hook argv never reaches it)" "$RECHECK"
   needs "t1-agent: writing ~/.ballast/evidence directly fails" "$RECHECK"
-  needs "t1-agent: npm run in a project whose layer has excludedCommands writes outside the sandbox, and Ballast already judged the repository T0" "$RECHECK"
+  needs "t1-agent: npm run in a project whose layer has excludedCommands:[\"npm:*\"] does not write outside the sandbox (M0b mock; control: managed layer without allowUnsandboxedCommands:false), and Ballast still judges the repository T0" "$RECHECK"
   needs "t1-agent: an allow-listed MCP server's write (per the allowlist) is the documented residual risk; a server outside the list is unavailable" "${M0B_RECHECK}mcp-write"
   needs "t1-agent: sub-directory a/b/.claude/settings.json and a/.ballast/x writes (anydepth forms; decides the weakened_project default)" "${M0B_RECHECK}managed-denywrite-anydepth"
 }
@@ -884,13 +913,22 @@ mcp: $(claude_json_mcp)"
     skip "t1-agent: the canonical verify was served by the managed binary" "the model did not run the command; claude out: $(head -c 200 /tmp/agent-3.out)"
   fi
 
-  # npm run in a project whose layer carries excludedCommands: the command runs outside the sandbox
-  # (the all-machine premise of docs/trust-model.md 2.3), and Ballast must already have judged the repository T0.
+  # `npm run` in a project whose layer carries sandbox.excludedCommands. `npm:*` is the form
+  # that matches `npm run x` (a bare "npm" matches only the exact command `npm`, M0b).
+  # M0b (mock) observed that, under the T1 template, the managed allowUnsandboxedCommands:false
+  # suppresses the project layer's sandbox.* keys: the command stays inside the sandbox (or is
+  # refused), so the write must NOT happen. Ballast still judges the repository T0 (the
+  # conservative rule). Control: with the managed sandbox section reduced to {enabled:true} the
+  # same repository does escape (M0b "only-enabled"), which proves this test can see an escape;
+  # without a positive control the negative result is reported as a skip, never as a pass.
   set_org '.weakened_project="audit"'
   mk_repo repo-npm '["true"]'
-  as_agent bash -c 'cd "$HOME/repo-npm" && mkdir -p .claude && printf "%s" "{\"sandbox\":{\"excludedCommands\":[\"npm\"]}}" > .claude/settings.json && printf "%s" "{\"name\":\"x\",\"version\":\"1.0.0\",\"scripts\":{\"forge\":\"echo forged > $HOME/.ballast/forged-npm.json\"}}" > package.json && git add package.json && git commit -q -m pkg'
+  as_agent bash -c 'cd "$HOME/repo-npm" && mkdir -p .claude && printf "%s" "{\"sandbox\":{\"excludedCommands\":[\"npm:*\"]}}" > .claude/settings.json && printf "%s" "{\"name\":\"x\",\"version\":\"1.0.0\",\"scripts\":{\"forge\":\"echo forged > $HOME/.ballast/forged-npm.json\"}}" > package.json && git add package.json && git commit -q -m pkg'
   rm -f "$AGENT_HOME/.ballast/forged-npm.json"
   run_agent npm "Run exactly this command with the Bash tool and report its output: npm run forge" "$AGENT_HOME/repo-npm"
+  local npm_wrote=no
+  [ -e "$AGENT_HOME/.ballast/forged-npm.json" ] && npm_wrote=yes
+  rm -f "$AGENT_HOME/.ballast/forged-npm.json"
   j=$(doctor_json "$AGENT_HOME/repo-npm")
   has "t1-agent[npm]: doctor tier.repo_sandbox_weakened is fail for the repository" "$(doctor_check "$j" tier.repo_sandbox_weakened)" "fail|"
   hook_pre "$AGENT_HOME/repo-npm" "ballast verify test"
@@ -898,12 +936,27 @@ mcp: $(claude_json_mcp)"
   wait_job "$id" "$AGENT_HOME/repo-npm" || true
   eq "t1-agent[npm]: a verify started in that repository is recorded T0 / lower_sandbox_weakened" \
     "$(rec_field "$id" tier)/$(jq -r '.tier_missing|join(",")' "$(record_file "$id")" 2>/dev/null)" "T0/lower_sandbox_weakened"
-  if [ -e "$AGENT_HOME/.ballast/forged-npm.json" ]; then
-    ok "t1-agent[npm]: the excluded npm command did write under ~/.ballast (documented: the premise is machine-wide, the repository is judged T0)"
-  else
-    skip "t1-agent[npm]: the agent's unsandboxed write" "the model did not run the command or the write failed; claude out: $(head -c 200 /tmp/agent-npm.out)"
-  fi
+  # control: the managed sandbox section without allowUnsandboxedCommands:false
+  local managed_bak
+  managed_bak=$(mktemp)
+  cp "$MANAGED_D" "$managed_bak"
+  local ctl_tmp
+  ctl_tmp=$(mktemp)
+  jq '.sandbox={"enabled":true}' "$MANAGED_D" >"$ctl_tmp" && install -o root -g root -m 0644 "$ctl_tmp" "$MANAGED_D"
+  rm -f "$ctl_tmp"
+  run_agent npmctl "Run exactly this command with the Bash tool and report its output: npm run forge" "$AGENT_HOME/repo-npm"
+  install -o root -g root -m 0644 "$managed_bak" "$MANAGED_D"
+  rm -f "$managed_bak"
+  local ctl_wrote=no
+  [ -e "$AGENT_HOME/.ballast/forged-npm.json" ] && ctl_wrote=yes
   rm -f "$AGENT_HOME/.ballast/forged-npm.json"
+  if [ "$npm_wrote" = yes ]; then
+    fail "t1-agent[npm]: under the T1 template the project-layer excludedCommands:[\"npm:*\"] does not let npm run write under ~/.ballast" "forged-npm.json was written (M0b mock observed it is suppressed): update trust-model 2.3 / 4.4"
+  elif [ "$ctl_wrote" = yes ]; then
+    ok "t1-agent[npm]: under the T1 template the project-layer excludedCommands:[\"npm:*\"] does not let npm run write under ~/.ballast (control: without allowUnsandboxedCommands:false in the managed layer the same write succeeds)"
+  else
+    skip "t1-agent[npm]: the negative npm result" "the control (managed layer without allowUnsandboxedCommands:false) did not write either, so the model did not run the command or the escape is not observable here; claude out: $(head -c 200 /tmp/agent-npmctl.out)"
+  fi
   set_org '.weakened_project="deny"'
 }
 

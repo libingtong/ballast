@@ -864,6 +864,54 @@ true`
 	}
 }
 
+// TestJobTmpNextToTree: with Tree set, the per-job temp dir lives next to the
+// tree below the protected ~/.ballast (<WorkRoot>/<job>/tmp, the TreeTmp
+// carve-out): TMPDIR points at it and is writable (darwin: the directory on
+// the host; linux: the private /tmp), while the rest of the job directory,
+// ~/.ballast and any other job stay read-only.
+func TestJobTmpNextToTree(t *testing.T) {
+	f := fix(t, model.NetworkDeny)
+	work := filepath.Join(f.home, ".ballast", "work")
+	job := filepath.Join(work, "job1")
+	tree := filepath.Join(job, "tree")
+	jtmp := filepath.Join(job, "tmp")
+	mkfiles(t, tree, "src/main.go")
+	mkfiles(t, job, "tmp/")
+	mkfiles(t, work, "job2/tmp/")
+	spec := Spec{
+		AllowWrite: []string{tree}, RepoRoots: []string{tree}, DenyWrite: []string{filepath.Join(f.home, ".ballast")},
+		TmpDir: jtmp, Network: model.NetworkDeny, Home: f.home, Cwd: tree, Tree: tree, WorkRoot: work,
+	}
+	f.extra = append(f.extra, "JOB="+job, "OTHERTMP="+filepath.Join(work, "job2", "tmp"))
+	f.guard(f.home+"/.ballast/rules.json", f.home+"/.ballast/evidence/e1.json")
+	script := `
+echo "tmpdir=$TMPDIR"
+echo t > "$TMPDIR/scratch" && echo tmp-ok
+mkdir -p "$TMPDIR/cache/go-build" && echo cache-ok
+echo x > "$JOB/sibling" 2>/dev/null
+mkdir "$JOB/tmp2" 2>/dev/null
+echo x > "$OTHERTMP/planted" 2>/dev/null
+echo x > "$H/.ballast/work/loose" 2>/dev/null
+true`
+	res := f.sh(script, runOpts{spec: &spec})
+	t.Logf("found=%v\n%s", res.Found, res.Out)
+	for _, want := range []string{"tmp-ok", "cache-ok"} {
+		if !strings.Contains(res.Out, want) {
+			t.Errorf("missing %q in output", want)
+		}
+	}
+	if runtime.GOOS == "darwin" {
+		if _, err := os.Stat(filepath.Join(jtmp, "scratch")); err != nil {
+			t.Errorf("the write into the job temp dir is missing on the host: %v", err)
+		}
+		if !strings.Contains(res.Out, "tmpdir="+jtmp) {
+			t.Errorf("TMPDIR is not the job temp dir %s:\n%s", jtmp, res.Out)
+		}
+	}
+	f.assertGuards()
+	f.assertAbsent(job+"/sibling", job+"/tmp2", filepath.Join(work, "job2", "tmp", "planted"), f.home+"/.ballast/work/loose")
+}
+
 // ---- network allow: /run and /var/run (linux) ----
 
 func TestLinuxRunDirectoriesMasked(t *testing.T) {

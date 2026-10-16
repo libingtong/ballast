@@ -148,8 +148,11 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   check_eq "no local absolute paths" "$paths_hit" ""
   uid_hit="$(git grep --untracked -nIE '[~]/NewCode|claude-[0-9]+-' -- . ':!.github/workflows/ci.yml' ':!scripts/accept-p2.sh' || true)"
   check_eq "no local directory layout or uid fragments" "$uid_hit" ""
-  sid_hit="$(git grep --untracked -nIE '"(session_id|prompt_id)" *: *"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"|/[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\.jsonl' -- docs/facts || true)"
-  check_eq "no real client session ids in the evidence samples (session_id / prompt_id are <session-N> / <prompt-N>)" "$sid_hit" ""
+  # The whole repository, not only docs/facts: a real id written back as a "must be flagged"
+  # counter-example in a checker test is the same leak. The only exemption is the explicit
+  # synthetic range 00000000-0000-4000-8000-0000000000xx (shaped like an id, belongs to nobody).
+  sid_hit="$(git grep --untracked -nIE '"(session_id|prompt_id)" *: *"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"|/[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\.jsonl' -- . | grep -v '00000000-0000-4000-8000-0000000000' || true)"
+  check_eq "no real client session ids anywhere in the repository (session_id / prompt_id are <session-N> / <prompt-N>; only the synthetic 00000000-0000-4000-8000-0000000000xx range is exempt)" "$sid_hit" ""
   secret_hit="$(git grep --untracked -nIE 'sk-ant-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[abprs]-[A-Za-z0-9-]{10,}' -- . ':!internal/redact' ':!internal/audit' ':!internal/report' ':!internal/hook' ':!internal/*_test.go' ':!scripts/boundary-t0.sh' ':!scripts/accept-p2.sh' ':!scripts/probe-m0b' ':!docs/facts' ':!schema/examples' || true)"
   check_eq "no credentials or secrets outside the redaction fixtures" "$secret_hit" ""
 else

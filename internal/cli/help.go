@@ -68,8 +68,9 @@ const verifyUsage = `用法:
   ballast verify --hook-start --request <id> --cwd <目录> --client <id> [--session <id>] [--agent <id>]
                  [--project-dir <目录>] -- [名称...]        内部:T1 下由 hook 代起(参数格式冻结)
 
---status 的参数可以是 hook 代起时给出的 request id:没有同名 job 时回退读取请求文件(~/.ballast/requests),
-多个 job 取最差结果(fail > timeout > signal > infra > 运行中 > pass);请求文件也不存在则按"无记录"退出 11。
+--status 的参数可以是 hook 代起时给出的 request id:请求有多个 job 时先按请求文件(~/.ballast/requests)聚合,
+多个 job 取最差结果(fail > timeout > signal > infra > 运行中 > pass);只有一个 job,或参数不是请求 id 时按 job 查找;
+都找不到则按"无记录"退出 11。
 退出码(启动):0 已启动;2 配置错误(无仓库 / 无 project.json / 未知名称 / project.json 非法);5 基础设施错误。
 退出码(--status / --foreground / --run-job):0 pass;1 fail;3 timeout;4 signal;5 infra;6 运行中;7 superseded;11 无记录。
 退出码(--check):0 新鲜;10 过期;11 无证据;12 无法判定;13 同名 job 运行中。
@@ -155,7 +156,9 @@ verify 结果、hook 延迟直方图)。默认不运行、不联网、不发送�
 
 const gcUsage = `用法:ballast gc
 
-清理过期的会话状态、审计文件与证据(内部命令,由 SessionStart 每天至多分离触发一次)。
+清理过期的会话状态(残留计数先写成 eval_summary)、审计文件、证据与规则缓存;
+P2 起另清理 requests/ 与 quarantine/ 下超过 30 天的条目,以及 work/ 中 job 已结束且超过 24 小时的残留
+(内部命令,由 SessionStart 每天至多分离触发一次)。
 退出码:0;5(写 stderr)。
 `
 

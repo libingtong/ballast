@@ -219,6 +219,9 @@ func TestGC(t *testing.T) {
 	if b, err := os.ReadFile(recent); err != nil || !strings.Contains(string(b), `"type":"eval_summary"`) ||
 		!strings.Contains(string(b), `"cause":"gc"`) || !strings.Contains(string(b), `"r1":{"evals":3`) {
 		t.Errorf("gc should flush residual evals as eval_summary(cause=gc): %v %s", err, b)
+	} else if strings.Contains(string(b), `"tier"`) {
+		// A gc process never probes the tier; it must not claim one (v2.0.9).
+		t.Errorf("the gc eval_summary must carry no tier field: %s", b)
 	}
 	if _, err := os.Stat(staleCache); err == nil {
 		t.Error("gc should delete unreferenced rules cache files older than 7 days")

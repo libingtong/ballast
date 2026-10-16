@@ -1,6 +1,6 @@
-# Ballast 架构与接口契约(冻结版 v2.0.8)
+# Ballast 架构与接口契约(冻结版 v2.0.9)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4、v2.0.5、v2.0.6、v2.0.7 为 P2 设计第 1、2、3、4、5、6、7 轮独立审核修订,v2.0.8 为 P2 集成阶段按项目负责人裁决处理 M0b 与 P2-CLI 报告的契约问题;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4、v2.0.5、v2.0.6、v2.0.7 为 P2 设计第 1、2、3、4、5、6、7 轮独立审核修订,v2.0.8 为 P2 集成阶段按项目负责人裁决处理 M0b 与 P2-CLI 报告的契约问题,v2.0.9 为集成后第 1 轮系统审计修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >

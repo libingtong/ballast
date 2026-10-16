@@ -277,6 +277,29 @@ func orgPreflight(opt OrgRenderOptions) (note string, err error) {
 // <ManagedDir>/ballast/org.json (0644; org.json last, because writing it is
 // what locks the host), after the home-directory pre-flight.
 func OrgRenderFull(lay layout.Layout, fsys sys.FS, opt OrgRenderOptions) (*OrgRendered, error) {
+	r, err := orgRenderFull(lay, fsys, opt)
+	if err != nil && errors.Is(err, ErrUsage) {
+		err = &orgUsageError{err: err}
+	}
+	return r, err
+}
+
+// orgUsageError re-labels an ErrUsage failure of `org render` with the right
+// command name: the shared sentinel's own text says "ballast install", which
+// misleads an administrator. errors.Is(err, ErrUsage) still holds (exit 2).
+type orgUsageError struct{ err error }
+
+func (e *orgUsageError) Error() string {
+	msg := e.err.Error()
+	if rest, ok := strings.CutPrefix(msg, ErrUsage.Error()+": "); ok {
+		return "org render: usage error: " + rest
+	}
+	return strings.Replace(msg, ErrUsage.Error(), "org render: usage error", 1)
+}
+
+func (e *orgUsageError) Unwrap() error { return e.err }
+
+func orgRenderFull(lay layout.Layout, fsys sys.FS, opt OrgRenderOptions) (*OrgRendered, error) {
 	goos := firstNonEmpty(opt.GOOS, lay.GOOS)
 	if goos == "" {
 		goos = "linux"

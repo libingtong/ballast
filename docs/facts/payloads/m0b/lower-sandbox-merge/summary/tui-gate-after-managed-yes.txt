@@ -1,35 +1,5 @@
 === dialog
-Permission deny rule (managed policy settings): Write(/etc/claude-code/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/etc/claude-code/ballast/**) instead (Edit rules cover all file-editing tools).
 
-Permission deny rule (managed policy settings): Write(~/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(./.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(**/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(/usr/local/libexec/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/usr/local/libexec/ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(~/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(./.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(**/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(/etc/claude-code/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/etc/claude-code/ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(~/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(./.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(**/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(/usr/local/libexec/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/usr/local/libexec/ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(~/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(./.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(**/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -53,37 +23,7 @@ Entertoconfirm·Esctocancel
 
 
 === after-accept
-Permission deny rule (managed policy settings): Write(/etc/claude-code/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/etc/claude-code/ballast/**) instead (Edit rules cover all file-editing tools).
 
-Permission deny rule (managed policy settings): Write(~/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(./.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(**/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(/usr/local/libexec/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/usr/local/libexec/ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(~/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(./.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(**/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(/etc/claude-code/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/etc/claude-code/ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(~/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(./.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(**/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(/usr/local/libexec/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/usr/local/libexec/ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(~/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(./.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(**/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -109,9 +49,9 @@ Entertoconfirm·Esctocancel
  No, exit
 ❯Yes, I trust this folder
 
- ▐▛███▛█Claude Codev2.1.300
-▝▜██████▀Opus 5.5 · API Usage Billing
- ▝▝   ▝▝ ~/proj
+Claude Codev2.1.300
+Opus 5.5 · API Usage Billing
+~/proj
 ⚠Both apiKeyHelper and ANTHROPIC_API_KEY set · auth may not work as expected
 · to use apiKeyHelper: Unset the ANTHROPIC_API_KEY environment variable, or claude /logout then say "No" to the API key approval before 
 login.
@@ -125,45 +65,30 @@ login.
 ❯  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
-▟▟
-█▟█▟
-▟█▟█
-▗▟▛▛▄
- ▘
- ▐ 
-▝▀
+█▟
+██▀
+▝▝ 
+  
+   
+   
+██▟
+███▀
+ ▝▝ 
+█▛█▄
+███▘
+  ▝▝ 
+▗▟▛██▛█▄
+ ▜████▘
+▝▝  ▝▝ 
+         
+▐▛▛█ 
+·▜██████·
+~~
+ ▐▛███▛█
+▝▜███▀
+ ▝▝   ▝▝ 
 === sandbox-cmd
-Permission deny rule (managed policy settings): Write(/etc/claude-code/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/etc/claude-code/ballast/**) instead (Edit rules cover all file-editing tools).
 
-Permission deny rule (managed policy settings): Write(~/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(./.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(**/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(/usr/local/libexec/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/usr/local/libexec/ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(~/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(./.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): Write(**/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(/etc/claude-code/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/etc/claude-code/ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(~/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(./.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(**/.ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(/usr/local/libexec/ballast/**) is not matched by file permission checks — only Edit(path) rules are. Use Edit(/usr/local/libexec/ballast/**) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(~/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(~/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(./.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(./.claude/settings*.json) instead (Edit rules cover all file-editing tools).
-
-Permission deny rule (managed policy settings): NotebookEdit(**/.claude/settings*.json) is not matched by file permission checks — only Edit(path) rules are. Use Edit(**/.claude/settings*.json) instead (Edit rules cover all file-editing tools).
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -189,9 +114,9 @@ Entertoconfirm·Esctocancel
  No, exit
 ❯Yes, I trust this folder
 
- ▐▛███▛█Claude Codev2.1.300
-▝▜██████▀Opus 5.5 · API Usage Billing
- ▝▝   ▝▝ ~/proj
+Claude Codev2.1.300
+Opus 5.5 · API Usage Billing
+~/proj
 ⚠Both apiKeyHelper and ANTHROPIC_API_KEY set · auth may not work as expected
 · to use apiKeyHelper: Unset the ANTHROPIC_API_KEY environment variable, or claude /logout then say "No" to the API key approval before 
 login.
@@ -205,13 +130,28 @@ login.
 ❯  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
-▟▟
-█▟█▟
-▟█▟█
-▗▟▛▛▄
- ▘
- ▐ 
-▝▀
+█▟
+██▀
+▝▝ 
+  
+   
+   
+██▟
+███▀
+ ▝▝ 
+█▛█▄
+███▘
+  ▝▝ 
+▗▟▛██▛█▄
+ ▜████▘
+▝▝  ▝▝ 
+         
+▐▛▛█ 
+·▜██████·
+~~
+ ▐▛███▛█
+▝▜███▀
+ ▝▝   ▝▝ 
 ❯ /sandbox                    ✔ sandbox enabled (auto-allow) (managed) (⏎ to configure)
 /sandbox 
 

@@ -480,7 +480,7 @@
     "result": "needs_credentials",
     "mode": "mock",
     "claude_version": "2.1.300",
-    "observation": "[模拟模型佐证,不替代 credentials 结论:mock 观察到的行为与期望一致] 托管 T1 模板(permissions.deny 含 Edit/Write/NotebookEdit 的 ~/.ballast/**、./.ballast/**、~/.claude/settings*.json;allowManagedPermissionRulesOnly:true)。Edit/Write 结果:edit-rules=blocked write-evidence=blocked edit-settings=blocked write-cwd-ballast=blocked control-write=written control-edit=written(发出 9 个工具调用;托管 allow 放行 Edit/Write,拒绝只可能来自 deny 规则)。对照:写会话目录外的非受保护目录与改会话目录内文件应成功。",
+    "observation": "[模拟模型佐证,不替代 credentials 结论:mock 观察到的行为与期望一致] 托管 T1 模板(permissions.deny 只含 Edit(...) 条目,覆盖 ~/.ballast/**、./.ballast/**、~/.claude/settings*.json,绝对路径用 // 形式,Edit 规则覆盖 Edit 与 Write 工具;allowManagedPermissionRulesOnly:true)。Edit/Write 结果:edit-rules=blocked write-evidence=blocked edit-settings=blocked write-cwd-ballast=blocked control-write=written control-edit=written(发出 9 个工具调用;托管 allow 放行 Edit/Write,拒绝只可能来自 deny 规则)。对照:写会话目录外的非受保护目录与改会话目录内文件应成功。",
     "evidence": [
       "payloads/m0b/permissions-deny-edit/"
     ],
@@ -523,7 +523,7 @@
         "permissions.deny"
       ]
     },
-    "assertion": "按 org render 的 T1 模板(含 **/.ballast、**/.claude/settings*.json 及对应的 Edit/Write/NotebookEdit 规则),Bash 与 Edit/Write 写 <cwd>/a/b/.claude/settings.json、<cwd>/a/.ballast/project.json,以及会话在仓库子目录启动时写仓库根的 .claude/settings.json 与 .ballast/project.json,全部被拒才算 pass",
+    "assertion": "按 org render 的 T1 模板(含 **/.ballast、**/.claude/settings*.json 及对应的 Edit(...) 规则,Edit 规则覆盖 Edit 与 Write 工具),Bash 与 Edit/Write 写 <cwd>/a/b/.claude/settings.json、<cwd>/a/.ballast/project.json,以及会话在仓库子目录启动时写仓库根的 .claude/settings.json 与 .ballast/project.json,全部被拒才算 pass",
     "result": "needs_credentials",
     "mode": "mock",
     "claude_version": "2.1.300",

@@ -480,6 +480,13 @@ func TestHookSpecIsTheCopyOnly(t *testing.T) {
 	info.Network = model.NetworkLoopback
 	h.opt.Tier = fakeTier{info}
 	h.write("sub/keep.txt", "x\n")
+	// An inherited $TMPDIR (set by the agent's client; its directory may be
+	// writable from the agent's own sandbox) must not be the temp dir's base.
+	inheritedTmp := filepath.Join(h.sb.Root, "client-tmp")
+	if err := os.MkdirAll(inheritedTmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h.vars["TMPDIR"] = inheritedTmp
 	spec := helperSpec("test", "report")
 	spec.Cwd = "sub"
 	h.setProject(spec)
@@ -501,8 +508,16 @@ func TestHookSpecIsTheCopyOnly(t *testing.T) {
 	if sp.Cwd != filepath.Join(treeRoot, "sub") || sp.Network != model.NetworkLoopback {
 		t.Errorf("Cwd %s Network %s", sp.Cwd, sp.Network)
 	}
-	if sp.TmpDir == "" || sp.Home != h.sb.Home {
-		t.Errorf("TmpDir %q Home %q", sp.TmpDir, sp.Home)
+	if sp.Home != h.sb.Home {
+		t.Errorf("Home %q", sp.Home)
+	}
+	// The temp dir is the sibling of the tree below ~/.ballast/work/<job>, not
+	// a child of the inherited $TMPDIR (sandbox.TreeTmp is its only carve-out).
+	if want := filepath.Join(h.realWorkDir(), rec.JobID, "tmp"); sp.TmpDir != want || sandbox.TreeTmp(sp) != want {
+		t.Errorf("TmpDir = %q, want %q (not under the inherited TMPDIR %s)", sp.TmpDir, want, inheritedTmp)
+	}
+	if ents, _ := os.ReadDir(inheritedTmp); len(ents) != 0 {
+		t.Errorf("the inherited TMPDIR was used: %v", ents)
 	}
 	// ~/.ballast is protected (raw form at least); the real repo is not in W.
 	if !contains(sp.DenyWrite, h.sb.BallastHome) {

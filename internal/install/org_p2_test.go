@@ -243,6 +243,9 @@ func TestOrgRenderInputValidation(t *testing.T) {
 			if !errors.Is(err, ErrUsage) || r != nil || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("err = %v, result %v", err, r)
 			}
+			if err != nil && (strings.Contains(err.Error(), "install") || !strings.HasPrefix(err.Error(), "org render:")) {
+				t.Errorf("the org render usage error must name org render, not install: %q", err)
+			}
 		})
 	}
 }

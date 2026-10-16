@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source /m0b/lib.sh
-# T1 模板(含 **/.ballast、**/.claude/settings*.json 与对应 Edit/Write/NotebookEdit 规则)。
+# T1 模板(含 **/.ballast、**/.claude/settings*.json 与对应 Edit(...) 规则)。
 P=/home/agent
 cred_world '.sandbox.filesystem.allowWrite = ["/home/agent/proj"]'
 mkdir -p $P/proj/a/b/.claude $P/proj/a/.ballast $P/proj/sub
