@@ -84,8 +84,9 @@ func TestSampleAcrossProcesses(t *testing.T) {
 			}
 			finished++
 		default:
-			// Read the way the product does (FILE_SHARE_DELETE on Windows), so the
-			// reader never blocks the children's rename-over.
+			// Windows: an open handle blocks the children's rename-over, so the
+			// reader must not spin (see TestSampleConcurrentWritersKeepFileValid).
+			time.Sleep(100 * time.Microsecond)
 			data, err := sys.OSFS{}.ReadFile(reviewFile)
 			if err != nil {
 				continue

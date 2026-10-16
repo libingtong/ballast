@@ -201,8 +201,11 @@ func TestSampleConcurrentWritersKeepFileValid(t *testing.T) {
 				return
 			default:
 			}
-			// Read the way the product does (FILE_SHARE_DELETE on Windows), so the
-			// reader never blocks the writers' rename-over.
+			// On Windows an open handle makes a rename-over of the file fail
+			// until it is closed, so a reader that never pauses would starve
+			// the writers; a real reader (a hook, `ballast stats`) does not
+			// spin. The pause keeps the torn-file check at about 2000 reads/s.
+			time.Sleep(100 * time.Microsecond)
 			data, err := sys.OSFS{}.ReadFile(filepath.Join(lay.ReviewsDir, "rule-a.json"))
 			if err != nil {
 				continue // not created yet

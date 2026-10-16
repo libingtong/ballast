@@ -22,6 +22,14 @@ go run ./scripts/bench -list             # 列出场景 id
 2. 样本齐全:恰好得到 `n × 进程数` 个样本(spawn 全部失败时样本为 0,不会被报告为通过);
 3. `p95 <= 30ms`,p95 取最近秩 `ceil(0.95n)`;门槛 30ms 是常量,没有命令行开关。
 
+**Windows 的修正(只在 Windows 生效,Linux / macOS 仍是固定 30ms)**:Windows 上创建进程本身就要 35–45ms
+(加载器 + 杀软扫描刚构建的 exe;GitHub 托管 runner 上 `ballast version` 的 p95 实测约 48ms,而 Linux / macOS 为 2–5ms),
+所以"进程创建到退出不超过 30ms"在 Windows 上连空操作都做不到。bench 在每次运行开头先测一次裸 `ballast version` 的 p95
+(`process_floor_p95_ms`,写进报告),Windows 上的门槛是 `p95 <= 30ms + 该下限`,即约束钩子自身的开销。另外,场景
+6c / 6d / 8b / 8c(1k / 10k 文件工作树的 S 快照、verify_fresh)的开销主要是对每个已跟踪文件的 lstat,NTFS + Defender 上约 8µs/文件
+(10k 文件约 80ms),Linux 约 1.6µs/文件;这四个场景在 Windows 上只报告 p95、不作门槛(`p95_informational`),
+其余条件(Bad == 0、样本齐全、审计命中)照常适用。产品里大仓库的工作区快照由 120ms 的谓词 deadline 兜底(超时为 unknown + 审计诊断)。
+
 整次运行还要求:所有场景都在(完整运行)、每个 `--client`(claude-code、codex、cursor、hermes)至少有一个 PreToolUse 场景。
 带审计校验的场景还要求审计里确有预期规则的命中记录(证明走了预期的代码路径,而不是静默放行);
 场景 10 核对"无丢失更新"(状态 `event_seq` + `lock_timeout` 诊断数 == 执行次数);场景 11 核对损坏状态确实被检测并重置。

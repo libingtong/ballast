@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"testing"
 	"time"
 )
@@ -138,5 +139,40 @@ func TestOkOutput(t *testing.T) {
 	}
 	if !okOutput(`"permission":"deny"`, []byte(`{"permission":"deny"}`)) || okOutput("deny", nil) {
 		t.Error("substring expectation")
+	}
+}
+
+// Informational scenarios skip only the p95 bound; the correctness checks
+// still gate them.
+func TestGateInformational(t *testing.T) {
+	r := good()
+	r.P95, r.Informational = 500, true
+	gate(&r)
+	if !r.Pass {
+		t.Errorf("an informational p95 must not fail the gate: %v", r.Failures)
+	}
+	r = good()
+	r.P95, r.Informational, r.Bad = 500, true, 1
+	gate(&r)
+	if r.Pass {
+		t.Error("an informational scenario with Bad runs must still fail")
+	}
+}
+
+// The process-creation floor widens the p95 bound on Windows only.
+func TestGateProcessFloorOnlyOnWindows(t *testing.T) {
+	defer func(f time.Duration) { processFloor = f }(processFloor)
+	processFloor = 40 * time.Millisecond
+	r := good()
+	r.P95 = 65
+	gate(&r)
+	if want := runtime.GOOS == "windows"; r.Pass != want {
+		t.Errorf("p95 65ms with a 40ms floor on %s: pass=%v, want %v", runtime.GOOS, r.Pass, want)
+	}
+	r = good()
+	r.P95 = 71
+	gate(&r)
+	if r.Pass {
+		t.Error("p95 above 30ms + floor must fail everywhere")
 	}
 }

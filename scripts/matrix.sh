@@ -298,11 +298,13 @@ fn t() {
 "; fi
       ;;
     dotnet)
-      # Pin the SDK to the 8.0 band that CI installs (setup-dotnet 8.0.x). The
-      # runner images also carry newer SDKs, and with the newest one (10.x)
-      # `dotnet test` on a project that is not a test project builds nothing and
-      # exits 0 even when the code does not compile, so the failing fixture
-      # would pass. 8.0's `dotnet test` always builds first.
+      # A real xunit test project. A plain library would not do: `dotnet test`
+      # on a project without the test SDK only restores and exits 0 even when
+      # the code does not compile, so the failing fixture would "pass". The
+      # packages come from nuget.org, which is why this stack only runs under
+      # CI (or with BALLAST_MATRIX_ALLOW_NET=1, see needs_net).
+      # The SDK is pinned to the 8.0 band that CI installs (setup-dotnet 8.0.x);
+      # the runner images also carry newer SDKs.
       write_file "$dir/global.json" '{"sdk":{"version":"8.0.100","rollForward":"latestFeature"}}
 '
       # Target the framework of the SDK that global.json selects (its
@@ -310,12 +312,24 @@ fn t() {
       local tfm
       tfm="net$(cd "$dir" && dotnet --version 2>/dev/null | cut -d. -f1).0"
       write_file "$dir/m.csproj" "<Project Sdk=\"Microsoft.NET.Sdk\">
-  <PropertyGroup><TargetFramework>$tfm</TargetFramework></PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>$tfm</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.11.1\" />
+    <PackageReference Include=\"xunit\" Version=\"2.9.2\" />
+    <PackageReference Include=\"xunit.runner.visualstudio\" Version=\"2.8.2\" />
+  </ItemGroup>
 </Project>
 "
-      if [ "$leg" = pass ]; then write_file "$dir/A.cs" "class A {}
-"; else write_file "$dir/A.cs" "class A { this does not compile }
-"; fi
+      if [ "$leg" = pass ]; then ass='Xunit.Assert.True(true);'; else ass='Xunit.Assert.True(false);'; fi
+      write_file "$dir/MTests.cs" "public class MTests
+{
+    [Xunit.Fact]
+    public void M() { $ass }
+}
+"
       ;;
     swift)
       write_file "$dir/Package.swift" '// swift-tools-version:5.5
