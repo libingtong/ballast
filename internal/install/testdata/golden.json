@@ -12,7 +12,8 @@
         "PostToolBatch": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "PostToolBatch"]}]}],
         "Stop": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "Stop"]}]}],
         "SubagentStop": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "SubagentStop"]}]}],
-        "SessionEnd": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "SessionEnd"]}]}]
+        "SessionEnd": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "SessionEnd"]}]}],
+        "ConfigChange": [{"hooks": [{"type": "command", "command": "/opt/ballast/bin/ballast", "args": ["hook", "--client", "claude-code", "--event", "ConfigChange"]}]}]
       }
     },
     "manifest_key_example": "hooks.PreToolUse[0].hooks[0]",

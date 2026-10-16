@@ -1,6 +1,6 @@
 --- /home/u/.claude/settings.json
 +++ /home/u/.claude/settings.json
-@@ -1,3 +1,161 @@
+@@ -1,3 +1,178 @@
  {
 -  "model": "opus"
 +  "model": "opus",
@@ -156,6 +156,23 @@
 +              "claude-code",
 +              "--event",
 +              "SessionEnd"
++            ]
++          }
++        ]
++      }
++    ],
++    "ConfigChange": [
++      {
++        "hooks": [
++          {
++            "type": "command",
++            "command": "/opt/ballast/bin/ballast",
++            "args": [
++              "hook",
++              "--client",
++              "claude-code",
++              "--event",
++              "ConfigChange"
 +            ]
 +          }
 +        ]

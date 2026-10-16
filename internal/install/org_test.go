@@ -86,8 +86,8 @@ func TestOrgRenderShape(t *testing.T) {
 	if doc.Sandbox.ExcludedCommands == nil || len(doc.Sandbox.ExcludedCommands) != 0 {
 		t.Error("excludedCommands must be an empty list, not absent")
 	}
-	if len(doc.Hooks) != 9 {
-		t.Fatalf("%d hook events, want the 9 claude natives", len(doc.Hooks))
+	if len(doc.Hooks) != 10 {
+		t.Fatalf("%d hook events, want the 10 claude natives", len(doc.Hooks))
 	}
 	for ev, groups := range doc.Hooks {
 		ne, ok := model.LookupNative(model.ClientClaude, ev)

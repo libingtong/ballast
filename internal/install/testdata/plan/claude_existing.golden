@@ -166,6 +166,23 @@
           }
         ]
       }
+    ],
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/ballast/bin/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "ConfigChange"
+            ]
+          }
+        ]
+      }
     ]
   },
   "env": {

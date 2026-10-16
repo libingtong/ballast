@@ -1,6 +1,23 @@
 {
   "allowManagedHooksOnly": true,
   "hooks": {
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/libexec/ballast/ballast",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "ConfigChange"
+            ]
+          }
+        ]
+      }
+    ],
     "PostToolBatch": [
       {
         "hooks": [

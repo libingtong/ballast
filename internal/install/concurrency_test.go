@@ -109,8 +109,8 @@ func assertConsistent(t *testing.T, e *tenv) (installed bool) {
 			t.Errorf("manifest says uninstalled but %d hook commands remain (mdc exists: %v)", total, e.exists(e.cursorMDC()))
 		}
 	} else {
-		if len(m.Entries) != 9+6+10+6 {
-			t.Errorf("manifest has %d entries, want 31", len(m.Entries))
+		if len(m.Entries) != 10+6+10+6 {
+			t.Errorf("manifest has %d entries, want 32", len(m.Entries))
 		}
 		// claude commands are command+args: count by event arg instead
 		for _, c := range model.AllClients {

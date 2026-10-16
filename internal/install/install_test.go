@@ -1084,8 +1084,8 @@ func TestReportContent(t *testing.T) {
 		}
 	}
 	m, _ := LoadManifest(e.fs, e.lay.Manifest)
-	if len(m.Entries) != 9+6+10+6 {
-		t.Errorf("manifest entries = %d, want 31", len(m.Entries))
+	if len(m.Entries) != 10+6+10+6 {
+		t.Errorf("manifest entries = %d, want 32", len(m.Entries))
 	}
 	if len(m.Files) != 6 {
 		t.Errorf("manifest files = %d", len(m.Files))

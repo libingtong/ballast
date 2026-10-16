@@ -322,8 +322,8 @@ func TestEntryWithoutManifestIsForeign(t *testing.T) {
 	if string(p2.After) != string(p1.After) {
 		t.Error("file must be unchanged")
 	}
-	if len(p2.Warnings) != 9 {
-		t.Errorf("warnings = %d, want 9", len(p2.Warnings))
+	if len(p2.Warnings) != 10 {
+		t.Errorf("warnings = %d, want 10", len(p2.Warnings))
 	}
 	if len(p2.Entries) != 0 {
 		t.Error("nothing can be claimed without a manifest")
@@ -555,7 +555,7 @@ func TestEventSubsetAndRetainedRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p2.Entries) != 9 {
+	if len(p2.Entries) != 10 {
 		t.Errorf("records for events outside this install must stay recorded: %d", len(p2.Entries))
 	}
 	if string(p2.After) != string(p1.After) {

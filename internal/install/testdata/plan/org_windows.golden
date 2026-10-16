@@ -1,6 +1,23 @@
 {
   "allowManagedHooksOnly": true,
   "hooks": {
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Program Files\\Ballast\\ballast.exe",
+            "args": [
+              "hook",
+              "--client",
+              "claude-code",
+              "--event",
+              "ConfigChange"
+            ]
+          }
+        ]
+      }
+    ],
     "PostToolBatch": [
       {
         "hooks": [
