@@ -142,6 +142,12 @@
     {"src": "foreach ($f in 'a','b') { [IO.File]::WriteAllText($f, 'x') }", "nodes": [{"name": "[io.file]::writealltext", "writes": [{"dynamic": true, "via": "[io.file]::writealltext"}], "loop": {"kind": "foreach", "n": 2, "bounded": "true"}}]},
     {"src": "Write-Output [IO.File]::WriteAllText('a.txt','x')", "nodes": [{"name": "write-output", "writes": []}]},
     {"src": "[IO.File]::ReadAllText('a.txt')", "nodes": []},
-    {"src": "[IO.File]::WriteAllText()", "nodes": [{"name": "[io.file]::writealltext", "writes": []}]}
+    {"src": "[IO.File]::WriteAllText()", "nodes": [{"name": "[io.file]::writealltext", "writes": []}]},
+    {"src": "[IO.File]::WriteAllText('..\\..\\’+‘.ballast\\rules.json','x')", "nodes": [{"name": "[io.file]::writealltext", "writes": [{"dynamic": true, "via": "[io.file]::writealltext"}]}]},
+    {"src": "[IO.File]::WriteAllText(\"..\\..\\”+“.ballast\\rules.json\",'x')", "nodes": [{"name": "[io.file]::writealltext", "writes": [{"dynamic": true, "via": "[io.file]::writealltext"}]}]},
+    {"src": "[IO.File]::WriteAllText('a’’b','x')", "nodes": [{"name": "[io.file]::writealltext", "writes": [{"dynamic": true, "via": "[io.file]::writealltext"}]}]},
+    {"src": "[IO.File]::WriteAllText('decoy’,’real','x')", "nodes": [{"name": "[io.file]::writealltext", "writes": [{"dynamic": true, "via": "[io.file]::writealltext"}]}]},
+    {"src": "Rename-Item C:\\x\\d\\ e", "nodes": [{"name": "rename-item", "writes": [{"path": "C:\\x\\d\\", "via": "rename-item"}, {"path": "C:\\x\\e", "via": "rename-item"}]}]},
+    {"src": "Rename-Item -Path ./d/ -NewName e", "nodes": [{"name": "rename-item", "writes": [{"path": "./d/", "via": "rename-item"}, {"path": "./e", "via": "rename-item"}]}]}
   ]
 }

@@ -108,8 +108,11 @@ func renameTargets(bound map[string][]model.Word) []model.WriteTarget {
 	out := psTargets(src, "rename-item")
 	var dir string
 	if len(src) == 1 && !src[0].Dynamic {
-		if i := strings.LastIndexAny(src[0].Lit, `\/`); i >= 0 {
-			dir = src[0].Lit[:i+1]
+		// a source ending in a separator names a directory: drop the
+		// trailing separators first so the new name replaces that leaf.
+		base := strings.TrimRight(src[0].Lit, `\/`)
+		if i := strings.LastIndexAny(base, `\/`); i >= 0 {
+			dir = base[:i+1]
 		}
 	}
 	for _, nm := range bound["-newname"] {

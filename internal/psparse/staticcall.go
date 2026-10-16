@@ -39,6 +39,19 @@ func fileWriteMethod(lit string) (method string, ok bool) {
 	return method, true
 }
 
+// hasTypographicQuote reports whether s contains a typographic quote that
+// PowerShell treats as a quote character (U+2018..U+201E, see parser.quoteAt).
+// splitCallArgs/literalString only understand ASCII quotes, so any argument
+// containing one is never a static literal (it is Dynamic).
+func hasTypographicQuote(s string) bool {
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] == 0xE2 && s[i+1] == 0x80 && s[i+2] >= 0x98 && s[i+2] <= 0x9E {
+			return true
+		}
+	}
+	return false
+}
+
 // splitCallArgs splits the inside of a ( ... ) argument list on top-level
 // commas, honouring quotes and nested ()[]{} groups.
 func splitCallArgs(s string) []string {
@@ -72,7 +85,7 @@ func splitCallArgs(s string) []string {
 // literal without expansion: '...' (a doubled quote escapes one) or "..."
 // without '$' or a backtick ("" escapes one). Anything else is dynamic.
 func literalString(s string) (string, bool) {
-	if len(s) < 2 {
+	if len(s) < 2 || hasTypographicQuote(s) {
 		return "", false
 	}
 	q := s[0]

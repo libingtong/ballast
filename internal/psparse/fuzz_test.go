@@ -95,6 +95,8 @@ var fuzzSeeds = []string{
 	"Start-Sleep 1e999999", "Start-Sleep -Duration ::", "Start-Sleep -Duration 1:2:3:4",
 	"[IO.File]::WriteAllText(", "[IO.File]::WriteAllText('", "[IO.File]::WriteAllText(\"$(", "[IO.File]::WriteAllText('a',", "[IO.File]::WriteAllText(,)",
 	"[IO.File]::WriteAllText(((((", "[void][IO.File]::", "[IO.File]::WriteAllText(@'\n'@, 1)", "[[IO.File]]::WriteAllText('a')", "]::WriteAllText('a')", "[]::WriteAllText('a')",
+	"[IO.File]::WriteAllText('..\\..\\’+‘.ballast\\rules.json','x')", "[IO.File]::WriteAllText(\"a\\”+“b\",'x')", "[IO.File]::WriteAllText('a’’b','x')", "[IO.File]::WriteAllText('decoy’,’real','x')",
+	"Rename-Item C:\\x\\d\\ e", "Rename-Item -Path ./d/ -NewName e", "Rename-Item /", "Rename-Item \\ x",
 	"Rename-Item", "Rename-Item -", "Rename-Item -NewName", "rni a", "rni -lp", "Tee-Object -LiteralPath", "Set-Content -LiteralPath", "Copy-Item -LiteralPath a",
 	"& { & { & { & { x } } } }", "((((((((x))))))))", "$($($($($(x)))))", "{{{{{{{{x}}}}}}}}", "[[[[[[[[x]]]]]]]]",
 }
