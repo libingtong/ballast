@@ -179,3 +179,14 @@ type Injector interface {
 type Spawner interface {
 	SpawnDetached(argv []string, env []string, logPath string) (pid int, err error)
 }
+
+// TierProbe (P2 unit P2-TIER, internal/tier) reports the trust tier of this
+// host (plan B0; docs/p2-design.md §3.2). Probe never errors and never
+// spawns: it only stats/reads root-owned inputs (binary chain, managed
+// settings, <managed>/ballast/org.json). Any doubt ⇒ T0 with the reason in
+// TierInfo.Missing. Implementations memoize per process. The hook calls it
+// lazily (only for a canonical `ballast verify` PreToolUse); the runner
+// calls it once per job and is authoritative for VerifyRecord.Tier.
+type TierProbe interface {
+	Probe() model.TierInfo
+}

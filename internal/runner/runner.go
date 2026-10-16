@@ -28,6 +28,11 @@ type Options struct {
 	Project  ports.ProjectLoader
 	Spawner  ports.Spawner
 
+	// Tier (P2, architecture v2.0) is the authoritative tier source for
+	// VerifyRecord.Tier and the sandbox policy. nil ⇒ T0, SandboxOff
+	// (pre-P2 behaviour). See docs/p2-design.md §3.4.
+	Tier ports.TierProbe
+
 	// Output receives the verify command's combined output in Foreground
 	// (nil ⇒ os.Stdout). The output always goes to the job log as well.
 	Output io.Writer

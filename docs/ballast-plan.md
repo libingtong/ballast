@@ -1,5 +1,7 @@
 # Ballast(压舱石)实施计划 v0.4
 
+> v0.5(2026-10-16):核心路径完成并通过系统审计,P2 计划见末尾"v0.5 P2 计划",详细设计见 `docs/p2-design.md`。
+
 > v0.4(2026-10-16):M0a/M0c 实测完成,并按用户要求加入多客户端支持(参照 pinrule)。改动见末尾"v0.4 变更",与正文冲突时以 v0.4 变更为准。
 
 > v0.2 根据 `docs/ballast-plan-review.md`(R01–R20,5 blocker / 13 major / 2 minor)重写。逐条修订去向见末尾"审核意见追溯表"。
@@ -627,3 +629,39 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - 合并语义:采用 B4 的方案,org 整体不可变,原问题 3 的备选方案升格为正式方案,以消除歧义。
 - ~~Codex:只预留 Adapter 接口~~ → 已被 v0.4 多客户端支持取代(用户 2026-10-16 要求)。
 - 计划批准后,将本文件同步覆盖 `docs/ballast-plan.md`,v0.1 留在审核报告记录的 hash 中可追溯。
+
+## v0.5 P2 计划(2026-10-16,优先于正文中 P2 相关条目)
+
+**依据**:核心路径(M0a/M0c、M1、M2、M3 自动化部分、M4-core 安装卸载)已完成并通过独立系统审计。P2 的详细设计与契约冻结在 `docs/p2-design.md`(v1.0),架构契约同步为 `docs/architecture.md` v2.0。本节只列计划层面的决定与验收,细节以设计文档为准。
+
+### 1. 工作包与验收
+
+| 工作包 | 内容 | 验收(可执行) |
+|---|---|---|
+| **M0b 托管层容器取证** | 一次性 Linux 容器(Claude Code 固定版本,`/etc/claude-code/managed-settings.json` 与 `managed-settings.d/`),不使用凭据:先核实无凭据时 SessionStart/UserPromptSubmit 是否触发(无 key / 假 key + 拒绝连接端点 / 假 key + 挂起端点三种模式),再测 `allowManagedHooksOnly`、低层 `disableAllHooks`、hook 合并、`.d` 合并规则、托管 hook 的路径要求、ConfigChange payload、MCP 白名单键名、容器内 bwrap 条件。沙箱 denyWrite、permissions.deny、MCP 写入、hook 是否在沙箱外标为【需凭据】,给出一条命令的补测方式 | `scripts/probe-m0b/run.sh` 生成 `docs/facts/m0b-cases.json`、`M0b-CONCLUSIONS.md`;`go run ./scripts/probe-m0b/check docs/facts/m0b-cases.json` 通过(每个必需 case 字段齐全,`needs_credentials` 带 `recheck`) |
+| **T1 沙箱化 runner 与 hook 代起 verify**(B0) | 层级判定五条件(GOOS、无测试重定向变量、二进制链 root 所有、root 所有的 `org.json` 声明 T1、托管设置完整),agent 无法伪造;PreToolUse 识别规范 `ballast verify <name>`,T1 下 hook 以 detached 方式启动 Ballast 自身(`verify --hook-start`),返回带 job id 的 deny,不依赖 `updatedInput`;runner 在进程内把测试命令包进 sandbox-exec(macOS)或 bwrap(Linux),受保护路径 denyWrite;沙箱不可用时按策略表退化(T1 默认 `require`:不执行、记 infra);证据 `tier:"T1"` 当且仅当 runner 自判 T1 且确实用了沙箱 | `go test ./internal/tier ./internal/sandbox ./internal/runner ./internal/hook`;bench 新场景(假 T1 规范 verify)p95 ≤ 30ms;`scripts/boundary-t1.sh` |
+| **P2-a 脱敏与可选上报** | 新 L0 包 `internal/redact`,hook 与 audit 共用;`ballast report --out <file>` 只输出脱敏后的聚合统计,默认不产生、不在热路径、不联网;网络上报不在 P2 实现,只冻结约束(单独二进制、显式 endpoint 加二次确认参数、`ballast` 二进制永不链接 `net/*`) | ≥ 50 条正样本零泄漏 + ≥ 20 条负样本不变;`go test ./internal/redact -run '^$' -fuzz FuzzString -fuzztime 60s`;`go test ./internal/report`;archtest `TestBinaryNoNet` |
+| **M4 边界** | ConfigChange 只审计(stdout 恒空),payload 取证后再安装;`boundary-t0.sh` 覆盖 trust-model §2.1 的全部"识别的写入"并把"未覆盖的写法"作为 gap 断言;`boundary-t1.sh` 在容器中用 `org render` 生成的托管配置与沙箱 runner 验证 agent 不可写,不需要模型的部分做成断言,agent 实际尝试的部分标【需凭据】 | `scripts/boundary-t0.sh`(三平台);`scripts/boundary-t1.sh`(Linux + Docker);`--with-credentials` 补测 |
+| **客户端取证** | Hermes:在隔离环境(Docker 或临时 venv,不碰真实 `~/.hermes`)中用 `hermes hooks test` 离线验证安装后的调用链(载荷、stdout 协议、阻断语义),写 `docs/facts/hermes-cases.json`,据此修正 adapter/hermes(`patch` 工具、`pre_verify` 续跑映射等);Codex、Cursor 不碰凭据无法取证,写补测命令 | `bash scripts/probe-clients/hermes.sh`;`go test ./internal/adapter/...` |
+| **其他增强** | psparse 写入目标补全(Tee-Object、-LiteralPath、Rename-Item、`[IO.File]::Write*` 等);请求文件 GC。cache GC 已在 v0.4.1 完成 | `go test ./internal/psparse ./internal/runner` |
+
+集成验收:`scripts/accept-p2.sh`(设计文档 §10),三平台 CI 执行,容器与真实客户端部分缺前提时显式 SKIP。
+
+### 2. 已定事项(本版裁决)
+
+- 层级配置放在独立的 root 所有文件 `<托管目录>/ballast/org.json`,`schema/rules.v1.json` 不变。
+- 新鲜度不按 tier 过滤:T1 主机上只有沙箱外进程能写证据,tier 用于审计与 CI 判读。
+- hook 代起 verify 的 deny 是合成决策,与同事件规则结果按既有裁决合并;spawn 失败仍然 deny 并审计。
+- 统一脱敏器放在 L0,hook 可直接 import(对"hook 只依赖契约包"的唯一放宽)。
+- ConfigChange 只审计、绝不阻断;M0b 未取得 payload 之前不安装。
+- Hermes 的 `hooks test` 结果算"离线核验",文档须注明触发时机未核验。
+
+### 3. 单元与顺序
+
+13 个实现单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLIENTS、P2-RUNNER、P2-HOOK、P2-REPORT、P2-CC、P2-INSTALL、P2-CLI),独占目录与依赖见设计文档 §9。第一批可并行:P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLIENTS;P2-CLI 最后集成。
+
+### 4. 需要用户在本机或用凭据完成的事项
+
+- M0b、boundary-t1 中标【需凭据】的用例:用户提供凭据后运行设计文档 §6.5、§5.3 的补测命令(脚本只从环境读取变量并经 `docker run -e` 传入,不落盘)。
+- Codex、Cursor 的真实取证:用户在临时配置根中自行登录后运行 `scripts/probe-clients/{codex,cursor}.sh`。
+- 在此之前,这些项在文档、`doctor` 与能力矩阵中保持【未核验】。

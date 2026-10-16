@@ -34,7 +34,12 @@ var allowed = map[string][]string{
 	"internal/config":    {"internal/model", "internal/ports", "internal/sys", "internal/layout"},
 	"internal/inject":    {"internal/model", "internal/ports"},
 	"internal/state":     {"internal/model", "internal/ports", "internal/sys", "internal/layout"},
-	"internal/audit":     {"internal/model", "internal/ports", "internal/sys", "internal/layout"},
+	"internal/audit":     {"internal/model", "internal/ports", "internal/sys", "internal/layout", "internal/redact"},
+
+	// P2 (architecture v2.0, docs/p2-design.md §2).
+	"internal/redact":  {},
+	"internal/tier":    {"internal/model", "internal/sys", "internal/layout"},
+	"internal/sandbox": {"internal/model", "internal/sys"},
 
 	"internal/adapter":            {"internal/model", "internal/ports", "internal/adapter/claudecode", "internal/adapter/codex", "internal/adapter/cursor", "internal/adapter/hermes", "internal/adapter/common"},
 	"internal/adapter/common":     {"internal/model"},
@@ -43,16 +48,17 @@ var allowed = map[string][]string{
 	"internal/adapter/cursor":     {"internal/model", "internal/ports", "internal/adapter/common"},
 	"internal/adapter/hermes":     {"internal/model", "internal/ports", "internal/adapter/common"},
 
-	"internal/hook": {"internal/model", "internal/ports", "internal/sys", "internal/layout", "internal/version"},
+	"internal/hook": {"internal/model", "internal/ports", "internal/sys", "internal/layout", "internal/version", "internal/redact"},
 
 	"internal/snapshot": {"internal/model", "internal/ports", "internal/sys"},
 	"internal/evidence": {"internal/model", "internal/ports", "internal/sys", "internal/layout", "internal/snapshot"},
 	"internal/project":  {"internal/model", "internal/ports", "internal/sys"},
-	"internal/runner":   {"internal/model", "internal/ports", "internal/sys", "internal/layout", "internal/evidence", "internal/snapshot", "internal/project", "internal/version"},
+	"internal/runner":   {"internal/model", "internal/ports", "internal/sys", "internal/layout", "internal/evidence", "internal/snapshot", "internal/project", "internal/version", "internal/tier", "internal/sandbox"},
 
 	"internal/stats":   {"internal/model", "internal/ports", "internal/sys", "internal/layout"},
 	"internal/replay":  {"internal/model", "internal/ports", "internal/sys", "internal/layout"},
-	"internal/install": {"internal/model", "internal/ports", "internal/sys", "internal/layout"},
+	"internal/install": {"internal/model", "internal/ports", "internal/sys", "internal/layout", "internal/tier"},
+	"internal/report":  {"internal/model", "internal/ports", "internal/sys", "internal/layout", "internal/redact", "internal/stats"},
 
 	"internal/archtest": {},
 	"internal/cli":      {"*"},
@@ -69,12 +75,20 @@ var hotPath = []string{
 	"internal/adapter/common", "internal/adapter/claudecode", "internal/adapter/codex",
 	"internal/adapter/cursor", "internal/adapter/hermes", "internal/hook",
 	"internal/snapshot", "internal/evidence", "internal/project",
+	"internal/redact", "internal/tier", // P2
 }
 
 var execAllowed = map[string]bool{"internal/snapshot/gitfallback.go": true}
 
 // noExecTransitive packages must not reach os/exec even transitively.
-var noExecTransitive = []string{"internal/hook", "internal/dsl", "internal/adapter", "internal/state", "internal/audit", "internal/config", "internal/inject", "internal/paths", "internal/bashparse", "internal/psparse"}
+var noExecTransitive = []string{"internal/hook", "internal/dsl", "internal/adapter", "internal/state", "internal/audit", "internal/config", "internal/inject", "internal/paths", "internal/bashparse", "internal/psparse", "internal/redact", "internal/tier"}
+
+// noNetBinaries must not depend (transitively) on net/* at all: the whole
+// ballast binary stays offline (P2 report is a local file; any future
+// network upload lives in a separate binary, docs/p2-design.md §4.5). This
+// is stricter than TestHotPathNoNet and also keeps net/http's package init
+// out of every hook invocation.
+var noNetBinaries = []string{"cmd/ballast"}
 
 func repoRoot(t *testing.T) string {
 	_, file, _, _ := runtime.Caller(0)
@@ -145,6 +159,18 @@ func TestHotPathNoNet(t *testing.T) {
 		for _, d := range strings.Fields(deps) {
 			if d == "os/exec" {
 				t.Errorf("%s depends on os/exec transitively", p)
+			}
+		}
+	}
+}
+
+func TestBinaryNoNet(t *testing.T) {
+	root := repoRoot(t)
+	for _, p := range noNetBinaries {
+		deps := goList(t, root, "-deps", "./"+p)
+		for _, d := range strings.Fields(deps) {
+			if d == "net" || strings.HasPrefix(d, "net/") {
+				t.Errorf("%s depends on %s (the ballast binary must not link net/*)", p, d)
 			}
 		}
 	}

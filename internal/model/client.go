@@ -48,6 +48,11 @@ const (
 	// EventAgentResponse is Cursor's afterAgentResponse: audit/bookkeeping only
 	// (stores the assistant text so a later Cursor `stop` can evaluate text rules).
 	EventAgentResponse EventName = "AgentResponse"
+	// EventConfigChange is Claude Code's ConfigChange: audit only (P2,
+	// architecture v2.0). Its NativeEventTable row has Install=false until
+	// M0b captures the payload (docs/p2-design.md §5.1). Rules can never
+	// name it.
+	EventConfigChange EventName = "ConfigChange"
 )
 
 // RuleEvents are the only values accepted by Rule.Event (plan B1).
@@ -122,6 +127,10 @@ var NativeEventTable = map[ClientID][]NativeEvent{
 		{Native: "PreCompact", Event: EventPreCompact, Roles: []Role{RoleAudit}, Install: false, Verified: true},
 		{Native: "PostCompact", Event: EventPostCompact, Roles: []Role{RoleAudit}, Install: false, Verified: true},
 		{Native: "SubagentStart", Event: EventSubagentStart, Roles: []Role{RoleAudit}, Install: false, Verified: true},
+		// P2 (architecture v2.0): audit-only, never installed until M0b
+		// captures the payload (case configchange-payload); unit P2-CC then
+		// flips Install/Verified on this row only. docs/p2-design.md §5.1.
+		{Native: "ConfigChange", Event: EventConfigChange, Roles: []Role{RoleAudit}, Install: false, Verified: false},
 	},
 	ClientCodex: {
 		{Native: "SessionStart", Event: EventSessionStart, Roles: []Role{RoleInject}, Install: true, Verified: false},

@@ -71,6 +71,16 @@ type VerifyRecord struct {
 	AgentID         string    `json:"agent_id,omitempty"`
 	LogPath         string    `json:"log_path,omitempty"`
 	Error           string    `json:"error,omitempty"` // infra errors
+
+	// P2 (architecture v2.0, additive). Sandbox is the OS sandbox the test
+	// command ran in: "sandbox-exec", "bwrap" or "none" ("" in pre-P2
+	// records ⇒ "none"). Tier is T1 only when the runner's own tier
+	// detection says T1 AND Sandbox != "none". Origin says who started the
+	// job; TierMissing copies TierInfo.Missing when the record is T0 on a
+	// host whose org.json declares T1.
+	Sandbox     string       `json:"sandbox,omitempty"`
+	Origin      VerifyOrigin `json:"origin,omitempty"`
+	TierMissing []string     `json:"tier_missing,omitempty"`
 }
 
 // ValidPass reports outcome=pass with S_start == S_end (plan B3).

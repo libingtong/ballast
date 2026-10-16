@@ -25,6 +25,7 @@ type Layout struct {
 	StateDir    string // ~/.ballast/state/<repo_inst>/<session>/<agent>.json(+.lock)
 	EvidenceDir string // ~/.ballast/evidence/<repo_inst>/<name>/<t_start_ns>-<job_id>.json
 	JobsDir     string // ~/.ballast/jobs/<repo_inst>/<name>/<job_id>.{json,log}
+	RequestsDir string // ~/.ballast/requests/<repo_inst>/<request_id>.json (P2: hook-started verify)
 	AuditDir    string // ~/.ballast/audit/YYYY-MM[.N].jsonl
 	CacheDir    string // ~/.ballast/cache/rules-<generation>-<key[:8]>.json, cache/stat.json
 	LKGDir      string // ~/.ballast/cache/lkg/<layer>-<sha256(path)[:12]>.json
@@ -38,6 +39,7 @@ type Layout struct {
 	InstallRoot string // parent of client config roots (normally the home dir)
 	ManagedDir  string // OS managed-settings dir (Claude Code), see ManagedDirFor
 	OrgRules    string // <ManagedDir>/ballast/rules.json
+	OrgConfig   string // <ManagedDir>/ballast/org.json (P2: declared tier, runner sandbox policy)
 
 	ClaudeDir string // CLAUDE_CONFIG_DIR or <InstallRoot>/.claude
 	CodexDir  string // CODEX_HOME or <InstallRoot>/.codex
@@ -66,6 +68,7 @@ func Resolve(env sys.Env) (Layout, error) {
 	l.StateDir = filepath.Join(l.Home, "state")
 	l.EvidenceDir = filepath.Join(l.Home, "evidence")
 	l.JobsDir = filepath.Join(l.Home, "jobs")
+	l.RequestsDir = filepath.Join(l.Home, "requests")
 	l.AuditDir = filepath.Join(l.Home, "audit")
 	l.CacheDir = filepath.Join(l.Home, "cache")
 	l.LKGDir = filepath.Join(l.Home, "cache", "lkg")
@@ -85,6 +88,7 @@ func Resolve(env sys.Env) (Layout, error) {
 		l.ManagedDir = ManagedDirFor(goos)
 	}
 	l.OrgRules = filepath.Join(l.ManagedDir, "ballast", "rules.json")
+	l.OrgConfig = filepath.Join(l.ManagedDir, "ballast", "org.json")
 
 	l.ClaudeDir = get(EnvClaudeDir)
 	if l.ClaudeDir == "" && l.InstallRoot != "" {

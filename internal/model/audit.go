@@ -19,6 +19,7 @@ const (
 	AuditPromote       AuditType = "promote"        // rules promote (incl. --force)
 	AuditInstall       AuditType = "install"        // install / uninstall actions
 	AuditTamper        AuditType = "tamper"         // T0 detection (boundary-t0)
+	AuditConfigChange  AuditType = "config_change"  // Claude ConfigChange event, audit only (P2, architecture v2.0)
 )
 
 // AuditVersion is the current record schema version ("v").

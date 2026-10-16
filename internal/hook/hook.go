@@ -93,7 +93,11 @@ type Deps struct {
 	Evidence ports.EvidenceProvider
 	Injector ports.Injector
 	Spawner  ports.Spawner
-	Faults   FaultInjector
+	// Tier (P2, architecture v2.0) is consulted only for a canonical
+	// `ballast verify` PreToolUse (model.ParseVerifyRequest). nil ⇒ T0:
+	// the command is evaluated like any other. See docs/p2-design.md §3.3.
+	Tier   ports.TierProbe
+	Faults FaultInjector
 	// Self is the absolute path of the running binary (for detached children).
 	Self string
 	// Watchdog defaults to DefaultWatchdog when zero.
