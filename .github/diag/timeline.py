@@ -2,7 +2,11 @@ import json, sys, glob, os, collections
 root = sys.argv[1]
 sess = sys.argv[2]
 rows = []
-for f in glob.glob(os.path.join(root, "**", "audit", "*.jsonl"), recursive=True):
+files = []
+for dp, dn, fn in os.walk(root):
+    if os.path.basename(dp) == "audit":
+        files += [os.path.join(dp, x) for x in fn if x.endswith(".jsonl")]
+for f in files:
     for line in open(f, encoding="utf8"):
         try:
             r = json.loads(line)

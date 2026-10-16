@@ -78,6 +78,21 @@ jobs:
           bash scripts/concurrency.sh 2>&1 | grep -E "N=[0-9]: [0-9]+ inv|FAIL|iteration|SUMMARY|kept"
           d=$(ls -dt "${TMPDIR:-/tmp}"/ballast-accept.* | head -1); echo "tmp=$d"
           python3 -I .github/diag/timeline.py "$d" uniq4 | head -120
+      - name: lock budget experiment
+        run: |
+          set +e
+          export BALLAST_TEST_WATCHDOG_MS=3000
+          exe=""; case "$RUNNER_OS" in Windows) exe=".exe";; esac
+          for B in 20 100 400; do
+            cp internal/state/store.go "$RUNNER_TEMP/store.go.orig"
+            python3 -I .github/diag/setbudget.py "$B"
+            GOPROXY=off go build -o "$RUNNER_TEMP/ballast-b$B$exe" ./cmd/ballast
+            cp "$RUNNER_TEMP/store.go.orig" internal/state/store.go
+            echo "=== LockBudget=${B}ms"
+            s=$(date +%s)
+            BALLAST_BIN="$RUNNER_TEMP/ballast-b$B$exe" bash scripts/concurrency.sh 2>&1 | grep -E "N=[0-9]: [0-9]+ inv|FAIL"
+            echo "script seconds: $(( $(date +%s) - s ))"
+          done
       - name: hook p95 via bench script (idle)
         run: |
           bash scripts/bench.sh 2>&1 | tail -40 || true
@@ -115,3 +130,18 @@ jobs:
           bash scripts/concurrency.sh 2>&1 | grep -E "N=[0-9]: [0-9]+ inv|FAIL|iteration|SUMMARY" || true
           # lock_timeout wait values from the sandbox audit logs
           find "${RUNNER_TEMP:-/tmp}" /var/folders -name 'audit' -maxdepth 8 -type d 2>/dev/null | head -3 | while read d; do grep -h lock_timeout "$d"/* 2>/dev/null | head -5 | cut -c1-300; done || true
+      - name: lock budget experiment (mac)
+        run: |
+          set +e
+          export BALLAST_TEST_WATCHDOG_MS=3000
+          exe=""; case "$RUNNER_OS" in Windows) exe=".exe";; esac
+          for B in 20 100 400; do
+            cp internal/state/store.go "$RUNNER_TEMP/store.go.orig"
+            python3 -I .github/diag/setbudget.py "$B"
+            GOPROXY=off go build -o "$RUNNER_TEMP/ballast-b$B$exe" ./cmd/ballast
+            cp "$RUNNER_TEMP/store.go.orig" internal/state/store.go
+            echo "=== LockBudget=${B}ms"
+            s=$(date +%s)
+            BALLAST_BIN="$RUNNER_TEMP/ballast-b$B$exe" bash scripts/concurrency.sh 2>&1 | grep -E "N=[0-9]: [0-9]+ inv|FAIL"
+            echo "script seconds: $(( $(date +%s) - s ))"
+          done
