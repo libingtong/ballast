@@ -1,0 +1,94 @@
+# TEMPORARY diagnostics (removed before the final commit).
+name: diag
+on:
+  push:
+    branches: [ci-preview]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+env:
+  GOFLAGS: -mod=readonly
+  GOPROXY: "off"
+jobs:
+  win:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-dotnet@v5.4.0
+        with:
+          dotnet-version: "8.0.x"
+      - name: dotnet failing fixture
+        run: |
+          set +e
+          dotnet --list-sdks; dotnet --version; which dotnet
+          D="$RUNNER_TEMP/dnfail"; rm -rf "$D"; mkdir -p "$D"; cd "$D"
+          tfm="net$(dotnet --version 2>/dev/null | cut -d. -f1).0"
+          echo "tfm=$tfm"
+          printf '<Project Sdk="Microsoft.NET.Sdk">\n  <PropertyGroup><TargetFramework>%s</TargetFramework></PropertyGroup>\n</Project>\n' "$tfm" > m.csproj
+          printf 'class A { this does not compile }\n' > A.cs
+          cat m.csproj A.cs
+          dotnet test; echo "dotnet test rc=$?"
+          dotnet build; echo "dotnet build rc=$?"
+      - name: go env + misc
+        run: |
+          go version; git --version; nproc || true
+          go run .github/diag/readdir.go
+      - name: hook timing
+        run: |
+          go build -o ballast.exe ./cmd/ballast
+          T="$RUNNER_TEMP/dg"; rm -rf "$T"; mkdir -p "$T/home/.ballast" "$T/work"
+          cp testdata/bash-regress.json "$T/home/.ballast/rules.json"
+          touch "$T/home/.ballast/gc.stamp"
+          export HOME="$(cygpath -w "$T/home")" USERPROFILE="$(cygpath -w "$T/home")" BALLAST_HOME="$(cygpath -w "$T/home/.ballast")"
+          export CLAUDE_CONFIG_DIR="$(cygpath -w "$T/claude")" CODEX_HOME="$(cygpath -w "$T/codex")" HERMES_HOME="$(cygpath -w "$T/hermes")" BALLAST_INSTALL_ROOT="$(cygpath -w "$T/root")" GIT_CONFIG_GLOBAL="$(cygpath -w "$T/gitconfig")"
+          W="$(cygpath -m "$T/work")"
+          ms() { echo $(( ($(date +%s%N) - $1) / 1000000 )); }
+          run_hook() { # session id event
+            printf '{"session_id":"%s","cwd":"%s","tool_name":"Bash","tool_use_id":"%s","tool_input":{"command":"sleep 300"},"prompt":"hi"}' "$1" "$W" "$2" | ./ballast.exe hook --client claude-code --event "$3" >/dev/null 2>"$T/err"; echo "rc=$?"
+          }
+          echo "== baseline: process spawn costs"
+          for i in 1 2 3 4 5; do s=$(date +%s%N); git --version >/dev/null; echo "git --version ${i}: $(ms $s)ms"; done
+          for i in 1 2 3; do s=$(date +%s%N); ./ballast.exe version >/dev/null 2>&1 || true; echo "ballast version ${i}: $(ms $s)ms"; done
+          echo "== sequential hooks (idle machine)"
+          for i in $(seq 1 25); do s=$(date +%s%N); r=$(run_hook idle t$i PreToolUse); echo "PreToolUse #$i: $(ms $s)ms $r $(head -c 120 $T/err)"; done
+          for ev in SessionStart UserPromptSubmit PostToolUse Stop; do s=$(date +%s%N); r=$(run_hook idle ev$ev $ev); echo "$ev: $(ms $s)ms $r $(head -c 120 $T/err)"; done
+          echo "== inittrace"
+          printf '{"session_id":"x","cwd":"%s","tool_name":"Bash","tool_use_id":"i1","tool_input":{"command":"ls"}}' "$W" | GODEBUG=inittrace=1 ./ballast.exe hook --client claude-code --event PreToolUse 2>&1 >/dev/null | awk '{ if ($5+0 > 0.2) print }' | head -20
+          echo "== sequential hooks under load (4 busy loops)"
+          for i in 1 2 3 4; do (while :; do :; done) & done
+          for i in $(seq 1 25); do s=$(date +%s%N); r=$(run_hook load t$i PreToolUse); echo "loaded PreToolUse #$i: $(ms $s)ms $r $(head -c 120 $T/err)"; done
+          kill $(jobs -p) 2>/dev/null || true
+      - name: hook p95 via bench script (idle)
+        run: |
+          bash scripts/bench.sh 2>&1 | tail -40 || true
+      - name: concurrency script (windows)
+        run: |
+          bash scripts/concurrency.sh 2>&1 | grep -E "N=[0-9]: [0-9]+ inv|FAIL|iteration|SUMMARY" || true
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: machine
+        run: |
+          sysctl -n hw.ncpu hw.memsize; sw_vers; uptime
+          go test -run '^$' -bench . -benchtime 200x ./internal/state 2>&1 | tail -20 || true
+      - name: concurrency detail
+        run: |
+          go build -o ballast ./cmd/ballast
+          bash scripts/concurrency.sh 2>&1 | grep -E "N=[0-9]: [0-9]+ inv|FAIL|iteration|SUMMARY" || true
+          # lock_timeout wait values from the sandbox audit logs
+          find "${RUNNER_TEMP:-/tmp}" /var/folders -name 'audit' -maxdepth 8 -type d 2>/dev/null | head -3 | while read d; do grep -h lock_timeout "$d"/* 2>/dev/null | head -5 | cut -c1-300; done || true
