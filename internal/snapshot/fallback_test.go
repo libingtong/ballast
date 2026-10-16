@@ -74,7 +74,7 @@ func pollutedEnv(base sys.MapEnv, tmp string) sys.MapEnv {
 	for _, k := range inheritedGitVars {
 		vars[k] = filepath.Join("/definitely/not/here", k)
 	}
-	vars["TMPDIR"] = tmp
+	vars["TMPDIR"], vars["TMP"], vars["TEMP"] = tmp, tmp, tmp // TMPDIR on unix, TMP / TEMP on Windows
 	vars["GIT_CONFIG_PARAMETERS"] = "'user.name=keep'"
 	return sys.MapEnv{Vars: vars, OS: base.OS}
 }
@@ -167,7 +167,7 @@ func TestTempRootAvoidsGitDir(t *testing.T) {
 	for tmp, inside := range map[string]bool{
 		"/tmp/x": false, "/r/.git": true, "/r/.git/tmp": true, "/r/.gitx": false, "/r/.git/worktrees/w/t": true,
 	} {
-		env := sys.MapEnv{Vars: map[string]string{"TMPDIR": tmp}}
+		env := sys.MapEnv{Vars: map[string]string{"TMPDIR": tmp, "TMP": tmp, "TEMP": tmp}}
 		got := tempRoot(env, repo)
 		if (got != tmp) != inside {
 			t.Errorf("TMPDIR=%s: tempRoot = %s", tmp, got)

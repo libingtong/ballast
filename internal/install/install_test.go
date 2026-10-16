@@ -734,7 +734,7 @@ func TestBackupsAreCappedAndPrivate(t *testing.T) {
 	for i := 0; i < 13; i++ {
 		e.clock.Advance(time.Second)
 		opt := e.opts(model.ClientClaude)
-		opt.Binary = "/opt/ballast/v" + string(rune('a'+i)) + "/ballast" // every run changes the file
+		opt.Binary = fakeBinaryIn("/opt/ballast/v" + string(rune('a'+i))) // every run changes the file
 		mustInstall(t, opt)
 	}
 	ents, _ := os.ReadDir(e.lay.BackupsDir)
@@ -910,7 +910,7 @@ func TestReinstallWithNewBinaryReplacesInPlace(t *testing.T) {
 	}
 	mustInstall(t, e.opts(model.AllClients...))
 	v2 := e.opts(model.AllClients...)
-	v2.Binary = "/opt/ballast-v2/ballast"
+	v2.Binary = fakeBinaryIn("/opt/ballast-v2")
 	rep := mustInstall(t, v2)
 	if len(rep.Warnings) != 0 {
 		t.Errorf("warnings: %v", rep.Warnings)
@@ -1135,7 +1135,7 @@ func TestLiveInstallLockBlocks(t *testing.T) {
 	e.write(lock, "1\n")
 	before[lock] = "1\n"
 	opt := e.opts(model.ClientCursor)
-	opt.Binary = "/opt/other/ballast" // would change the files
+	opt.Binary = fakeBinaryIn("/opt/other") // would change the files
 	if _, err := Install(opt); !errors.Is(err, ErrLocked) {
 		t.Fatalf("err = %v, want ErrLocked", err)
 	}

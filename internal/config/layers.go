@@ -13,9 +13,12 @@ import (
 	"github.com/libingtong/ballast/internal/sys"
 )
 
-// isNotExist reports a missing file, including a parent that is not a directory.
+// isNotExist reports a missing file, including a parent that is not a
+// directory and, on Windows, a path that cannot name any file (invalid
+// characters such as "<", a malformed path): such a file cannot exist, so the
+// layer is simply absent instead of failing the whole load.
 func isNotExist(err error) bool {
-	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) || isInvalidPath(err)
 }
 
 // isUnusable reports an error that makes a layer file unusable without being

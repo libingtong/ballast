@@ -1,7 +1,10 @@
 # Ballast CI:三平台构建 / 测试 / 验收脚本 / bench 门槛,外加多语言真实矩阵。
 #
 # 约定(docs/architecture.md §8.3、§11):
-#   - 所有 action 固定到具体版本号;Go 版本取自 go.mod。
+#   - 所有 action 固定到具体版本号(均为 Node 24 运行时的大版本,版本号以
+#     `gh api repos/<owner>/<repo>/releases` 核实过);Go 版本取自 go.mod。
+#   - 真实矩阵里的语言运行时用 `22`、`3.12`、`21`、`8.0.x`、`3.3` 这类可解析的写法,
+#     不写补丁号 / 构建号(例如 temurin 的 `21.0.7+6` 在 setup-java 里并不存在)。
 #   - `go test` 一律 GOPROXY=off(依赖先由 `go mod download` 拉取一次),测试不得联网。
 #   - 测试自己把 HOME / BALLAST_HOME / CLAUDE_CONFIG_DIR / CODEX_HOME / HERMES_HOME /
 #     BALLAST_INSTALL_ROOT / GIT_CONFIG_GLOBAL 等重定向到临时目录;CI 不运行真实的
@@ -41,10 +44,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: 检出
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.1.0
 
       - name: 安装 Go(版本取自 go.mod)
-        uses: actions/setup-go@v5.5.0
+        uses: actions/setup-go@v6.5.0
         with:
           go-version-file: go.mod
           cache: true
@@ -104,10 +107,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: 检出
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.1.0
 
       - name: 安装 Go(版本取自 go.mod)
-        uses: actions/setup-go@v5.5.0
+        uses: actions/setup-go@v6.5.0
         with:
           go-version-file: go.mod
           cache: true
@@ -242,10 +245,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: 检出
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.1.0
 
       - name: 安装 Go(版本取自 go.mod)
-        uses: actions/setup-go@v5.5.0
+        uses: actions/setup-go@v6.5.0
         with:
           go-version-file: go.mod
           cache: true
@@ -256,40 +259,40 @@ jobs:
       # ---- Linux:8 种栈的工具链(swift 不在 Linux 上跑)----
       - name: Node.js
         if: runner.os == 'Linux'
-        uses: actions/setup-node@v4.4.0
+        uses: actions/setup-node@v6.5.0
         with:
-          node-version: "22.16.0"
+          node-version: "22"
 
       - name: Python
         if: runner.os == 'Linux'
-        uses: actions/setup-python@v5.6.0
+        uses: actions/setup-python@v6.3.0
         with:
-          python-version: "3.12.10"
+          python-version: "3.12"
 
       - name: Java(maven / gradle 的运行时)
         if: runner.os == 'Linux'
-        uses: actions/setup-java@v4.7.1
+        uses: actions/setup-java@v5.7.0
         with:
           distribution: temurin
-          java-version: "21.0.7+6"
+          java-version: "21"
 
       - name: Gradle
         if: runner.os == 'Linux'
-        uses: gradle/actions/setup-gradle@v4.4.1
+        uses: gradle/actions/setup-gradle@v5.0.2
         with:
           gradle-version: "8.14.3"
 
       - name: .NET SDK
         if: runner.os == 'Linux' || runner.os == 'Windows'
-        uses: actions/setup-dotnet@v4.3.1
+        uses: actions/setup-dotnet@v5.4.0
         with:
-          dotnet-version: "8.0.411"
+          dotnet-version: "8.0.x"
 
       - name: Ruby
         if: runner.os == 'Linux'
-        uses: ruby/setup-ruby@v1.245.0
+        uses: ruby/setup-ruby@v1.322.0
         with:
-          ruby-version: "3.3.8"
+          ruby-version: "3.3"
 
       - name: Rust 与 Maven 与测试辅助包
         if: runner.os == 'Linux'

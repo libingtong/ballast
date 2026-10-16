@@ -49,7 +49,9 @@ func TestStatFile(t *testing.T) {
 	if err := os.WriteFile(p, []byte("abc"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	mt := time.Unix(1_700_000_000, 123)
+	// NTFS stores mtimes in 100 ns units, so a finer nanosecond part would not
+	// round-trip there.
+	mt := time.Unix(1_700_000_000, 100)
 	if err := os.Chtimes(p, mt, mt); err != nil {
 		t.Fatal(err)
 	}

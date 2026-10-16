@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -220,9 +221,16 @@ func (h *harness) installHook(repoDir string) (out string) {
 		h.t.Fatal(err)
 	}
 	o := filepath.ToSlash(out)
+	// Git for Windows runs hooks in an MSYS shell whose `pwd` prints
+	// "/c/Users/..."; `pwd -W` prints the native form ("C:/Users/...") that
+	// Check needs as its cwd.
+	pwd := "pwd -P"
+	if runtime.GOOS == "windows" {
+		pwd = "pwd -W"
+	}
 	script := "#!/bin/sh\n" +
 		"cp \"$GIT_INDEX_FILE\" \"" + o + "/index\" || exit 2\n" +
-		"pwd -P > \"" + o + "/cwd\"\n" +
+		pwd + " > \"" + o + "/cwd\"\n" +
 		"exit 1\n"
 	repo := h.sb.locate(h.t, repoDir)
 	hook := filepath.Join(repo.CommonDir, "hooks", "pre-commit")

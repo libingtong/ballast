@@ -42,7 +42,18 @@ type FS interface {
 type OSFS struct{}
 
 // ReadFile implements FS.
-func (OSFS) ReadFile(n string) ([]byte, error) { return os.ReadFile(n) }
+//
+// On Windows a read that collides with a concurrent replace of the same file
+// (MoveFileEx holds the target for an instant) fails with a sharing
+// violation; the read is retried for a few milliseconds (see retry.go).
+func (OSFS) ReadFile(n string) ([]byte, error) {
+	var data []byte
+	err := retryTransient(readRetryBudget, isTransientRead, func() (err error) {
+		data, err = os.ReadFile(n)
+		return err
+	})
+	return data, err
+}
 
 // Stat implements FS.
 func (OSFS) Stat(n string) (fs.FileInfo, error) { return os.Stat(n) }
@@ -71,8 +82,13 @@ func (OSFS) OpenFile(n string, flag int, perm fs.FileMode) (File, error) {
 // MkdirAll implements FS.
 func (OSFS) MkdirAll(n string, perm fs.FileMode) error { return os.MkdirAll(n, perm) }
 
-// Rename implements FS. On Windows os.Rename uses MoveFileEx(MOVEFILE_REPLACE_EXISTING).
-func (OSFS) Rename(o, n string) error { return os.Rename(o, n) }
+// Rename implements FS. On Windows os.Rename uses MoveFileEx(MOVEFILE_REPLACE_EXISTING),
+// which fails with "access denied" or a sharing violation while another
+// handle (a reader, another renamer) has the destination open; those are
+// retried for a bounded time (see retry.go). Other errors return at once.
+func (OSFS) Rename(o, n string) error {
+	return retryTransient(renameRetryBudget, isTransientRename, func() error { return os.Rename(o, n) })
+}
 
 // Remove implements FS.
 func (OSFS) Remove(n string) error { return os.Remove(n) }
