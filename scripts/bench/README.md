@@ -34,6 +34,9 @@ CI 在 Linux 上强制 30ms;在托管 macOS 设 45 / 80、Windows 设 150 / 400(
 | macOS(3 vCPU) | 28.2ms(100KB 命令) | 45ms | 51.0ms(6d)/ 50.2ms(8c),此前观察到 50–57ms | 80ms |
 | Windows(4 vCPU) | 77.7ms(场景 5;各场景在两次运行里的范围 44–78) | 150ms | 6c 82–116、6d 169–206、8b 89–107、8c 162–306(8c 那次还有一个 5.4s 的单进程停顿) | 400ms |
 
+使用平台上限时,只要任一场景 p95 超过 30ms 产品门槛,结论一律写成"通过平台上限,但 N 个场景未达 30ms 产品门槛"(不会只写"通过"),
+Markdown 报告列出这些场景,JSON 报告的 `over_product_budget` 给出场景 ID;`GITHUB_ACTIONS=true` 时另输出 `::warning::` 注释列出它们。
+
 上限留出约 60% 的余量吸收 runner 间的波动,所以它只防数量级的退化(例如多出一次全量扫描或一次进程启动),不是性能目标;其余条件(Bad == 0、样本齐全、审计命中)在所有平台照常适用。
 CI 把看门狗放宽到 15s(`BALLAST_TEST_WATCHDOG_MS`),但这**只拉长强杀计时**,昂贵谓词的 120ms deadline 默认不变,所以 Linux / macOS 上 bench 看到的是产品的判定。
 托管 Windows 上 10k 文件工作区的 S 快照 / verify_fresh 本身就要 150ms 以上(最近一次:6d p50 158ms,300/300 个样本越过 120ms,168 个越过 150ms),

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -287,5 +288,72 @@ func TestGateDegradedBound(t *testing.T) {
 	gate(&r)
 	if r.Pass {
 		t.Error("16/300 degraded exceeds 5%")
+	}
+}
+
+// A run that passes only under a platform bound must say so and count the
+// scenarios above the product gate; a run within 30 ms keeps the plain pass.
+func TestConclusionNamesPlatformBound(t *testing.T) {
+	oldB, oldH := budget, heavyBudget
+	defer func() { budget, heavyBudget = oldB, oldH }()
+	budget, heavyBudget = 60*time.Millisecond, 60*time.Millisecond
+
+	a, b, c := good(), good(), good()
+	a.ID, b.ID, c.ID = "1", "2", "3"
+	b.P95, c.P95 = 45.5, 30.01
+	for _, r := range []*result{&a, &b, &c} {
+		gate(r)
+		if !r.Pass {
+			t.Fatalf("scenario %s must pass under the platform bound: %v", r.ID, r.Failures)
+		}
+	}
+	got := conclusion([]result{a, b, c}, true)
+	if !strings.Contains(got, "通过平台上限,但 2 个场景未达 30ms 产品门槛") {
+		t.Errorf("conclusion = %q", got)
+	}
+	if ids := overIDs([]result{a, b, c}); len(ids) != 2 || ids[0] != "2" || ids[1] != "3" {
+		t.Errorf("overIDs = %v", ids)
+	}
+	md := markdown(map[string]string{}, []result{a, b, c}, nil, true, true)
+	if !strings.Contains(md, "通过平台上限,但 2 个场景未达 30ms 产品门槛") || !strings.Contains(md, "- 2 ") {
+		t.Errorf("markdown lacks the platform-bound wording:\n%s", md)
+	}
+
+	// Exactly 30 ms is still within the product gate.
+	d := good()
+	d.P95 = 30
+	if len(overProductBudget([]result{d})) != 0 {
+		t.Error("p95 == 30ms must not count as over the product gate")
+	}
+	if got := conclusion([]result{a}, true); !strings.HasPrefix(got, "通过(") {
+		t.Errorf("clean run must keep the plain pass: %q", got)
+	}
+	if got := conclusion([]result{b}, false); got != "未通过" {
+		t.Errorf("failed run conclusion = %q", got)
+	}
+}
+
+func TestOverBudgetWarningOnlyOnGitHubActions(t *testing.T) {
+	oldB, oldH := budget, heavyBudget
+	defer func() { budget, heavyBudget = oldB, oldH }()
+	budget, heavyBudget = 60*time.Millisecond, 60*time.Millisecond
+
+	slow, fast := good(), good()
+	slow.ID, slow.Name, slow.P95 = "7", "slow", 41.25
+	fast.ID = "8"
+	rs := []result{slow, fast}
+
+	t.Setenv("GITHUB_ACTIONS", "")
+	if w := overBudgetWarning(rs); w != "" {
+		t.Errorf("warning outside GitHub Actions: %q", w)
+	}
+	t.Setenv("GITHUB_ACTIONS", "true")
+	w := overBudgetWarning(rs)
+	if !strings.HasPrefix(w, "::warning::") || !strings.Contains(w, "7 slow p95=41.25ms") ||
+		strings.Contains(w, "8 ") || !strings.Contains(w, "1 个场景未达 30ms 产品门槛") {
+		t.Errorf("warning = %q", w)
+	}
+	if w := overBudgetWarning([]result{fast}); w != "" {
+		t.Errorf("warning with nothing over the gate: %q", w)
 	}
 }

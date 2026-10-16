@@ -256,6 +256,50 @@ func budgetText() string {
 	return t + ")"
 }
 
+// overProductBudget returns the scenarios whose p95 is above the product's
+// 30 ms gate. Under a platform bound (BALLAST_BENCH_P95_MS) such a scenario
+// still passes; it must never be reported as a plain pass.
+func overProductBudget(rs []result) []result {
+	var over []result
+	for _, r := range rs {
+		if r.Samples > 0 && ms2dur(r.P95) > productBudget {
+			over = append(over, r)
+		}
+	}
+	return over
+}
+
+// conclusion is the verdict sentence of the report. A run that passed only
+// because of a platform bound says so and how many scenarios missed the
+// product gate.
+func conclusion(rs []result, ok bool) string {
+	if !ok {
+		return "未通过"
+	}
+	over := overProductBudget(rs)
+	if len(over) == 0 {
+		return fmt.Sprintf("通过(%d 个场景,门槛 p95 <= %s,Bad == 0,样本齐全)", len(rs), budgetText())
+	}
+	return fmt.Sprintf("通过平台上限,但 %d 个场景未达 %dms 产品门槛(%d 个场景,平台上限 p95 <= %s,Bad == 0,样本齐全)",
+		len(over), productBudget/time.Millisecond, len(rs), budgetText())
+}
+
+// overBudgetWarning is the GitHub Actions annotation listing the scenarios
+// above the product gate, or "" when there are none or the run is not on
+// GitHub Actions.
+func overBudgetWarning(rs []result) string {
+	over := overProductBudget(rs)
+	if len(over) == 0 || os.Getenv("GITHUB_ACTIONS") != "true" {
+		return ""
+	}
+	parts := make([]string, len(over))
+	for i, r := range over {
+		parts[i] = fmt.Sprintf("%s %s p95=%.2fms", r.ID, r.Name, r.P95)
+	}
+	return fmt.Sprintf("::warning::bench 通过平台上限,但 %d 个场景未达 %dms 产品门槛: %s",
+		len(over), productBudget/time.Millisecond, strings.Join(parts, "; "))
+}
+
 // gate applies the pass/fail rules to a finished scenario. It is the only
 // place that decides pass/fail (so a partly failed spawn can never read as
 // green: M0c audit finding).
@@ -277,6 +321,16 @@ func gate(r *result) {
 		r.Failures = append(r.Failures, fmt.Sprintf("p95=%.2fms > %dms", r.P95, limit/time.Millisecond))
 	}
 	r.Pass = len(r.Failures) == 0
+}
+
+// overIDs lists the IDs of the scenarios above the product gate (never nil, so
+// the JSON report always carries an array).
+func overIDs(rs []result) []string {
+	ids := []string{}
+	for _, r := range overProductBudget(rs) {
+		ids = append(ids, r.ID)
+	}
+	return ids
 }
 
 func ms2dur(ms float64) time.Duration { return time.Duration(ms * float64(time.Millisecond)) }
@@ -1288,15 +1342,14 @@ func main() {
 		fmt.Printf("\n覆盖检查未通过: %s\n", p)
 	}
 	fmt.Printf("\n负载(结束): %s\n", info["load_end"])
-	if ok {
-		fmt.Printf("\n结论: 通过(%d 个场景,门槛 p95 <= %s,Bad == 0,样本齐全)\n", len(results), budgetText())
-	} else {
-		fmt.Printf("\n结论: 未通过\n")
+	fmt.Printf("\n结论: %s\n", conclusion(results, ok))
+	if w := overBudgetWarning(results); ok && w != "" {
+		fmt.Println(w)
 	}
 
 	complete := o.only == nil
 	out := map[string]any{"env": info, "time": time.Now().Format(time.RFC3339), "complete": complete,
-		"budget_ms": int(budget / time.Millisecond), "product_budget_ms": int(productBudget / time.Millisecond), "heavy_budget_ms": int(heavyBudget / time.Millisecond), "pass": ok, "results": results, "coverage_problems": problems}
+		"budget_ms": int(budget / time.Millisecond), "product_budget_ms": int(productBudget / time.Millisecond), "heavy_budget_ms": int(heavyBudget / time.Millisecond), "pass": ok, "over_product_budget": overIDs(results), "results": results, "coverage_problems": problems}
 	if o.jsonOut != "" {
 		b, _ := json.MarshalIndent(out, "", "  ")
 		if err := os.WriteFile(o.jsonOut, b, 0o644); err != nil {
@@ -1399,11 +1452,14 @@ func coverage(all []scenario, got []result, partial bool) []string {
 
 func markdown(info map[string]string, rs []result, problems []string, complete, ok bool) string {
 	var b strings.Builder
-	st := "通过"
-	if !ok {
-		st = "未通过"
+	fmt.Fprintf(&b, "# ballast hook 性能报告\n\n结论: **%s**(完整运行: %v)\n\n", conclusion(rs, ok), complete)
+	if over := overProductBudget(rs); ok && len(over) > 0 {
+		b.WriteString("未达产品门槛的场景:\n\n")
+		for _, r := range over {
+			fmt.Fprintf(&b, "- %s %s: p95 %.2f ms > %d ms\n", r.ID, r.Name, r.P95, productBudget/time.Millisecond)
+		}
+		b.WriteString("\n")
 	}
-	fmt.Fprintf(&b, "# ballast hook 性能报告\n\n结论: **%s**(门槛: 每个场景 p95 <= %s,Bad == 0,样本齐全;完整运行: %v)\n\n", st, budgetText(), complete)
 	b.WriteString("## 环境\n\n| 项 | 值 |\n|---|---|\n")
 	for _, k := range []string{"model", "cpu", "num_cpu", "memory_gb", "os", "goos", "goarch", "go", "git", "ballast", "binary_bytes", "extra_env", "watchdog_override_ms", "deadline_override_ms", "process_floor_p95_ms", "n", "warm", "load_start", "load_end"} {
 		if v := info[k]; v != "" {
