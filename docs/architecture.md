@@ -277,7 +277,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 ### 5.2 Codex
 
 - `<CODEX_HOME>/hooks.json`:`{"hooks":{"<Event>":[{"hooks":[{"type":"command","command":"<quoted argv>","timeout":30}]}]}}`,不带 matcher;6 个原生事件。
-- `<CODEX_HOME>/config.toml`:确保 `[features]` 下 `hooks = true`(按行外科式编辑,原子写);manifest 记 `ManagedFlag{key:"features.hooks"}`,`Value` 为安装前的原值(v1.8):`absent`(没有该键)、`false`(显式关闭)、`true`(原本就开着),`set_by_ballast` 在前两种为真。原值为显式 `false` 时,安装改成 `true` 之前先向 stderr 警告(开启后 `hooks.json` 里别的工具的 hook 也会跟着生效),卸载**恢复成 `false`**(只在当前值仍是安装写入的 `true` 时;用户已改过则不动)。原值为 `absent` 时**不自动关闭**,只提示(见 §13 的已登记例外)。v1.8 之前的 manifest 是 `Value:"true"` + `set_by_ballast`,按 `absent` 处理。
+- `<CODEX_HOME>/config.toml`:确保 `[features]` 下 `hooks = true`(按行外科式编辑,原子写);manifest 记 `ManagedFlag{key:"features.hooks"}`,`Value` 为安装前的原值(v1.8):`absent`(没有该键)、`false`(显式关闭)、`true`(原本就开着),`set_by_ballast` 在前两种为真。原值为显式 `false` 时,安装改成 `true` 之前先向 stderr 警告(开启后 `hooks.json` 里别的工具的 hook 也会跟着生效),卸载**恢复成 `false`**(只在当前值仍是安装写入的 `true` 时;用户已改过则不动)。原值为 `absent` 时**不自动关闭**,只提示(见 §13 的已登记例外);但若上次记为 `absent`、重装时当前值已被用户显式改成 `false`,以用户最近一次的显式关闭为准,改记 `false`,卸载恢复 `false`。v1.8 之前的 manifest 是 `Value:"true"` + `set_by_ballast`,按 `absent` 处理。
 - **trust 默认不写**。仅 `--codex-trust` 时写 `[hooks.state.'<hooks.json 绝对路径>:<snake_event>:<组下标>:<条目下标>']`、`enabled = true`、`trusted_hash = "sha256:…"`(`install.CodexTrustHash`,算法照搬 pinrule 引用的 Codex 0.130 源码【未核验于其他版本】);记入 manifest,卸载删除。因 key 含下标,每次写入后按最终位置重算。
 - 提示:hook 仅在交互式 TUI 触发(pinrule 观察【未核验】)。
 
