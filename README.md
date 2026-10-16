@@ -9,7 +9,7 @@ Ballast 是给 AI 编码客户端用的**行为策略引擎**:把一小组关键
 - **热路径很轻**:每次 hook 调用 p95 不超过 30ms,不联网、不调 LLM,任何异常都放行(stdout 为空、退出码 1)。
 - **可审计、可回放**:`stats` 看命中,`replay` 用历史 transcript 离线评估规则。
 
-> 状态:接口契约 v1.3 已冻结,U1 到 U12 的实现已合入。设计依据见 [`docs/ballast-plan.md`](docs/ballast-plan.md)(v0.4,末尾"v0.4 变更"优先),接口契约见 [`docs/architecture.md`](docs/architecture.md)。
+> 状态:接口契约 v2.0(P2)已冻结,U1 到 U12 与 P2 各单元的实现已合入集成分支。P2 加入了层级判定与重定向锁、hook 代起 verify、沙箱化 runner、脱敏上报文件、ConfigChange 审计与两个边界验收脚本。设计依据见 [`docs/ballast-plan.md`](docs/ballast-plan.md)(末尾"v0.5 P2 计划"优先)与 [`docs/p2-design.md`](docs/p2-design.md),接口契约见 [`docs/architecture.md`](docs/architecture.md)。
 
 ## 目录
 
@@ -38,10 +38,10 @@ Ballast 把保证强度分成两级(详见 [`docs/trust-model.md`](docs/trust-mo
 
 | 层级 | 适用条件 | 能兑现的保证 |
 |---|---|---|
-| **T1 托管强制** | macOS / Linux / WSL2,且组织用托管设置部署了 Ballast | 设计目标是 agent 不可写规则、状态、证据和二进制。**这套部署尚未在真实托管环境核验(待 M0b)** |
+| **T1 托管强制** | macOS / Linux / WSL2,且组织用托管设置部署了 Ballast | 设计目标是 agent 不可写规则、状态、证据和二进制。托管层的合并与强制行为已在 Linux 容器里用 Claude Code 2.1.300 取证(M0b),沙箱化 runner 在真实 bwrap 下验收(`scripts/boundary-t1.sh`);**让真实模型 agent 去尝试逃逸的部分仍是【需凭据】,macOS 与 Windows 的托管路径没有取过证** |
 | **T0 尽力而为** | 个人安装、没有托管部署,或原生 Windows | **篡改可检测、不可防**:agent 与 Ballast 同一用户权限,能改规则和状态文件;`no-tamper` 规则与审计只能让这种行为被发现 |
 
-个人安装默认是 T0。`ballast doctor` 会输出当前层级和缺失的 T1 组件;想要 T1,让管理员用 `ballast org render` 生成托管设置模板自行下发。
+个人安装默认是 T0。`ballast doctor` 会输出当前层级和缺失的 T1 组件;想要 T1,让管理员用 `ballast org render` 生成托管设置模板与 `org.json` 自行下发(`--write --i-am-admin` 可由 root 代写)。已写入 root 所有的 `org.json` 的主机称为"已锁定":生产构建忽略 `BALLAST_HOME` 等重定向变量,家目录取自 passwd。
 
 其他边界:
 
@@ -56,7 +56,7 @@ Ballast 把保证强度分成两级(详见 [`docs/trust-model.md`](docs/trust-mo
 | 一级 | **Claude Code** | 完整支持。注入、拦截(deny / ask / warn)、Stop 干预均有真实 payload 取证(Claude Code 2.1.300) |
 | 二级 | **Codex** | 注入与 PreToolUse deny;**不支持 ask**;Stop 的 block 待验证;hook 仅在交互式 TUI 触发。全部行为**未经 Ballast 自己核验** |
 | 二级 | **Cursor** | 注入、PreToolUse deny / ask;Stop 只能"续跑"(`followup_message`);另生成托管的 `ballast.mdc` 规则文件兜底。全部行为**未经 Ballast 自己核验** |
-| 三级 | **Hermes** | 尽力支持:`pre_tool_call` deny、`pre_llm_call` 注入,其余只能记 `log`。全部行为**未经 Ballast 自己核验** |
+| 三级 | **Hermes** | 尽力支持:`pre_tool_call` deny、`pre_llm_call` 注入、`pre_verify` 的 Stop deny(语义是续跑),其余只能记 `log`。**离线核验(`hermes hooks test`),触发时机未核验** |
 
 每个客户端的能力矩阵、事件映射和 payload 字段核验状态见 [`docs/clients.md`](docs/clients.md)。`ballast lint` 会按客户端能力矩阵拒绝不支持的"事件 × 动作"组合(默认检查已安装的客户端加 Claude Code),未核验的组合给警告。
 
@@ -311,19 +311,20 @@ git 在提交阶段会把 `GIT_INDEX_FILE` 指向真正要提交的索引,`commi
 | `ballast test-rules <文件\|目录>...` | 运行规则内的 examples |
 | `ballast config show [--explain]` | 显示当前生效的 org / repo / user 三层规则 |
 | `ballast init` | 探测技术栈,写入 `.ballast/project.json` |
-| `ballast verify` / `--status` / `--check` / `--foreground` | 后台运行验证、查询结果、检查新鲜度 |
+| `ballast verify` / `--status` / `--check` / `--foreground` | 后台运行验证、查询结果、检查新鲜度。T1 主机上,agent 运行的规范 `ballast verify <name>` 由 hook 在沙箱外代起(hook 给出 job id,`--status <job id>` 查询) |
 | `ballast stats` / `ballast rules promote <id> --to deny` | 命中统计、抽样复核、升级动作档位 |
 | `ballast replay <transcript>` | 对历史 transcript 离线回放规则 |
 | `ballast audit lint` | 检查审计日志格式 |
+| `ballast report --out <文件> [--since 30d] [--force]` | 把审计日志脱敏聚合成一个**本地**文件(只含计数、枚举与分桶数值,不含 id、路径、命令文本;非内置规则 id 只输出哈希);默认不运行,不联网,不发送任何数据;分享前请自行检查 |
 | `ballast install --client <id>` / `uninstall` / `doctor` | 安装、卸载、自检(层级 T0 / T1 与各客户端状态) |
-| `ballast org render` | 输出组织托管设置模板(T1,未核验) |
+| `ballast org render [--home-root <目录>] [--write --i-am-admin]` | 输出组织托管设置模板与 `org.json` 段(T1);`--write` 由 root 写入托管目录 |
 
 退出码约定见 [`docs/architecture.md` §7](docs/architecture.md)。
 
 ## 已知局限
 
-- **T0 只能检测篡改,不能防止**;T1 的部署方案尚未在真实托管环境核验(待 M0b),见 [`docs/trust-model.md`](docs/trust-model.md)。
-- **Codex、Cursor、Hermes 的 payload 字段与输出协议未经 Ballast 自己取证**(M0a 只覆盖 Claude Code),安装后的行为以 `ballast doctor` 与 `ballast lint` 的警告为准。Codex 的 hook 只在交互式 TUI 触发;Cursor 的 Stop 只能续跑;Hermes 只有 `pre_tool_call` 能拦截。
+- **T0 只能检测篡改,不能防止**(`scripts/boundary-t0.sh` 是这条边界的可执行登记表:被检测的写法必须命中,登记的缺口一旦被检测到脚本就失败,提示同步 trust-model);T1 的托管层行为已在 Linux 容器里取证,但需要真实模型调用的部分仍是【需凭据】,且**T1 证据的保证是全机范围的**——主机上任何一个削弱沙箱的项目层都能绕过 runner(`weakened_project:"deny"` 缺省拒绝这类会话的全部工具调用),见 [`docs/trust-model.md`](docs/trust-model.md) §2.3。
+- **Codex、Cursor 的 payload 字段与输出协议未经 Ballast 自己取证**(M0a 只覆盖 Claude Code),安装后的行为以 `ballast doctor` 与 `ballast lint` 的警告为准。Hermes 做过离线核验(`hermes hooks test`:形状、解析、阻断语义),**真实 agent 的触发时机未核验**。Codex 的 hook 只在交互式 TUI 触发;Cursor 的 Stop 与 Hermes 的 `pre_verify` 都只能续跑;Hermes 只有 `pre_tool_call` 能拦截。
 - **PowerShell 只做保守分词**,覆盖面窄于 bash;无法分词时按"不确定"处理(放行并写审计)。
 - **`git add … && git commit …` 写在同一条命令里**会被判为证据过期(Ballast 不模拟同一命令里前序节点的副作用)。请分两次执行。
 - **新鲜度只看已跟踪文件**。新建的文件要先 `git add` 再 `verify`;测试依赖未跟踪文件的情况交给 CI。
@@ -347,9 +348,10 @@ GOPROXY=off go test -race ./...
 ```
 
 - **不联网、不碰真实配置**:所有触及文件系统的测试都使用 `internal/testenv` 的沙箱,把 `HOME`、`BALLAST_HOME`、`CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`HERMES_HOME`、`BALLAST_INSTALL_ROOT`、`BALLAST_MANAGED_DIR`、`GIT_CONFIG_GLOBAL` 等全部重定向到临时目录;不会读写真实的 `~/.claude`、`~/.codex`、`~/.cursor`、`~/.hermes`、`~/.ballast`,也不会运行真实的客户端。`internal/cli` 的端到端测试会把 `ballast` 构建到临时目录并以子进程运行。
+- **P2 验收**:`bash scripts/accept-p2.sh` 编排 P2 的集成验收(构建与 vet、archtest、`go test ./...`、redact 60 秒 fuzz、`report` 端到端、`boundary-t0.sh`、Docker 下的 `sandbox-docker.sh` 与 `boundary-t1.sh`、M0b 取证检查、bench 场景 12–14 与 ConfigChange、卫生检查)。缺 Docker 时相应步骤显式 SKIP,`BALLAST_REQUIRE_DOCKER=1` 时失败;需要真实模型的步骤只打印【需凭据】与补测命令(`ANTHROPIC_API_KEY=<你自己提供> bash scripts/boundary-t1.sh --with-credentials`,密钥只从环境读、以变量名传给 `docker run`,不写入任何文件)。
 - **架构检查**:`internal/archtest` 强制依赖白名单——热路径(hook)不得依赖 `net/*`,`os/exec` 只允许出现在契约指定的隔离文件里,包级变量不得 `regexp.MustCompile`,不得有重的 `init()`。
 - **新增第三方依赖需要先走契约变更流程**(`docs/architecture.md` §12)。
-- **CI**:`.github/workflows/ci.yml` 在 ubuntu、macos、windows 三个平台上运行 `go vet`、`go test -race`(Windows 缺 cgo 时退回不带 `-race`)、`internal/archtest`、验收脚本和 bench 门槛(p95 不超过 30ms),另有 `matrix-real` job 在真实工具链上跑多语言证据矩阵。
+- **CI**:`.github/workflows/ci.yml` 在 ubuntu、macos、windows 三个平台上运行 `go vet`、`go test -race`(Windows 缺 cgo 时退回不带 `-race`)、`internal/archtest`、验收脚本和 bench 门槛(p95 不超过 30ms),另有 `matrix-real` job 在真实工具链上跑多语言证据矩阵。P2 的步骤(`accept-p2.sh`、Linux 上的 Docker 验收、macOS 上的 sandbox-exec 用例)待 CI 修复分支合入后追加,见 [`scripts/README.md`](scripts/README.md)。
 - 契约与取证资料:[`docs/architecture.md`](docs/architecture.md)、[`docs/dsl-semantics.md`](docs/dsl-semantics.md)、[`docs/facts/`](docs/facts/)、[`docs/research/pinrule-install-and-clients.md`](docs/research/pinrule-install-and-clients.md)、[`docs/pinrule-mapping.md`](docs/pinrule-mapping.md)。
 
 ## 许可

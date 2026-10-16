@@ -2,16 +2,18 @@
 
 > 权威数据在 `internal/model/capability.go`(`model.Capabilities`)与 `internal/model/client.go`(`model.NativeEventTable`),本文是它们的人类可读版本;安装目标与输出协议的冻结契约见 [`architecture.md`](architecture.md) §4–§5。调研来源见 [`research/pinrule-install-and-clients.md`](research/pinrule-install-and-clients.md)。
 >
-> **「核验」的含义**:Ballast 自己用真实客户端抓取过 payload 并断言过行为,才叫**已核验**。目前只有 Claude Code 做过(M0a:Claude Code 2.1.300,macOS,证据在 [`facts/`](facts/))。Codex、Cursor、Hermes 的事件名、payload 字段与输出协议来自参照项目 pinrule 的源码与文档,**全部未核验**;`ballast lint` 对这些组合给 `action-unverified` 警告,`ballast doctor` 会列出它们。「未核验」不等于「错误」,只是没有 Ballast 自己的证据。
+> **「核验」的含义**:Ballast 自己用真实客户端抓取过 payload 并断言过行为,才叫**已核验**。目前只有 Claude Code 做过(M0a:Claude Code 2.1.300,macOS,证据在 [`facts/`](facts/))。Codex、Cursor 的事件名、payload 字段与输出协议来自参照项目 pinrule 的源码与文档,**全部未核验**(Hermes 见下一段);`ballast lint` 对这些组合给 `action-unverified` 警告,`ballast doctor` 会列出它们。「未核验」不等于「错误」,只是没有 Ballast 自己的证据。
+>
+> **Hermes 的特殊状态(P2)**:Hermes 做过**离线核验**——用 `hermes hooks test`(Hermes 源码提交 9a0a162536)在一次性 `HERMES_HOME` 里跑过序列化形状、输出解析与阻断语义,证据在 [`facts/hermes-cases.json`](facts/hermes-cases.json)、[`facts/HERMES-CONCLUSIONS.md`](facts/HERMES-CONCLUSIONS.md);**触发时机未核验**(真实 agent 何时、以什么参数调用 hook 需要模型会话,【需凭据】,补测命令见结论文档)。
 
 ## 1. 分级总览
 
 | 级别 | 客户端 | `--client` | 配置位置 | 最高信任层级 | 核验状态 |
 |---|---|---|---|---|---|
-| 一级 | Claude Code | `claude-code` | `~/.claude/settings.json` | T1(需组织托管部署,**未核验,待 M0b**) | M0a 已核验(除下表标注的单元格) |
+| 一级 | Claude Code | `claude-code` | `~/.claude/settings.json` | T1(需组织托管部署;托管层行为已在 Linux 容器里用 Claude Code 2.1.300 取证,见 [`facts/M0b-CONCLUSIONS.md`](facts/M0b-CONCLUSIONS.md),其中 6 项【需凭据】尚未核验) | M0a 已核验(除下表标注的单元格) |
 | 二级 | Codex | `codex` | `~/.codex/hooks.json`、`config.toml` | T0 | 全部未核验 |
 | 二级 | Cursor | `cursor` | `~/.cursor/hooks.json`、`rules/ballast.mdc` | T0 | 全部未核验 |
-| 三级 | Hermes | `hermes` | `~/.hermes/config.yaml` | T0 | 全部未核验 |
+| 三级 | Hermes | `hermes` | `~/.hermes/config.yaml` | T0 | 离线核验(hooks test),触发时机未核验 |
 
 - **运行时不嗅探客户端**:客户端身份由安装器写进命令行(`<abs>/ballast hook --client <id> --event <原生事件>`),原生事件经 `NativeEventTable` 归一为 6 个规则事件之一。
 - 任何异常都放行:stdout 为空、退出码 1。**无决策时绝不输出 allow**(Codex 要求 allow 为 `{}` 或空)。
@@ -23,14 +25,14 @@
 
 | 规则事件 | 动作 | Claude Code | Codex | Cursor | Hermes |
 |---|---|---|---|---|---|
-| PreToolUse | deny | ✓ | ✓? | ✓? | ✓? |
+| PreToolUse | deny | ✓ | ✓? | ✓? | ✓(离线核验,触发时机未核验) |
 | | ask | ✓(`-p` 非交互下可能被直接拒绝) | ✗(Codex 解析但不执行,fail open) | ✓? | ✗ |
 | | warn | ✓(仅 `additionalContext`,不输出决策) | ✗ | ✗ | ✗ |
 | UserPromptSubmit | deny | ✓ | ✗ | ✗ | ✗ |
-| | warn | ✓ | ✓? | ✓?(嵌套格式沿用 pinrule) | ✓?(仅 `pre_llm_call`) |
+| | warn | ✓ | ✓? | ✓?(嵌套格式沿用 pinrule) | ✓(仅 `pre_llm_call`;离线核验,触发时机未核验) |
 | PostToolUse | warn | ✓ | ✓? | ✓? | ✗(只能 log) |
 | PostToolUseFailure | warn | ✓?(文档列出,未单独取证) | — | — | — |
-| Stop | deny | ✓(`block` 使会话继续,连续 8 次上限,已实测) | ✓?(pinrule 亦标待验证) | ✓?(**语义为续跑**,见 §4.3) | — |
+| Stop | deny | ✓(`block` 使会话继续,连续 8 次上限,已实测) | ✓?(pinrule 亦标待验证) | ✓?(**语义为续跑**,见 §4.3) | ✓(仅 `pre_verify`;**语义为续跑**,见 §4.4;离线核验,触发时机未核验;`lint` 给 `hermes-stop-continue` 警告) |
 | | warn | ✓(`systemMessage`,放行停止,已实测) | ✗ | ✗ | — |
 | SubagentStop | deny | ✓ | — | ✓?(同 stop) | — |
 | | warn | ✓?(按 Stop 推断) | — | ✗ | — |
@@ -56,7 +58,7 @@
 
 ### 4.1 Claude Code(一级)
 
-**原生事件**(全部安装,同名归一):SessionStart、UserPromptSubmit、PreToolUse、PostToolUse、PostToolUseFailure、PostToolBatch、Stop、SubagentStop、SessionEnd。工具事件(PreToolUse、PostToolUse、PostToolUseFailure)带 `"matcher":"*"`。另有**仅解析、不安装**的 PreCompact、PostCompact、SubagentStart(规则不能引用)。
+**原生事件**(全部安装,同名归一):SessionStart、UserPromptSubmit、PreToolUse、PostToolUse、PostToolUseFailure、PostToolBatch、Stop、SubagentStop、SessionEnd,以及 P2 起的 **ConfigChange**(只审计:一行 `config_change`,detail 为 `{source, file, protected}`,stdout 恒空,规则不能引用;不带 matcher)。工具事件(PreToolUse、PostToolUse、PostToolUseFailure)带 `"matcher":"*"`。另有**仅解析、不安装**的 PreCompact、PostCompact、SubagentStart(规则不能引用)。
 
 **条目格式**:`{"type":"command","command":"<二进制绝对路径>","args":["hook","--client","claude-code","--event","<Event>"]}`,命令与参数分开写。
 
@@ -73,6 +75,7 @@
 | `last_assistant_message`、`stop_hook_active` | 已核验 | Stop / SubagentStop |
 | `agent_id`、`agent_type` | 已核验 | 只在子 agent 内出现;压缩用的内部 agent 的 `agent_type` 是空字符串,其 SubagentStop 默认被忽略 |
 | `agent_transcript_path` | 已核验 | SubagentStop |
+| `source`、`file_path` | 已核验(M0b `configchange-payload`,Claude Code 2.1.300) | ConfigChange:`source` 为 `user_settings`/`project_settings`/`local_settings`/`policy_settings`/`skills`,`file_path` 是变更文件的绝对路径;托管目录的 `managed-settings.d/` 新增文件与 `~/.claude.json` 不触发该事件 |
 | `scratchpad_dir` | **本次样本均未出现** | 不依赖 |
 | `PowerShell` 工具与 Windows 路径形态 | 文档依据,**未实测**(Ballast 只在 macOS 上做过 M0a) | 依据 `ballast-plan.md` A23 |
 
@@ -124,9 +127,11 @@
 
 **托管规则文件**:`~/.cursor/rules/ballast.mdc`(front matter `alwaysApply: true` + 托管标记行 + 全文注入),整文件由 Ballast 托管,卸载时删除。它是**安装时按当时生效规则渲染的快照**,不随规则热更新(hook 通道才热更新)。规则变更后需重新运行 `ballast install --client cursor` 刷新(hooks.json 无变化,只重写 mdc);`ballast doctor` 的 `cursor.mdc_current` 检查它是否过期。安装时若当时没有任何生效规则,mdc 只有 front matter,`ballast install --client cursor` 会向 stderr 打印警告("放入规则后重新运行 install")。本版选择"重新安装刷新"这条路径,SessionStart 不做 mdc 过期检测。
 
-### 4.4 Hermes(三级,尽力支持,全部未核验)
+### 4.4 Hermes(三级,尽力支持,离线核验,触发时机未核验)
 
-**原生事件**(5 个,均未核验):on_session_start→SessionStart、pre_llm_call→UserPromptSubmit、pre_tool_call→PreToolUse、post_tool_call→PostToolUse、on_session_end→SessionEnd(**不是 Stop**:它无法干预停止,也不带最终文本)。
+**核验状态**:2026-10 用 `hermes hooks test`(Hermes 源码提交 9a0a162536,一次性 `HERMES_HOME`,不调用模型)核验了序列化形状、输出解析和阻断语义,证据见 `docs/facts/hermes-cases.json`。**离线核验(hooks test),触发时机未核验**:真实 agent 在什么时机、以什么 kwargs 调用 hook,需要模型会话(【需凭据】,补测命令见 `docs/facts/HERMES-CONCLUSIONS.md` §5)。因此下表各行的 Verified 含义是「形状、解析、阻断语义已核验」,不含「会在该时机触发」。
+
+**原生事件**(6 个):on_session_start→SessionStart、pre_llm_call→UserPromptSubmit、pre_tool_call→PreToolUse、post_tool_call→PostToolUse、pre_verify→Stop、on_session_end→SessionEnd。`pre_verify` 在本回合改过代码、即将结束时触发;`on_session_end` 仍不是 Stop(它无法干预停止,也不带最终文本)。
 
 **条目格式**:`~/.hermes/config.yaml` 顶层 `hooks:` 段:
 
@@ -137,17 +142,20 @@ hooks:
       timeout: 30
 ```
 
-Ballast 不依赖 YAML 库,按行外科式编辑,**只认块状 YAML**;`hooks:` 段用 flow 风格或锚点时拒绝写入。段外字节原样保留,往返逐字节一致,包括 0 字节文件(不会被当作新建文件删除)和没有末尾换行的文件(`yaml:blank`、`yaml:noeol` 标记)。**拒绝裸 CR 换行**:文件里出现不属于 CRLF 的单独 `\r`(旧式 Mac 换行)时拒绝写入。需要用户以 `--accept-hooks` 启动 Hermes 表示同意。
+Ballast 不依赖 YAML 库,按行外科式编辑,**只认块状 YAML**;`hooks:` 段用 flow 风格或锚点时拒绝写入。段外字节原样保留,往返逐字节一致,包括 0 字节文件(不会被当作新建文件删除)和没有末尾换行的文件(`yaml:blank`、`yaml:noeol` 标记)。**拒绝裸 CR 换行**:文件里出现不属于 CRLF 的单独 `\r`(旧式 Mac 换行)时拒绝写入。需要用户以 `--accept-hooks` 启动 Hermes 表示同意(`hermes hooks list` 把未同意的条目标为 `not allowlisted`;`hermes hooks test` 不检查同意)。**安装器绝不写 `fail_closed`**:否则 Ballast 的任何失败(崩溃、二进制被卸载)都会阻断全部工具调用。
 
-**payload / 协议假设**(来自 pinrule,未核验):
+**payload / 协议**(离线核验):
 
-| 项 | 假设 |
+| 项 | 内容 |
 |---|---|
-| 工具名 | `terminal`、`shell`、`execute_shell` → Bash;`read_file` → Read;`write_file`、`create_file` → Write;`patch_file`、`edit_file` → Edit |
+| stdin | `{hook_event_name, tool_name, tool_input(取自 args,非对象为 null), session_id, cwd, profile, extra{其余 kwargs}}` |
+| 工具名 | `terminal`、`shell`、`execute_shell` → Bash;`read_file` → Read;`write_file`、`create_file` → Write;`patch`、`patch_file`、`edit_file` → Edit(`patch` 的 V4A 模式:信封里每个 `*** Update/Add/Delete File:` 与 `*** Move File: a -> b` 都是目标);`execute_code` 保持原名(规则可按名字匹配,但没有匹配器看得到脚本里的写入,见 trust-model §2.1) |
 | `pre_llm_call` | 提示在 `extra.user_message`;首轮标志在 `extra.is_first_turn` |
-| deny | `{"decision":"block","reason":R}` |
+| deny(`pre_tool_call`) | `{"decision":"block","reason":R}`(Hermes 同时接受 `{"action":"block","message":R}`);退出码 2 也阻断 |
 | 注入 | 只有 `pre_llm_call` 能用 `{"context":C}`;其他事件输出为空 |
-| 能力缺口 | 没有 Stop / SubagentStop / PostToolUseFailure;`post_tool_call` 只能记 `log` |
+| 失败 | Ballast 的异常是「退出码 1 + 空 stdout」⇒ Hermes 放行;非 0 退出仍会解析 stdout,所以崩溃前绝不先打印决策 |
+| **Stop(`pre_verify`)** | `extra={platform, model, coding, attempt, final_response, changed_paths}`;`final_response` ⇒ `last_assistant_message`,`attempt>0` ⇒ `stop_hook_active`。**deny 渲染为 `{"decision":"block","reason":R}`,Hermes 解析为 `{action:"continue",message:R}`,语义是续跑(agent 继续),不是阻止停止**,受 `agent.max_verify_nudges`(默认 3)限制;`lint` 给 `hermes-stop-continue` 警告 |
+| 能力缺口 | 没有 SubagentStop / PostToolUseFailure;`post_tool_call` 只能记 `log`(其上的 block 应答被 Hermes 忽略) |
 
 ## 5. 事件映射速查
 
@@ -159,7 +167,7 @@ Ballast 不依赖 YAML 库,按行外科式编辑,**只认块状 YAML**;`hooks:` 
 | PostToolUse | PostToolUse | PostToolUse | postToolUse | post_tool_call |
 | PostToolUseFailure | PostToolUseFailure | — | — | — |
 | PostToolBatch | PostToolBatch | — | — | — |
-| Stop | Stop | Stop | stop | — |
+| Stop | Stop | Stop | stop | pre_verify(语义为续跑) |
 | SubagentStop | SubagentStop | — | subagentStop | — |
 | SessionEnd | SessionEnd | — | — | on_session_end |
 | AgentResponse(仅记账) | — | — | afterAgentResponse | — |

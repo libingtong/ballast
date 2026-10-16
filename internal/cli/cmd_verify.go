@@ -28,6 +28,9 @@ func isJobID(s string) bool {
 }
 
 func runVerify(a *app, c *command, args []string) int {
+	if hasHookStart(args) {
+		return a.verifyHookStart(args)
+	}
 	fs := newFlagSet("verify")
 	var status, check, commit, worktree, foreground, asJSON bool
 	var runJob string
@@ -82,6 +85,45 @@ func runVerify(a *app, c *command, args []string) int {
 	return a.verifyStart(pos)
 }
 
+// hasHookStart reports whether the internal --hook-start flag appears before
+// the "--" terminator (names after it can never be flags).
+func hasHookStart(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "--hook-start" {
+			return true
+		}
+	}
+	return false
+}
+
+// verifyHookStart implements the internal `verify --hook-start …` child the
+// hook spawns when it denies a canonical `ballast verify` under T1
+// (docs/p2-design.md §3.3). The frozen argv grammar is parsed by
+// model.ParseHookStartArgv; runner.StartRequest does the rest. Exit codes:
+// 0 started, 2 configuration error (the request file still carries the
+// error, so `verify --status <request_id>` can explain), 5 infrastructure.
+func (a *app) verifyHookStart(args []string) int {
+	req, err := model.ParseHookStartArgv(append([]string{"verify"}, args...))
+	if err != nil {
+		return a.errorf(ExitUsage, "verify: %v", err)
+	}
+	opt, err := a.runnerOptions(nil)
+	if err != nil {
+		return a.errorf(ExitInfra, "%v", err)
+	}
+	started, err := runner.StartRequest(opt, req)
+	for _, s := range started {
+		fmt.Fprintln(a.out, s.String())
+	}
+	if err != nil {
+		return a.runnerExit(err)
+	}
+	return ExitOK
+}
+
 // runnerOptions builds the runner configuration. Self is the symlink-
 // resolved running binary: the detached child must re-execute exactly it.
 func (a *app) runnerOptions(out io.Writer) (runner.Options, error) {
@@ -101,6 +143,7 @@ func (a *app) runnerOptions(out io.Writer) (runner.Options, error) {
 		Repo:     a.locator(),
 		Project:  &project.Loader{FS: a.fs},
 		Spawner:  runner.Spawner{},
+		Tier:     a.tierProbe(self),
 		Output:   out,
 	}, nil
 }
@@ -206,6 +249,13 @@ func (a *app) verifyStatus(c *command, pos []string, asJSON bool) int {
 		if err != nil {
 			return a.errorf(ExitVerifyInfra, "verify: %v", err)
 		}
+		if js == nil && rec == nil {
+			// No job has that id: it may be the request id a hook-started
+			// verify announced in its deny reason (P2, architecture §7).
+			if code, handled := a.requestStatus(pos[0], asJSON); handled {
+				return code
+			}
+		}
 		row := statusRow{JobID: pos[0], State: "none", code: ExitVerifyNoRecord}
 		switch {
 		case js != nil && store.JobActive(js):
@@ -264,6 +314,54 @@ func (a *app) verifyStatus(c *command, pos []string, asJSON bool) int {
 	return a.printStatus(rows, asJSON)
 }
 
+// requestStatus is the `verify --status <request_id>` fallback: when no job
+// has the id it reads the request file written by the hook-started verify
+// (runner.RequestStatus) and prints its jobs; the exit code is the worst
+// outcome (fail > timeout > signal > infra > running > pass). handled=false
+// means "no such request" and the caller reports the ordinary no-record
+// result (exit 11).
+func (a *app) requestStatus(id string, asJSON bool) (code int, handled bool) {
+	opt := runner.Options{Layout: a.lay, FS: a.fs, Clock: a.clock, IDs: a.ids, Env: a.env}
+	res, err := runner.RequestStatus(opt, "", id)
+	if err != nil {
+		if errors.Is(err, runner.ErrRequestNotFound) {
+			return 0, false
+		}
+		return a.errorf(ExitVerifyInfra, "verify: %v", err), true
+	}
+	rows := make([]statusRow, 0, len(res.Jobs))
+	for _, j := range res.Jobs {
+		switch {
+		case j.Record != nil:
+			rows = append(rows, recordRow(j.Record))
+		case j.Outcome == "running":
+			rows = append(rows, statusRow{Name: j.Name, JobID: j.JobID, State: "running", code: ExitVerifyRunning})
+		default:
+			rows = append(rows, statusRow{Name: j.Name, JobID: j.JobID, State: "lost", Outcome: j.Outcome,
+				Error: "no record and no running job (the runner did not start or was lost)", code: ExitVerifyInfra})
+		}
+	}
+	if len(rows) == 0 {
+		rows = append(rows, statusRow{State: "failed", Outcome: "infra", Error: res.Error, code: ExitVerifyInfra})
+	}
+	if res.Error != "" && len(res.Jobs) > 0 {
+		rows[0].Error = strings.TrimSpace(rows[0].Error + " request: " + res.Error)
+	}
+	if asJSON {
+		out := map[string]any{"request_id": res.RequestID, "jobs": rows, "exit": res.ExitCode}
+		if res.Error != "" {
+			out["error"] = res.Error
+		}
+		if err := a.writeJSON(out); err != nil {
+			return a.errorf(ExitInfra, "%v", err), true
+		}
+		return res.ExitCode, true
+	}
+	fmt.Fprintf(a.out, "request=%s\n", res.RequestID)
+	a.printStatusRows(rows)
+	return res.ExitCode, true
+}
+
 func (a *app) printStatus(rows []statusRow, asJSON bool) int {
 	codes := make([]int, len(rows))
 	for i, r := range rows {
@@ -276,6 +374,11 @@ func (a *app) printStatus(rows []statusRow, asJSON bool) int {
 		}
 		return code
 	}
+	a.printStatusRows(rows)
+	return code
+}
+
+func (a *app) printStatusRows(rows []statusRow) {
 	for _, r := range rows {
 		var parts []string
 		if r.Name != "" {
@@ -302,7 +405,6 @@ func (a *app) printStatus(rows []statusRow, asJSON bool) int {
 		}
 		fmt.Fprintln(a.out, strings.Join(parts, " "))
 	}
-	return code
 }
 
 // verifyCheck implements `verify --check` for git pre-commit hooks.

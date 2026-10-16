@@ -28,6 +28,8 @@ go run ./scripts/bench -list             # 列出场景 id
 
 ## 隔离
 
+场景 12–14 用 `-tags ballast_fault` 构建的第二个二进制(`-fault-bin`,`scripts/bench.sh` 自动构建):`BALLAST_TEST_TIER=T1`(探针报告健康的 T1)、`BALLAST_TEST_LOCKED=1`(强制已锁定)、`BALLAST_TEST_WEAKENED=audit|deny` 三个开关只在那样的构建里生效,生产构建完全忽略;其余场景用生产二进制。
+
 每个场景有独立的 `BALLAST_HOME`(含 12 条规则的用户层 `rules.json`、新鲜的 `gc.stamp`);子进程环境从零构造,
 只继承 PATH(Windows 另加系统变量),`HOME`、`BALLAST_HOME`、`BALLAST_INSTALL_ROOT`、`BALLAST_MANAGED_DIR`、
 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`HERMES_HOME`、`GIT_CONFIG_GLOBAL` 全部指向 `-base`(临时目录)之内,不联网、
@@ -59,6 +61,10 @@ racy 窗口,再留 5 处未暂存改动。
 | C-codex-patch / C-codex-exec | codex PreToolUse:`apply_patch`(deny)/ `exec_command` 短命令 |
 | C-cursor-shell / C-cursor-pre | cursor `beforeShellExecution`(deny)/ `preToolUse` Shell 短命令 |
 | C-hermes | hermes `pre_tool_call` terminal(block) |
+| 12 | P2:假 T1(`BALLAST_TEST_TIER=T1`,需要 fault 二进制)下的规范 `ballast verify test` PreToolUse(代起路径 deny;审计里每次都有 `verify_hook_start` 且 `spawn_ok`) |
+| 13 | P2:强制已锁定(`BALLAST_TEST_LOCKED=1`):真实的 `sys.LookupHome` 与 home_root 判定被调用并计时,**结果丢弃、仍用重定向的家目录**(不碰真实 `~/.ballast`);审计里有 `env_redirect_ignored` |
+| 14a / 14b | P2:强制已锁定且 `weakened_project:"deny"`;项目目录没有 `.claude` / 有一个干净的 `.claude/settings.json`(每次 PreToolUse 都要检查项目层) |
+| C-configchange | P2:claude-code `ConfigChange`(审计 `config_change`,stdout 恒空) |
 
 可选的 hyperfine 交叉校验:`scripts/bench.sh` 在检测到 `hyperfine` 时对场景 4 再测一次(只供参考,不参与门槛)。
 **本机未安装 hyperfine,该步骤在本机没有实际运行过。**

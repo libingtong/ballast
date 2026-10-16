@@ -137,9 +137,9 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | `reviews/<rule_id>.json` | U9 | `stats.Review` | 原子 |
 | `labels/<rule_id>.jsonl` | 用户/U9 | `{"sample_id","label":"tp"\|"fp","note"}` | 用户追加 |
 | `install-manifest.json` | U10 | `model.InstallManifest` | 原子 + fsync |
-| `requests/<repo_inst>/<request_id>.json`(v2.0) | P2-RUNNER | `model.VerifyRequestFile`(hook 代起 verify 的请求 → job 映射);同目录 `<request_id>.spawn.log` 为子进程输出 | 原子;`ballast gc` 删除 30 天前的文件 |
+| `requests/<repo_inst>/<request_id>.json`(v2.0) | P2-RUNNER | `model.VerifyRequestFile`(hook 代起 verify 的请求 → job 映射);同目录 `<request_id>.spawn.log` 为子进程输出 | 原子;`ballast gc` 删除 30 天前的文件(`runner.GCRequests`,P2-CLI 接线)。`StartRequest` 即使配置错误也先写请求文件(带 `error`),所以 `verify --status <request_id>` 总能解释失败原因 |
 | `work/<job_id>/{index,index.tree,tree/}`(v2.0.5) | P2-RUNNER(`runner.Materialize`) | origin=hook 的 job 私有树:`S_start` 的树经临时索引 `read-tree` + `checkout-index --prefix` 检出到 `tree/`(无 `.git`),加上 project.json `verify[].inputs_untracked` 命中的未跟踪输入(v2.0.6:runner 在沙箱外写这里,检出前做路径布局预检,白名单复制只经副本根上的 `os.Root`、逐级只接受真实目录、叶子 `O_EXCL` 不跟随,写不出副本;v2.0.7:检出前要求 `S_start` 中的 `.ballast/project.json` 与 job sidecar 钉选的条目哈希相等、逐字相等,否则 infra `project_json_changed`/`project_json_untracked`;读真实索引与白名单源文件不跟随、只接受普通文件);沙箱内的测试只能写这里(`sandbox.Spec.Tree`,`layout.WorkDir`),见 `docs/p2-design.md` §3.4 | 目录 0700;job 收尾后删除;`ballast gc` 删除 job 已结束且超过 24 小时的残留 |
-| `quarantine/<job_id>/…`(v2.0.3) | P2-RUNNER(经 `sandbox.Quarantine`) | 沙箱内测试新建的受保护路径(任意深度的 `.git`、`.claude/`、`.vscode/`、`.mcp.json` 等)被移出仓库后的副本,保留相对路径(`layout.QuarantineDir`) | 只由 runner 写;`ballast gc` 删除 30 天前的条目 |
+| `quarantine/<job_id>/…`(v2.0.3) | P2-RUNNER(经 `sandbox.Quarantine`) | 沙箱内测试新建的受保护路径(任意深度的 `.git`、`.claude/`、`.vscode/`、`.mcp.json` 等)被移出仓库后的副本,保留相对路径(`layout.QuarantineDir`) | 只由 runner 写;`ballast gc` 删除 30 天前的条目(`runner.GCRequests`,P2-CLI 接线) |
 | `gc.stamp` | U7 | 空文件,mtime 即上次 GC 时间 | 只由 hook 在派生 `ballast gc` 之前 touch;派生失败时删除以便下次重试;`ballast gc` 本身不写(v1.3;v1.5 删除了 `runGC` 里残留的 touch,hook 与 gc 不再双写) |
 | `replay-set.txt` | 用户 | 每行一个 transcript 路径(不入库) | — |
 
@@ -368,9 +368,9 @@ v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.Mana
 | `verify --check [--commit\|--worktree]` | 0 新鲜;10 过期;11 无证据;12 无法判定(非 git、参数无法解析、快照失败、project.json 缺失或非法);13 同名 job 运行中。用于 git pre-commit:`--commit`(默认)模式下若环境有 `GIT_INDEX_FILE`,CLI 把它(相对值按 cwd)解析为绝对路径,经 `evidence.CheckOptions.IndexFile` 传入,C = F(该索引)——`commit -a`/带路径提交时 git 此刻指向 `index.lock` 或临时 next-index,即真正要提交的树。仓库由 cwd 决定(git 在被提交仓库的顶层运行 hook,所以 `git -C ../other commit` 在 ../other 中检查)。热路径(hook)**永不**读取 `GIT_INDEX_FILE` |
 | `verify --foreground <name>` | 同 `--status`;2 配置错误 |
 | `verify --run-job <id>`(内部) | 同 `--status` |
-| `verify --hook-start --request <id> --cwd <dir> --client <c> [--session] [--agent] [--project-dir <dir>] -- [names]`(内部,v2.0;`--project-dir` 为 v2.0.4) | 0 已启动;2 配置错误(请求文件仍写入并带 error);5 基础设施错误。参数格式由 `model.HookStartArgv` 冻结 |
-| `verify --status <request_id>`(v2.0 扩展) | 找不到同名 job 时回退读请求文件:单 job 同该 job;多 job 取最差结果(fail > timeout > signal > infra > 运行中 > pass) |
-| `report --out <file> [--since] [--force]`(v2.0) | 0 已写入;1 隐私自检失败(未写入);2 用法;4 文件已存在且无 `--force`;5 I/O |
+| `verify --hook-start --request <id> --cwd <dir> --client <c> [--session] [--agent] [--project-dir <dir>] -- [names]`(内部,v2.0;`--project-dir` 为 v2.0.4) | 0 已启动(stdout 每个 job 一行 `job=<id> name=<name>`,第一个 job 的 id 就是 request id);2 配置错误或参数不合 `model.ParseHookStartArgv`(配置错误时请求文件仍写入并带 error);5 基础设施错误。参数格式由 `model.HookStartArgv` 冻结;由 hook 在 T1 下对规范 `ballast verify` 分离启动,不供人直接使用 |
+| `verify --status <request_id>`(v2.0 扩展;P2-CLI 实现) | 没有同名 job 时回退读 `requests/<repo_inst>/<request_id>.json`(`runner.RequestStatus`,各 repo_inst 目录都找):stdout 先打印 `request=<id>`,再每个 job 一行(格式同 `--status`;没有记录又不在运行的 job 为 `state=lost`);单 job 的退出码同该 job 的 `--status`;多 job 取最差(fail 1 > timeout 3 > signal 4 > infra 5 > 运行中 6 > pass 0);请求文件带 error 且没有 job ⇒ 5;**请求文件也找不到 ⇒ 11(无记录)**,输出与找不到 job 时相同。`--json` 另含 `request_id` 与 `error` |
+| `report --out <file> [--since 30d] [--force]`(v2.0;P2-CLI 实现) | 0 已写入(stdout 一行说明,仅本地文件、未发送任何数据);1 隐私自检失败(`report.ErrPrivacy`,什么都不写,这是 bug);2 用法(缺 `--out`、`--since` 非法、多余参数);4 文件已存在且无 `--force`;5 读审计或写文件失败(含目标的父路径是普通文件)。相对 `--out` 按工作目录解析,父目录不存在时创建;内置规则 id 原样输出、其余输出 `h:`+sha256 前 12 位 |
 | `init [--yes] [--force] [--dry-run]` | 0 已写入/无需写入/dry-run;1 用户拒绝或未探测到栈;2 用法;3 已有 project.json 且无 `--force` |
 | `stats [--since] [--by] [--rule --sample N] [--json]` | 0;2 用法;5 读审计失败 |
 | `rules promote <id> --to X [--force]` | 0 已升级;1 闸门不满足(无 review 凭据或命中不足);2 用法;4 规则不存在于 repo/user 层、是 org 规则、或目标档位不被已安装客户端支持;5 I/O |
@@ -378,9 +378,9 @@ v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.Mana
 | `audit lint [--json]` | 0 格式全部合规;1 有问题;5 I/O |
 | `install --client … [--dry-run] [--codex-trust] [--binary] [--force]` | 0 成功或无变化;1 托管层已部署而拒绝;2 用法/客户端未检测到且无 `--force`/二进制路径不稳定;3 配置解析失败(未写入);5 I/O |
 | `uninstall [--client\|--all] [--dry-run]` | 0;1 部分条目被用户改过而保留(已警告);3 解析失败;5 I/O |
-| `doctor [--json]` | 0 无 fail(可有 warn);1 有 fail |
-| `org render [--write --i-am-admin]` | 0;2 用法;4 `--write` 但非 root 或缺 `--i-am-admin` |
-| `gc`(内部) | 0;5(写 stderr,不影响任何人) |
+| `doctor [--json]` | 0 无 fail(可有 warn);1 有 fail。P2:`tier.*` 检查(`tier.level` 逐条列出 Missing,`tier.declared_mismatch`、`tier.runner_sandbox`(沙箱探测由 CLI 注入)、`tier.redirect_ignored`、`tier.locked_home`、`tier.repo_sandbox_weakened`(当前目录与仓库顶层)、`tier.binary_hardening`)。已锁定主机的家目录取不到时 doctor 仍运行到 `tier.locked_home`(此时用 `$HOME` 作诊断回退,重定向变量仍被忽略,不读写状态),其余命令与 hook 则失败(hook 按 B7 放行) |
+| `org render [--client claude-code] [--binary] [--home-root <dir>]... [--protect <path>]... [--write --i-am-admin]` | 0;2 用法(含 `--home-root` 不合规,以及 `--write` 的家目录预检失败:`SUDO_UID` 的用户在 passwd 里没有条目又没有 `home_root`,此时什么都不写);4 `--write` 但非 root 或缺 `--i-am-admin`;5 I/O。stdout 是托管设置片段(纯 JSON)加以 `//` 开头的注释行引出的 org.json 段;`--write` 先写 `managed-settings.d/ballast.json` 再写 `<托管目录>/ballast/org.json`(写入即锁定本机),写入的文件是纯 JSON |
+| `gc`(内部) | 0;5(写 stderr,不影响任何人)。P2 起另清理 `requests/` 与 `quarantine/` 下超过 30 天的条目、`work/<job_id>/` 中 job 已结束且超过 24 小时的残留(`runner.GCRequests`) |
 | `version` | 0 |
 
 ---

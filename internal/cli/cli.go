@@ -43,7 +43,7 @@ func Main(argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, cmd.usage)
 		return ExitOK
 	}
-	a, err := newApp(stdin, stdout, stderr)
+	a, err := newAppWith(stdin, stdout, stderr, wireSeams{Diagnostic: name == "doctor"})
 	if err != nil {
 		fmt.Fprintf(stderr, "ballast: %s\n", stripBallastPrefix(err.Error()))
 		return ExitInfra
@@ -55,11 +55,16 @@ func Main(argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
 // hand over. Any failure before hook.Main takes over follows the hook
 // protocol (empty stdout, "ballast:" on stderr, exit 1).
 func runHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	return runHookWith(args, stdin, stdout, stderr, WireHook)
+}
+
+// runHookWith is runHook with the wiring function injected (tests).
+func runHookWith(args []string, stdin io.Reader, stdout, stderr io.Writer, wire func(sys.Env) (*hook.Deps, error)) int {
 	if wantsHelp(args) {
 		fmt.Fprint(stdout, hookUsage)
 		return ExitOK
 	}
-	deps, err := WireHook(sys.OSEnv{})
+	deps, err := wire(sys.OSEnv{})
 	if err != nil {
 		fmt.Fprintf(stderr, "ballast: hook: %s\n", oneLine(stripBallastPrefix(err.Error())))
 		return ExitHookError
@@ -95,7 +100,11 @@ type app struct {
 }
 
 func newApp(in io.Reader, out, errw io.Writer) (*app, error) {
-	c, err := newCore(sys.OSEnv{})
+	return newAppWith(in, out, errw, wireSeams{})
+}
+
+func newAppWith(in io.Reader, out, errw io.Writer, sm wireSeams) (*app, error) {
+	c, err := newCoreWith(sys.OSEnv{}, sm)
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +173,8 @@ func lookupCommand(name string) (*command, bool) {
 		c = &command{name, doctorUsage, runDoctor}
 	case "org":
 		c = &command{name, orgUsage, runOrg}
+	case "report":
+		c = &command{name, reportUsage, runReport}
 	case "gc":
 		c = &command{name, gcUsage, runGC}
 	case "version":

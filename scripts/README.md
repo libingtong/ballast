@@ -15,6 +15,9 @@
 | `matrix.sh --mode real` | 真实工具链;本地缺工具链时显式 SKIP,`CI=true` 时缺失即失败。CI 下每个系统只负责计划里分配的栈(Linux 8 个、macOS swift、Windows dotnet)。要下载插件/依赖的栈(maven、gradle、dotnet、ruby)本地默认 SKIP,`CI=true` 或 `BALLAST_MATRIX_ALLOW_NET=1` 时才跑 |
 | `replay.sh` | 读 `$BALLAST_HOME/replay-set.txt`(每行一个 transcript 路径,`#` 为注释):至少 3 份、其中一份 > 10 MB,报告符合 schema,内存 < 200 MB,`$BALLAST_HOME/labels` 中标注 ≥ 20 条且都能关联到样本 id。文件不存在时显式 SKIP(退出 0);`BALLAST_REQUIRE_REPLAY=1` 时视为失败。只输出统计,不输出路径和内容 |
 | `install-e2e.sh` | 四个客户端:dry-run、往返(逐字节相同)、幂等、保留用户已有与事后另加的 hook、用户改过的条目、原文件缺失、客户端未检测到、托管层已部署、配置损坏、备份上限 10、doctor、非规范 JSON 布局(tab、CRLF、空行、紧凑、0 字节、用户的空事件数组)逐字节往返 |
+| `boundary-t0.sh` | M4 边界的 T0 一半(三平台,不要模型、容器或凭据):`boundary/t0-cases.json` 的每一行是一条合成 payload,喂给真实的 `ballast hook`(驱动程序 `boundary/t0`)。"识别的写入"必须在审计里留下 `no-tamper` 命中;trust-model §2.1 "未覆盖的写法"七类(各 ≥ 2 例,另有 org 规则目录)必须**不**命中——缺口被检测到时脚本失败并提示"覆盖面变了,请同步更新 trust-model §2.1",所以它同时是缺口登记表。另有:伪造的 pass 记录(任意 `S_end` 判过期 10;先算出真实 `C` 的伪造者骗得过 `--check`,记为一条缺口)、ConfigChange 审计(`config_change`、`protected:true`、stdout 恒空) |
+| `boundary-t1.sh` | M4 边界的 T1 一半,需要 Docker(无 Docker 时 SKIP,`BALLAST_REQUIRE_DOCKER=1` 时失败;Linux CI 必跑)。构建 `boundary/Dockerfile`(与 M0b 镜像同一个基础镜像 digest、apt 包与 Claude Code 版本),在三个一次性容器里以 root 安装 ballast 并 `org render --write --i-am-admin`,之后以普通用户 `agent` 运行:t1-doctor、t1-runner-sandbox(`boundary/t1-escape.sh` 在 bwrap 里的 26 项逃逸尝试 + 新建类文件,hook 代起 / 人工运行两种来源,submodule 与第二个 worktree 夹具,`--network bridge` 下 `runner_network` 的 deny / allow,五个伪造用例)、t1-tty(python `pty`,`TIOCSTI` 注入)、t1-lower-sandbox ①–⑧、t1-config-dir、t1-forged-binary、t1-orgjson、t1-env-override(重定向锁)、t1-passwd-missing(uid 4242)、t1-sandbox-missing(去掉 bwrap)、t1-hooks-outside-sandbox 与 t1-lower-hooks(Claude Code,假 key + 黑洞端点)。需要模型的部分打印 `needs_credentials` 与补测命令 `ANTHROPIC_API_KEY=<用户自己提供> bash scripts/boundary-t1.sh --with-credentials`(密钥只从调用者环境读,以 `docker run -e ANTHROPIC_API_KEY` 只传变量名,不落盘、不进镜像层或日志) |
+| `accept-p2.sh` | P2 集成验收,逐项对应 `docs/p2-design.md` §10:构建与 vet(含 `GOOS=windows`)、archtest、`go test ./...`、redact 60 秒 fuzz、`report --out` 端到端(全部退出码,输出过 `report.Validate`,植入的 id/路径/秘密一个都不在)、`boundary-t0.sh`、`sandbox-docker.sh ./internal/sandbox ./internal/runner` 与 `boundary-t1.sh`、M0b 取证检查、bench(场景 12–14、ConfigChange 与全部既有场景)、卫生检查(本机路径、uid 片段、秘密;`docs/clients.md` 含"触发时机未核验")。分段运行用 `BALLAST_ACCEPT_SKIP_GOTEST/FUZZ/BENCH/DOCKER=1`(显式 SKIP) |
 | `accept-m0.sh` … `accept-m4.sh` | 里程碑编排,见各文件头注释。M1 含 `go test -race ./...`;M2 含 freshness 与 matrix stub;M3 含 audit lint、stats golden 与用合成 transcript 跑的 replay;M4 含 install-e2e、org render、doctor |
 
 `lib.sh` 是共用函数(沙箱、断言、运行 ballast、构建二进制)。`tools/accutil/` 是脚本用的小工具(JSON 取值、带超时的运行与峰值内存、目录哈希、桩工具链、合成 transcript 等),每次运行时自动构建到临时目录。
@@ -33,6 +36,10 @@
 | `BALLAST_ACCEPT_REAL_REPLAY=1` | `accept-m3.sh` 额外对你本机的 `replay-set.txt` 跑 `replay.sh` |
 | `BALLAST_ACCEPT_SKIP_GOTEST=1` / `BALLAST_ACCEPT_SKIP_BENCH=1` | `accept-m1.sh` 把 `go test -race ./...` / 全套 bench 显式 SKIP(CI 在独立步骤里跑,避免重复耗时) |
 | `BALLAST_ACCEPT_MATRIX_REAL=1` | `accept-m2.sh` 额外跑 `matrix.sh --mode real` |
+| `BALLAST_REQUIRE_DOCKER=1` | `sandbox-docker.sh`、`boundary-t1.sh`(与经由它们的 `accept-p2.sh`)在没有 Docker 时失败而不是 SKIP |
+| `BALLAST_ACCEPT_SKIP_GOTEST` / `_FUZZ` / `_BENCH` / `_DOCKER` | `accept-p2.sh` 把对应步骤显式 SKIP(CI 在独立步骤里跑) |
+| `BALLAST_T1_BUILD_PROXY`、`BALLAST_DEBIAN_MIRROR`、`BALLAST_T1_IMAGE` | `boundary-t1.sh` 构建镜像时的代理 / apt 镜像(只用于 `docker build`);`BALLAST_T1_IMAGE` 直接使用一个已有镜像(需要 bwrap、git、python3、jq、util-linux 和 uid 1000 的 `agent`) |
+| `BALLAST_T1_EXTERNAL_URL` | `boundary-t1.sh` 的 bridge 变体用来检查"外部地址"的 URL(默认 Debian 镜像的 `InRelease`);容器连不上外网时该项显式 SKIP |
 | `BALLAST_MATRIX_ALLOW_NET=1` | `matrix.sh --mode real` 允许需要联网下载依赖的栈在本地运行 |
 
 ## 需要你在本机完成的验收
@@ -49,3 +56,5 @@
 ## 与 `scripts/bench` 的约定
 
 性能门槛由 U12c 的 `scripts/bench`(Go 程序)负责,真实接口是 `go run ./scripts/bench -bin <二进制> -base <临时目录> -root <仓库根> [-only <场景 id 正则>] [-n N] [-warm N]`(`-bin` 与 `-base` 必填,缺一退出 2;用 `-list` 列出场景 id)。`accept-m1.sh` 与 `accept-m2.sh` 通过 `lib.sh` 的 `run_bench` 调用它:`-bin` 是脚本已构建的共用二进制,`-base` 是 `$TMP_ROOT/bench`(临时目录内,不在任何 git 仓库里),其余参数原样透传。`accept-m1.sh` 不加参数,跑全部场景;`accept-m2.sh` 传 `-only '^6[abcd]$'`,只测 `git commit` 检查场景(6a/6b 为 1k/10k 文件的 `git commit`,6c/6d 为 `git commit -a`)。没有 `scripts/bench` 目录时显式 SKIP(`CI=true` 时失败)。也可以直接用 U12c 的 `scripts/bench.sh`(用 `ONLY` 环境变量缩小范围)。
+
+**P2 的场景 12–14**(假 T1 的规范 verify、强制重定向锁、`weakened_project:"deny"`)需要一个用 `-tags ballast_fault` 构建的第二个二进制(`-fault-bin`):`BALLAST_TEST_TIER`、`BALLAST_TEST_LOCKED`、`BALLAST_TEST_WEAKENED` 这三个开关只在那样的构建里生效,生产构建完全忽略。`scripts/bench.sh` 与 `lib.sh` 的 `run_bench` 都会构建并传入它;直接 `go run ./scripts/bench` 选中这些场景而不给 `-fault-bin` 时退出 2。
