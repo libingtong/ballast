@@ -1,0 +1,17 @@
+{
+  "hook_event_name": "pre_tool_call",
+  "tool_name": "patch",
+  "tool_input": {
+    "mode": "replace",
+    "path": "<home>/.ballast/rules.json",
+    "old_string": "a",
+    "new_string": "b"
+  },
+  "session_id": "p-patch-replace",
+  "cwd": "<repo>",
+  "profile": "default",
+  "extra": {
+    "task_id": "test-task",
+    "tool_call_id": "test-call"
+  }
+}

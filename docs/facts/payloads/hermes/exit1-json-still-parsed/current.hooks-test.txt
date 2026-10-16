@@ -1,0 +1,7 @@
+Firing 1 hook(s) for event 'pre_tool_call':
+
+  → <bin>/exit1-json
+      exit=1  elapsed=<t>s
+      stdout: {"decision":"block","reason":"json despite exit 1"}
+      parsed (Hermes wire shape): {"action": "block", "message": "json despite exit 1"}
+

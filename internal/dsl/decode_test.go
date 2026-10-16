@@ -132,7 +132,7 @@ func TestCheckCapabilities(t *testing.T) {
 		{"cursor pre ask", r(model.EventPreToolUse, "ask", ""), model.ClientCursor, []string{"warning:action-unverified@/action"}},
 		{"cursor subagent stop deny", r(model.EventSubagentStop, "deny", ""), model.ClientCursor, []string{"warning:cursor-stop-followup@/action", "warning:action-unverified@/action"}},
 		{"hermes post warn", r(model.EventPostToolUse, "warn", ""), model.ClientHermes, []string{"error:action-unsupported@/action"}},
-		{"hermes prompt warn", r(model.EventUserPromptSubmit, "warn", ""), model.ClientHermes, []string{"warning:action-unverified@/action"}},
+		{"hermes prompt warn is verified offline", r(model.EventUserPromptSubmit, "warn", ""), model.ClientHermes, nil},
 		{"explicit target", r(model.EventPreToolUse, "log", "warn", model.ClientClaude, model.ClientCodex), model.ClientCodex, []string{"warning:target-unsupported@/target"}},
 		{"target log is never flagged", r(model.EventPreToolUse, "log", "log"), model.ClientCodex, nil},
 		{"rule not for this client", r(model.EventPreToolUse, "ask", "", model.ClientClaude), model.ClientCodex, nil},

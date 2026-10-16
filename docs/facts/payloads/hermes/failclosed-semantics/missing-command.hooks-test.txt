@@ -1,0 +1,6 @@
+Firing 1 hook(s) for event 'pre_tool_call':
+
+  → <bin>/no-such-script
+      ✗ error: command not found
+      parsed (Hermes wire shape): {"action": "block", "message": "hook <bin>/no-such-script failed closed: command not found"}
+

@@ -1,0 +1,4 @@
+exit: 0
+stdout: {"decision":"block","reason":"[no-long-sleep] 不要在前台 sleep 60 秒以上。需要等待时用 run_in_background,或用有界的短轮询。"}
+
+stderr: 

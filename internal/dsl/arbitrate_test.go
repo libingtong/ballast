@@ -44,7 +44,7 @@ func TestArbitrate(t *testing.T) {
 			[]model.RuleHit{hit("aaa", model.ActionDeny, "d")}, model.ActionLog, "", []model.Action{model.ActionLog}},
 		{"stop warn is supported on claude", model.ClientClaude, model.EventStop,
 			[]model.RuleHit{hit("aaa", model.ActionWarn, "w")}, model.ActionWarn, "[aaa] w", []model.Action{model.ActionWarn}},
-		{"event missing on the client degrades", model.ClientHermes, model.EventStop,
+		{"event missing on the client degrades", model.ClientHermes, model.EventSubagentStop,
 			[]model.RuleHit{hit("aaa", model.ActionDeny, "d")}, model.ActionLog, "", []model.Action{model.ActionLog}},
 		{"unknown client degrades everything", "mystery", pre,
 			[]model.RuleHit{hit("aaa", model.ActionDeny, "d")}, model.ActionLog, "", []model.Action{model.ActionLog}},

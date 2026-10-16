@@ -1,0 +1,4 @@
+exit: 0
+stdout: {"context":"Ballast rules (generation 1848ef30aba2daa0):\n- [no-long-sleep] 不要在前台 sleep 60 秒以上;需要等待时用 run_in_background 或短间隔轮询。\n- [no-tamper] 不得改写 ~/.ballast、<repo>/.ballast 或任何 AI 客户端的 hook 配置文件。"}
+
+stderr: 

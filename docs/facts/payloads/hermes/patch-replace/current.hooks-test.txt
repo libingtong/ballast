@@ -1,0 +1,11 @@
+Firing 2 hook(s) for event 'pre_tool_call':
+
+  → <probe>
+      exit=0  elapsed=<t>s
+      parsed: <none — hook contributed nothing to the dispatcher>
+
+  → <ballast> hook --client hermes --event pre_tool_call
+      exit=0  elapsed=<t>s
+      stdout: {"decision":"block","reason":"[no-tamper] 不得改写 Ballast 的规则、状态、证据,或 AI 客户端的 hook 配置。如需调整规则,请让用户手动修改。"}
+      parsed (Hermes wire shape): {"action": "block", "message": "[no-tamper] \u4e0d\u5f97\u6539\u5199 Ballast \u7684\u89c4\u5219\u3001\u72b6\u6001\u3001\u8bc1\u636e,\u6216 AI \u5ba2\u6237\u7aef\u7684 hook \u914d\u7f6e\u3002\u5982\u9700\u8c03\u6574\u89c4\u5219,\u8bf7\u8ba9\u7528\u6237\u624b\u52a8\u4fee\u6539\u3002"}
+

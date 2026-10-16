@@ -21,6 +21,7 @@ const (
 	CodeTargetUnsupported  = "target-unsupported"
 	CodeEventUnavailable   = "event-unavailable"
 	CodeCursorStopFollowup = "cursor-stop-followup"
+	CodeHermesStopContinue = "hermes-stop-continue"
 	CodeFieldNotApplicable = "field-not-applicable"
 	CodeInputFieldUnknown  = "input-field-unknown"
 	CodeTextSourceMismatch = "text-source-mismatch"
@@ -122,6 +123,10 @@ func CheckCapabilities(r *model.Rule, c model.ClientID) []model.Diagnostic {
 		if ok && c == model.ClientCursor && r.Event.IsStopFamily() && a == model.ActionDeny {
 			out = append(out, mk(model.SevWarning, CodeCursorStopFollowup, "/action",
 				"Cursor %s deny sends a follow-up message and continues the run instead of blocking the stop", r.Event))
+		}
+		if ok && c == model.ClientHermes && r.Event.IsStopFamily() && a == model.ActionDeny {
+			out = append(out, mk(model.SevWarning, CodeHermesStopContinue, "/action",
+				"Hermes %s deny (pre_verify) asks the agent to keep going instead of blocking the stop; it is bounded by agent.max_verify_nudges", r.Event))
 		}
 	}
 	if t := r.Target; t.Valid() && t != model.ActionLog {

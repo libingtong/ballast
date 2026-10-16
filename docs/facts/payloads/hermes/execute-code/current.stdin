@@ -1,0 +1,14 @@
+{
+  "hook_event_name": "pre_tool_call",
+  "tool_name": "execute_code",
+  "tool_input": {
+    "code": "open(\"<home>/.ballast/rules.json\", \"w\").write(\"{}\")"
+  },
+  "session_id": "p-exec",
+  "cwd": "<repo>",
+  "profile": "default",
+  "extra": {
+    "task_id": "test-task",
+    "tool_call_id": "test-call"
+  }
+}

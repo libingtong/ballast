@@ -1,0 +1,10 @@
+Firing 2 hook(s) for event 'pre_verify':
+
+  → <probe>
+      exit=0  elapsed=<t>s
+      parsed: <none — hook contributed nothing to the dispatcher>
+
+  → <ballast> hook --client hermes --event pre_verify
+      exit=0  elapsed=<t>s
+      parsed: <none — hook contributed nothing to the dispatcher>
+

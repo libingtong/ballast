@@ -1,0 +1,11 @@
+Firing 2 hook(s) for event 'pre_tool_call':
+
+  → <probe>
+      exit=0  elapsed=<t>s
+      parsed: <none — hook contributed nothing to the dispatcher>
+
+  → <ballast> hook --client hermes --event pre_tool_call
+      exit=0  elapsed=<t>s
+      stdout: {"decision":"block","reason":"[no-long-sleep] 不要在前台 sleep 60 秒以上。需要等待时用 run_in_background,或用有界的短轮询。"}
+      parsed (Hermes wire shape): {"action": "block", "message": "[no-long-sleep] \u4e0d\u8981\u5728\u524d\u53f0 sleep 60 \u79d2\u4ee5\u4e0a\u3002\u9700\u8981\u7b49\u5f85\u65f6\u7528 run_in_background,\u6216\u7528\u6709\u754c\u7684\u77ed\u8f6e\u8be2\u3002"}
+

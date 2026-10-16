@@ -1,0 +1,519 @@
+[
+  {
+    "case_id": "install-config",
+    "events": [
+      "on_session_start",
+      "pre_llm_call",
+      "pre_tool_call",
+      "post_tool_call",
+      "pre_verify",
+      "on_session_end"
+    ],
+    "schema_keys": {},
+    "assertion": "ballast install --client hermes writes one hook per installable native event into config.yaml (including pre_verify), never writes fail_closed, and hermes hooks list shows them as not allowlisted (consent is separate; hooks test does not need it)",
+    "result": "pass",
+    "observation": "Six Ballast hooks (on_session_start, pre_llm_call, pre_tool_call, post_tool_call, pre_verify, on_session_end), timeout 30, no fail_closed. `hermes hooks list` reports every one as `not allowlisted`: running a real agent needs --accept-hooks (or the allowlist), while `hermes hooks test` fires hooks without consent. The installer prints the --accept-hooks hint.",
+    "evidence": [
+      "payloads/hermes/install-config/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "terminal-deny",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {
+      "pre_tool_call.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "pre_tool_call.stdin.extra": [
+        "task_id",
+        "tool_call_id"
+      ],
+      "pre_tool_call.stdin.tool_input": [
+        "command"
+      ]
+    },
+    "assertion": "pre_tool_call + terminal running `sleep 300` with a deny rule: Hermes parses Ballast's output as a block carrying the rule reason",
+    "result": "pass",
+    "observation": "stdin = {hook_event_name, tool_name, tool_input (the model's args), session_id, cwd, profile, extra{task_id, tool_call_id}}; Ballast prints {\"decision\":\"block\",\"reason\":\"[no-long-sleep] ...\"} (exit 0) and Hermes parses it to {action:block, message:<reason>}.",
+    "evidence": [
+      "payloads/hermes/terminal-deny/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "write-file-tamper",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {
+      "pre_tool_call.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "pre_tool_call.stdin.extra": [
+        "task_id",
+        "tool_call_id"
+      ],
+      "pre_tool_call.stdin.tool_input": [
+        "content",
+        "path"
+      ]
+    },
+    "assertion": "pre_tool_call + write_file into <home>/.ballast/rules.json is blocked by the no-tamper rule",
+    "result": "pass",
+    "observation": "write_file args {path, content}; the adapter maps it to Write and no-tamper (path **/.ballast/**) blocks.",
+    "evidence": [
+      "payloads/hermes/write-file-tamper/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "patch-replace",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {
+      "pre_tool_call.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "pre_tool_call.stdin.extra": [
+        "task_id",
+        "tool_call_id"
+      ],
+      "pre_tool_call.stdin.tool_input": [
+        "mode",
+        "new_string",
+        "old_string",
+        "path"
+      ]
+    },
+    "assertion": "pre_tool_call + patch (replace mode, args path/old_string/new_string) on <home>/.ballast/rules.json: the pre-fix adapter missed it, the fixed adapter blocks it (no-tamper)",
+    "result": "pass",
+    "observation": "Pre-fix adapter (commit cee8a4c963): tool `patch` was not in the tool map, so no Edit-scoped rule saw it and nothing was blocked (parsed: none). Fixed adapter: patch => Edit with Targets=[path]; no-tamper blocks.",
+    "evidence": [
+      "payloads/hermes/patch-replace/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "patch-v4a",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {
+      "pre_tool_call.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "pre_tool_call.stdin.extra": [
+        "task_id",
+        "tool_call_id"
+      ],
+      "pre_tool_call.stdin.tool_input": [
+        "mode",
+        "patch"
+      ]
+    },
+    "assertion": "pre_tool_call + patch (V4A mode, args mode=patch + patch envelope) touching src/ok.go and <home>/.ballast/rules.json: the pre-fix adapter missed it, the fixed adapter blocks it via the second target",
+    "result": "pass",
+    "observation": "Pre-fix adapter: not mapped, nothing blocked (parsed: none). Fixed adapter: every `*** Update/Add/Delete File:` (and Hermes' `*** Move File: a -> b`) in the envelope is a target; the second file triggers no-tamper.",
+    "evidence": [
+      "payloads/hermes/patch-v4a/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "execute-code",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {
+      "pre_tool_call.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "pre_tool_call.stdin.extra": [
+        "task_id",
+        "tool_call_id"
+      ],
+      "pre_tool_call.stdin.tool_input": [
+        "code"
+      ]
+    },
+    "assertion": "pre_tool_call + execute_code writing <home>/.ballast/rules.json is NOT blocked (documented gap: no matcher sees which files a Python script writes)",
+    "result": "pass",
+    "observation": "execute_code args {code}; the tool keeps its raw name (rules can match it by name) but no-tamper cannot see the write, so the call is allowed. Registered in trust-model section 2.1 category 1 (see the pending-sync text in HERMES-CONCLUSIONS.md).",
+    "evidence": [
+      "payloads/hermes/execute-code/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "prellm-turns",
+    "events": [
+      "pre_llm_call"
+    ],
+    "schema_keys": {
+      "pre_llm_call.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "pre_llm_call.stdin.extra": [
+        "conversation_history",
+        "is_first_turn",
+        "model",
+        "platform",
+        "user_message"
+      ],
+      "pre_llm_call.stdin.extra(second)": [
+        "conversation_history",
+        "is_first_turn",
+        "model",
+        "platform",
+        "user_message"
+      ]
+    },
+    "assertion": "pre_llm_call with is_first_turn=true gets the full rule text as {\"context\"}; the next turn of the same session gets the short anchor",
+    "result": "pass",
+    "observation": "extra = {user_message, conversation_history, is_first_turn, model, platform}. First turn: {\"context\": \"Ballast rules (generation ...):\\n- [rule] ...\"}; second turn: {\"context\": \"Ballast: [rule] ...; ...\"} (anchor, shorter). The context key is the only thing Hermes reads from a non-gate event.",
+    "evidence": [
+      "payloads/hermes/prellm-turns/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "post-tool-call",
+    "events": [
+      "post_tool_call"
+    ],
+    "schema_keys": {
+      "post_tool_call.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "post_tool_call.stdin.extra": [
+        "duration_ms",
+        "result",
+        "task_id",
+        "tool_call_id"
+      ],
+      "post_tool_call.stdin.tool_input": [
+        "command"
+      ]
+    },
+    "assertion": "post_tool_call: Ballast prints nothing, Hermes parses none, and the call is audited",
+    "result": "pass",
+    "observation": "extra = {task_id, tool_call_id, result (a JSON string), duration_ms}. Ballast replies with empty stdout (exit 0) and records the call in the session state (PostToolUse, tool normalized to Bash from `terminal`); the audit log only gets hit/diag/eval_summary records, a plain post_tool_call writes none.",
+    "evidence": [
+      "payloads/hermes/post-tool-call/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "session-lifecycle",
+    "events": [
+      "on_session_start",
+      "on_session_end"
+    ],
+    "schema_keys": {
+      "on_session_start.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "on_session_start.stdin.extra": [],
+      "on_session_end.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "on_session_end.stdin.extra": [
+        "completed",
+        "failed",
+        "interrupted",
+        "model",
+        "platform",
+        "task_id",
+        "turn_exit_reason",
+        "turn_id"
+      ]
+    },
+    "assertion": "on_session_start and on_session_end: empty reply, parsed none",
+    "result": "pass",
+    "observation": "on_session_start extra is {}; on_session_end extra = {task_id, turn_id, completed, failed, interrupted, turn_exit_reason, model, platform}. Both are lifecycle only: Ballast prints nothing.",
+    "evidence": [
+      "payloads/hermes/session-lifecycle/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "pre-verify",
+    "events": [
+      "pre_verify"
+    ],
+    "schema_keys": {
+      "pre_verify.stdin": [
+        "cwd",
+        "extra",
+        "hook_event_name",
+        "profile",
+        "session_id",
+        "tool_input",
+        "tool_name"
+      ],
+      "pre_verify.stdin.extra": [
+        "attempt",
+        "changed_paths",
+        "coding",
+        "final_response",
+        "model",
+        "platform"
+      ]
+    },
+    "assertion": "pre_verify carries the final answer in extra.final_response (attempt counts nudges); a Stop deny rendered as {decision:block,reason} is parsed by Hermes as {action:continue,message} (keep going)",
+    "result": "pass",
+    "observation": "Hermes fires pre_verify once per turn after code edits. extra = {platform, model, coding, attempt, final_response, changed_paths}; no tool fields. The adapter maps it to Stop (last_assistant_message <- final_response, attempt>0 => stop_hook_active). A Stop deny prints {\"decision\":\"block\",\"reason\":R} and Hermes turns it into {action:\"continue\",message:R}: the agent keeps going (bounded by agent.max_verify_nudges, default 3). That is continue semantics, not a veto of the stop.",
+    "evidence": [
+      "payloads/hermes/pre-verify/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "pre-verify-dialects",
+    "events": [
+      "pre_verify",
+      "post_tool_call"
+    ],
+    "schema_keys": {},
+    "assertion": "pre_verify accepts both {action:continue,message} and the Claude Stop dialect {decision:block,reason}; a block answer on a non-blocking event (post_tool_call) is ignored",
+    "result": "pass",
+    "observation": "pre_verify: both dialects map to {action:continue}; Ballast uses the Claude one. post_tool_call: only a context directive is read, a block answer yields parsed none.",
+    "evidence": [
+      "payloads/hermes/pre-verify-dialects/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "exit2-blocks",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {},
+    "assertion": "a hook that exits 2 blocks pre_tool_call, the stderr text is the message",
+    "result": "pass",
+    "observation": "Exit code 2 on a blocking event => {action:block,message:<stderr>}, independent of stdout.",
+    "evidence": [
+      "payloads/hermes/exit2-blocks/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "exit1-json-still-parsed",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {},
+    "assertion": "a hook that exits 1 but prints a block JSON is still parsed as a block (non-zero exits other than 2 still parse stdout)",
+    "result": "pass",
+    "observation": "Consequence for Ballast: its failure protocol (exit 1 with EMPTY stdout) is safe because empty stdout parses to nothing; a Ballast crash must never print a decision before exiting 1.",
+    "evidence": [
+      "payloads/hermes/exit1-json-still-parsed/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "exit1-empty-allows",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {},
+    "assertion": "a hook that exits 1 with empty stdout contributes nothing (the call is allowed)",
+    "result": "pass",
+    "observation": "Exit 1 + empty stdout => parsed none => allowed. This is Ballast's fail-open protocol (architecture section 4.2).",
+    "evidence": [
+      "payloads/hermes/exit1-empty-allows/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "output-dialects",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {},
+    "assertion": "pre_tool_call accepts the Hermes dialect {action:block,message} and the Claude dialect {decision:block,reason}; both are translated to {action:block,message}",
+    "result": "pass",
+    "observation": "Ballast keeps emitting the Claude dialect.",
+    "evidence": [
+      "payloads/hermes/output-dialects/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "garbage-and-missing-fail-open",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {},
+    "assertion": "unparseable stdout and a missing hook command both fail OPEN by default",
+    "result": "pass",
+    "observation": "Default is fail open (spawn error, timeout, garbage stdout). Same as Claude's A7.",
+    "evidence": [
+      "payloads/hermes/garbage-and-missing-fail-open/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "failclosed-semantics",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {},
+    "assertion": "with fail_closed: true a spawn error or garbage stdout BLOCKS; the installer must therefore never write fail_closed",
+    "result": "pass",
+    "observation": "fail_closed turns every Ballast failure (crash, timeout, missing binary after an uninstall) into a hard block of all tool calls. install-config shows the installer does not write it.",
+    "evidence": [
+      "payloads/hermes/failclosed-semantics/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "fault-build",
+    "events": [
+      "pre_tool_call"
+    ],
+    "schema_keys": {},
+    "assertion": "a -tags ballast_fault build with BALLAST_FAULT=decided:error exits 1 with empty stdout; Hermes parses none (allow); without the variable the same build blocks",
+    "result": "pass",
+    "observation": "Fault => exit 1, stdout empty, stderr `ballast: fault injected at decided`; Hermes: parsed none, i.e. the tool call proceeds. Control run (no BALLAST_FAULT) blocks normally.",
+    "evidence": [
+      "payloads/hermes/fault-build/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8"
+  },
+  {
+    "case_id": "live-session-trigger-timing",
+    "events": [
+      "pre_tool_call",
+      "pre_llm_call",
+      "pre_verify",
+      "on_session_start",
+      "on_session_end",
+      "post_tool_call"
+    ],
+    "schema_keys": {},
+    "assertion": "in a real Hermes session each hook fires at the expected moment with kwargs shaped like the hooks-test payloads, and a Ballast block really stops the tool call",
+    "result": "needs_credentials",
+    "observation": "hooks test proves serialization, output parsing and blocking semantics; it does not run an agent. Whether and when a live agent fires these hooks (including that a parsed block really prevents the tool from running and that pre_verify nudges are bounded by agent.max_verify_nudges) needs a model call, i.e. credentials the user logs in with inside a throw-away HERMES_HOME.",
+    "evidence": [
+      "payloads/hermes/live-session-trigger-timing/"
+    ],
+    "client": "hermes",
+    "hermes_commit": "9a0a1625367242596d338ae2da541c4a1fc785a2",
+    "evidence_kind": "offline-hooks-test",
+    "python": "3.14.8",
+    "recheck": "HERMES_HOME=\"$(mktemp -d)\" BALLAST_HOME=\"$(mktemp -d)\" sh -c 'ballast install --client hermes --binary \"$(command -v ballast)\" --force && hermes chat --oneshot --accept-hooks -q \"Run the shell command: sleep 300\"'  # log in to a provider inside that temporary HERMES_HOME first; expect the sleep to be refused with a [no-long-sleep] message; inspect $BALLAST_HOME/audit afterwards"
+  }
+]

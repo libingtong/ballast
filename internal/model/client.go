@@ -153,11 +153,19 @@ var NativeEventTable = map[ClientID][]NativeEvent{
 		{Native: "subagentStop", Event: EventSubagentStop, Roles: []Role{RoleGate, RoleLifecycle}, Install: true, Verified: false},
 	},
 	ClientHermes: {
-		{Native: "on_session_start", Event: EventSessionStart, Roles: []Role{RoleLifecycle}, Install: true, Verified: false},
-		{Native: "pre_llm_call", Event: EventUserPromptSubmit, Roles: []Role{RoleInject}, Install: true, Verified: false},
-		{Native: "pre_tool_call", Event: EventPreToolUse, Roles: []Role{RoleGate}, Install: true, Verified: false},
-		{Native: "post_tool_call", Event: EventPostToolUse, Roles: []Role{RoleAudit}, Install: true, Verified: false},
-		{Native: "on_session_end", Event: EventSessionEnd, Roles: []Role{RoleLifecycle}, Install: true, Verified: false},
+		// v2.0 / P2-HERMES: every row below is verified OFFLINE only
+		// (`hermes hooks test`: serialization shape, output parsing and
+		// blocking semantics; docs/facts/hermes-cases.json). When a real
+		// agent fires these hooks is NOT verified (needs a model session).
+		{Native: "on_session_start", Event: EventSessionStart, Roles: []Role{RoleLifecycle}, Install: true, Verified: true},
+		{Native: "pre_llm_call", Event: EventUserPromptSubmit, Roles: []Role{RoleInject}, Install: true, Verified: true},
+		{Native: "pre_tool_call", Event: EventPreToolUse, Roles: []Role{RoleGate}, Install: true, Verified: true},
+		{Native: "post_tool_call", Event: EventPostToolUse, Roles: []Role{RoleAudit}, Install: true, Verified: true},
+		// pre_verify fires once per turn when the agent edited code and is
+		// about to finish; a block/continue answer keeps the agent running
+		// (Stop with CONTINUE semantics, bounded by agent.max_verify_nudges).
+		{Native: "pre_verify", Event: EventStop, Roles: []Role{RoleGate, RoleLifecycle}, Install: true, Verified: true},
+		{Native: "on_session_end", Event: EventSessionEnd, Roles: []Role{RoleLifecycle}, Install: true, Verified: true},
 	},
 }
 

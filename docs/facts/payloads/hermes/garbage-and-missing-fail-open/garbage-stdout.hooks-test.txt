@@ -1,0 +1,7 @@
+Firing 1 hook(s) for event 'pre_tool_call':
+
+  → <bin>/garbage-stdout
+      exit=0  elapsed=<t>s
+      stdout: Traceback (most recent call last): boom
+      parsed: <none — hook contributed nothing to the dispatcher>
+
