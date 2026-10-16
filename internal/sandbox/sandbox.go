@@ -79,7 +79,12 @@
 //     and under loopback / allow only:
 //     (allow network-bind (local ip "localhost:*"))
 //     (allow network-inbound (local ip "localhost:*"))
-//     — a test may listen on loopback, never on another interface
+//     — intended: listen on loopback only; measured at design time (v1.5,
+//     macOS 26): under loopback / allow a bind to the wildcard address
+//     0.0.0.0 is NOT refused and inbound from the host's LAN address is
+//     accepted (the `local ip` filter cannot express it) — a registered
+//     residual risk of loopback / allow (docs/p2-design.md §3.4, §11); under
+//     deny every IP bind (0.0.0.0, 127.0.0.1, [::1]) is refused
 //     plus DarwinEscapeDenials() (v1.5: IPC DEFAULT-DENY — (deny mach-lookup)
 //     followed by the explicit DarwinMachAllow allowlist, explicit
 //     (deny mach-register), (deny job-creation), (deny user-preference-write),
@@ -159,15 +164,25 @@
 // a LoaderEnv variable reaches the child but not the bwrap process itself.
 // v1.5 additions: the IPC section of every darwin golden (DarwinMachAllow in
 // order, none of DarwinMachForbidden, the explicit denials); darwin
-// integration cases `defaults write` into a preference domain outside W
-// (an absolute-path domain under a test-owned directory outside W, and in
-// CI also a named domain net.ballast.probe.<rand>) leaves the plist absent
-// or byte-identical; python3 ctypes CGEventPost of a key event and a
-// pasteboard write fail to reach WindowServer / pboard (the pasteboard read
-// back outside the sandbox is unchanged); `launchctl submit -l
+// integration cases (v1.5.1: aligned with docs/p2-design.md §3.4):
+// `defaults write net.ballast.probe.<rand> k v` into a NAMED preference
+// domain leaves ~/Library/Preferences/net.ballast.probe.<rand>.plist absent
+// and `defaults read` (outside the sandbox) finds nothing — this case writes
+// real user preferences, so it runs when CI=true (mandatory there) and SKIPs
+// locally by default, and always ends with `defaults delete`; an
+// absolute-path domain may be added as an auxiliary case only, never as the
+// assertion (design-time control runs showed it fails even without the
+// user-preference-write / mach denials, so it cannot tell whether cfprefsd
+// wrote on the test's behalf); python3 ctypes CGEventPost of a key event and
+// a pasteboard write fail to reach WindowServer / pboard (the pasteboard
+// read back outside the sandbox is unchanged); `launchctl submit -l
 // net.ballast.probe.<rand> -- /usr/bin/touch <outside W>` creates nothing
-// and no such job is listed outside the sandbox; a listener on a
-// non-loopback address fails under every policy; with Spec.Tree set, a
+// and no such job is listed outside the sandbox; listeners: under deny,
+// binding 0.0.0.0, 127.0.0.1 and [::1] all FAIL (asserted); under loopback
+// and allow, a localhost listener works and the outcome of a bind on the
+// wildcard / a non-loopback address is only RECORDED in the test log (the
+// design-time result is "succeeds", registered as residual risk; NOT a
+// failure condition); with Spec.Tree set, a
 // write into the tree succeeds while writes to the real work tree, its .git
 // and the rest of ~/.ballast fail. The linux half of every integration
 // case runs in scripts/sandbox-docker.sh (Debian 12 container, the three

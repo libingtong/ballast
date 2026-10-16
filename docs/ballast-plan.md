@@ -1,6 +1,6 @@
 # Ballast(压舱石)实施计划 v0.4
 
-> v0.5(2026-10-16):核心路径完成并通过系统审计,P2 计划见末尾"v0.5 P2 计划"(含 v0.5.1–v0.5.5 审核修订),详细设计见 `docs/p2-design.md`。
+> v0.5(2026-10-16):核心路径完成并通过系统审计,P2 计划见末尾"v0.5 P2 计划"(含 v0.5.1–v0.5.6 审核修订),详细设计见 `docs/p2-design.md`。
 
 > v0.4(2026-10-16):M0a/M0c 实测完成,并按用户要求加入多客户端支持(参照 pinrule)。改动见末尾"v0.4 变更",与正文冲突时以 v0.4 变更为准。
 
@@ -717,3 +717,12 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - **P2-SANDBOX 的 Linux 验收可执行**(major):新增独占脚本 `scripts/sandbox-docker.sh`(Debian 12 容器,只需 Docker),列为该单元必过验收,P2-RUNNER 的真实后端端到端复用它。
 - minor:收尾顺序冻结(PostCheck/Quarantine 先于 S_end);macOS 目录账户的 passwd 查询与 NSS-LDAP 同列;`scripts/bench.sh` 归 P2-CLI;Hermes 补丁解析改为复制。
 - 单元划分不变(仍是 13 个),依赖不变;P2-RUNNER 增加 `internal/project` 中 `inputs_untracked` 的解码。
+
+### 10. v0.5.6 修订(2026-10-16,P2 设计第 6 轮独立审核)
+
+设计文档升至 v1.5.1、架构升至 v2.0.6,逐条处置见 `docs/p2-design.md` §13。计划层面的变化:
+
+- **私有副本的写入位置由构造保证**(major):runner 在沙箱外把白名单输入复制进副本时,副本里可能已有来自索引的符号链接;复制改为只经副本根上的 `os.Root`、逐级只接受真实目录、文件独占且不跟随地创建,路径前缀撞上已跟踪的非目录条目即整个 job 记 infra(`inputs_path_conflict`),不跳过。
+- **检出依赖 git 的路径防护**(minor):登记为残余风险;检出前加路径布局预检(符号链接条目是其他条目的大小写不敏感前缀等 ⇒ infra `tree_unsafe_path`),检出显式打开 `core.protectHFS`/`core.protectNTFS`;沙箱内检出留作以后的契约追加。
+- `internal/sandbox` 包注释的验收段与设计对齐(minor):监听只在 deny 下断言失败;偏好写入用命名域。
+- 单元划分不变(仍是 13 个),依赖不变,性能门槛不变。
