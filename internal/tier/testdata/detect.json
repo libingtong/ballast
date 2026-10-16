@@ -1,0 +1,2799 @@
+{
+ "_comment": "Table for tier.Detect (docs/p2-design.md §3.2, §3.6). Each row applies ops to the fake all-conditions-hold host built by baseline() in fixture_test.go, then compares Detect's tier, Missing (exact, in missingOrder) and, when present, locked/declared. $M=/etc/claude-code, $MS=$M/managed-settings.d/ballast.json, $SELF=/usr/local/libexec/ballast/ballast, $HOME=/home/u (uid 1000); @ORG@ / @MS@ stand for the baseline org.json / managed settings content. Condition 2 note: host lock == condition 4, so env_override only ever appears together with org_config.",
+ "rows": [
+  {
+   "name": "all-conditions-hold",
+   "ops": [],
+   "tier": "T1",
+   "missing": [],
+   "locked": true,
+   "declared": "T1"
+  },
+  {
+   "name": "windows-is-t0-only",
+   "goos": "windows",
+   "ops": [],
+   "tier": "T0",
+   "missing": [
+    "os"
+   ]
+  },
+  {
+   "name": "redirect-vars-ignored-on-locked-host",
+   "note": "condition 2: a locked host ignores the variables, so they are never in effect",
+   "env": {
+    "BALLAST_HOME": "/agent/h",
+    "BALLAST_MANAGED_DIR": "/agent/m",
+    "BALLAST_INSTALL_ROOT": "/agent/r"
+   },
+   "ops": [],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "redirect-BALLAST_HOME-on-unlocked-host",
+   "note": "condition 2 can only fail on an unlocked host, which already fails condition 4 (locked == condition 4)",
+   "env": {
+    "BALLAST_HOME": "/agent/x"
+   },
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$M/ballast/org.json"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "env_override",
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "redirect-BALLAST_MANAGED_DIR-on-unlocked-host",
+   "note": "condition 2 can only fail on an unlocked host, which already fails condition 4 (locked == condition 4)",
+   "env": {
+    "BALLAST_MANAGED_DIR": "/agent/x"
+   },
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$M/ballast/org.json"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "env_override",
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "redirect-BALLAST_INSTALL_ROOT-on-unlocked-host",
+   "note": "condition 2 can only fail on an unlocked host, which already fails condition 4 (locked == condition 4)",
+   "env": {
+    "BALLAST_INSTALL_ROOT": "/agent/x"
+   },
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$M/ballast/org.json"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "env_override",
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "redirect-var-empty-value-is-not-in-effect",
+   "env": {
+    "BALLAST_HOME": ""
+   },
+   "ops": [],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "self-owned-by-user",
+   "ops": [
+    {
+     "op": "chown",
+     "path": "$SELF",
+     "uid": 1000
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "binary_root_owned"
+   ]
+  },
+  {
+   "name": "self-group-writable",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "$SELF",
+     "mode": "0775"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "binary_root_owned"
+   ]
+  },
+  {
+   "name": "self-other-writable",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "$SELF",
+     "mode": "0757"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "binary_root_owned"
+   ]
+  },
+  {
+   "name": "self-parent-group-writable",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "/usr/local/libexec/ballast",
+     "mode": "0775"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "binary_root_owned"
+   ]
+  },
+  {
+   "name": "self-grandparent-owned-by-user",
+   "ops": [
+    {
+     "op": "chown",
+     "path": "/usr/local",
+     "uid": 1000
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "binary_root_owned"
+   ]
+  },
+  {
+   "name": "self-root-dir-writable",
+   "note": "/ is also in the managed-dir parent chain (condition 4)",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "/",
+     "mode": "0777"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "binary_root_owned",
+    "org_config"
+   ]
+  },
+  {
+   "name": "self-is-directory",
+   "note": "hook entry still resolves to the same path; only the file type is wrong",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$SELF"
+    },
+    {
+     "op": "mkdir",
+     "path": "$SELF"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "binary_root_owned"
+   ]
+  },
+  {
+   "name": "self-missing",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$SELF"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "binary_root_owned",
+    "managed_hooks"
+   ]
+  },
+  {
+   "name": "org-absent",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$M/ballast/org.json"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "org-owned-by-user",
+   "ops": [
+    {
+     "op": "chown",
+     "path": "$M/ballast/org.json",
+     "uid": 1000
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false,
+   "declared": ""
+  },
+  {
+   "name": "org-group-writable",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "$M/ballast/org.json",
+     "mode": "0664"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "org-tier-t0",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/ballast/org.json",
+     "content": "{\"v\":1,\"tier\":\"T0\"}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false,
+   "declared": "T0"
+  },
+  {
+   "name": "org-tier-absent",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/ballast/org.json",
+     "content": "{\"v\":1}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false,
+   "declared": ""
+  },
+  {
+   "name": "org-invalid-version",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/ballast/org.json",
+     "content": "{\"v\":2,\"tier\":\"T1\"}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "org-invalid-json",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/ballast/org.json",
+     "content": "{not json"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "org-invalid-sandbox-policy",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/ballast/org.json",
+     "content": "{\"v\":1,\"tier\":\"T1\",\"runner_sandbox\":\"bogus\"}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "org-is-symlink",
+   "ops": [
+    {
+     "op": "write",
+     "path": "/srv/org.json",
+     "content": "{\"v\":1,\"tier\":\"T1\"}"
+    },
+    {
+     "op": "remove",
+     "path": "$M/ballast/org.json"
+    },
+    {
+     "op": "symlink",
+     "path": "$M/ballast/org.json",
+     "target": "/srv/org.json"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "managed-dir-group-writable",
+   "note": "v1.4: a group-writable managed dir would let a non-root member replace org.json",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "$M",
+     "mode": "0775"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "managed-ballast-dir-group-writable",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "$M/ballast",
+     "mode": "0775"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "managed-parent-etc-owned-by-user",
+   "ops": [
+    {
+     "op": "chown",
+     "path": "/etc",
+     "uid": 1000
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "managed-dir-behind-symlinked-parent",
+   "note": "macOS style /etc -> /private/etc; the chain is checked on the resolved path",
+   "ops": [
+    {
+     "op": "mkdir",
+     "path": "/private"
+    },
+    {
+     "op": "mkdir",
+     "path": "/private/etc"
+    },
+    {
+     "op": "mkdir",
+     "path": "/private/etc/claude-code"
+    },
+    {
+     "op": "mkdir",
+     "path": "/private/etc/claude-code/ballast"
+    },
+    {
+     "op": "mkdir",
+     "path": "/private/etc/claude-code/managed-settings.d"
+    },
+    {
+     "op": "write",
+     "path": "/private/etc/claude-code/ballast/org.json",
+     "content": "@ORG@"
+    },
+    {
+     "op": "write",
+     "path": "/private/etc/claude-code/managed-settings.d/ballast.json",
+     "content": "@MS@"
+    },
+    {
+     "op": "remove",
+     "path": "/etc"
+    },
+    {
+     "op": "symlink",
+     "path": "/etc",
+     "target": "/private/etc"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true,
+   "declared": "T1"
+  },
+  {
+   "name": "managed-dir-behind-symlinked-parent-group-writable-target",
+   "ops": [
+    {
+     "op": "mkdir",
+     "path": "/private"
+    },
+    {
+     "op": "mkdir",
+     "path": "/private/etc",
+     "mode": "0775"
+    },
+    {
+     "op": "mkdir",
+     "path": "/private/etc/claude-code"
+    },
+    {
+     "op": "mkdir",
+     "path": "/private/etc/claude-code/ballast"
+    },
+    {
+     "op": "mkdir",
+     "path": "/private/etc/claude-code/managed-settings.d"
+    },
+    {
+     "op": "write",
+     "path": "/private/etc/claude-code/ballast/org.json",
+     "content": "@ORG@"
+    },
+    {
+     "op": "write",
+     "path": "/private/etc/claude-code/managed-settings.d/ballast.json",
+     "content": "@MS@"
+    },
+    {
+     "op": "remove",
+     "path": "/etc"
+    },
+    {
+     "op": "symlink",
+     "path": "/etc",
+     "target": "/private/etc"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "org_config"
+   ],
+   "locked": false
+  },
+  {
+   "name": "managed-file-owned-by-user",
+   "ops": [
+    {
+     "op": "chown",
+     "path": "$MS",
+     "uid": 1000
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings"
+   ]
+  },
+  {
+   "name": "managed-file-group-writable",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "$MS",
+     "mode": "0664"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings"
+   ]
+  },
+  {
+   "name": "managed-file-other-writable",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "$MS",
+     "mode": "0666"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings"
+   ]
+  },
+  {
+   "name": "managed-settings-d-dir-group-writable",
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "$M/managed-settings.d",
+     "mode": "0775"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings"
+   ]
+  },
+  {
+   "name": "managed-settings-d-dir-owned-by-user",
+   "ops": [
+    {
+     "op": "chown",
+     "path": "$M/managed-settings.d",
+     "uid": 1000
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings"
+   ]
+  },
+  {
+   "name": "managed-settings-absent",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$MS"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings"
+   ]
+  },
+  {
+   "name": "managed-settings-invalid-json",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$MS",
+     "content": "{broken"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings",
+    "unreadable"
+   ]
+  },
+  {
+   "name": "managed-file-is-symlink",
+   "ops": [
+    {
+     "op": "write",
+     "path": "/srv/ms.json",
+     "content": "@MS@"
+    },
+    {
+     "op": "remove",
+     "path": "$MS"
+    },
+    {
+     "op": "symlink",
+     "path": "$MS",
+     "target": "/srv/ms.json"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings"
+   ]
+  },
+  {
+   "name": "extra-unowned-dropin-file",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/managed-settings.d/zz-user.json",
+     "content": "{}",
+     "uid": 1000
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings"
+   ]
+  },
+  {
+   "name": "hidden-dropin-ignored",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/managed-settings.d/.hidden.json",
+     "content": "{\"sandbox\":{\"enabled\":false}}",
+     "uid": 1000
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "non-json-dropin-ignored",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/managed-settings.d/notes.txt",
+     "content": "x",
+     "uid": 1000
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "split-across-base-and-dropin",
+   "note": "merge order is irrelevant: each requirement is checked over the union of files",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/managed-settings.json",
+     "content": "{\"allowManagedHooksOnly\":true,\"allowManagedPermissionRulesOnly\":true}"
+    },
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "allowManagedHooksOnly"
+     ],
+     "delete": true
+    },
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "allowManagedPermissionRulesOnly"
+     ],
+     "delete": true
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "dropin-contradicts-sandbox-enabled",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/managed-settings.d/zz.json",
+     "content": "{\"sandbox\":{\"enabled\":false}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "dropin-adds-excluded-commands",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/managed-settings.d/zz.json",
+     "content": "{\"sandbox\":{\"excludedCommands\":[\"npm\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "dropin-contradicts-managed-hooks-only",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/managed-settings.d/zz.json",
+     "content": "{\"allowManagedHooksOnly\":false}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "allow_managed_hooks_only"
+   ]
+  },
+  {
+   "name": "allow-managed-hooks-only-false",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "allowManagedHooksOnly"
+     ],
+     "value": false
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "allow_managed_hooks_only"
+   ]
+  },
+  {
+   "name": "allow-managed-hooks-only-absent",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "allowManagedHooksOnly"
+     ],
+     "delete": true
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "allow_managed_hooks_only"
+   ]
+  },
+  {
+   "name": "no-hooks",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "hooks"
+     ],
+     "value": {}
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_hooks"
+   ]
+  },
+  {
+   "name": "hook-command-relative",
+   "ops": [
+    {
+     "op": "render",
+     "path": "$MS",
+     "command": "ballast"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_hooks"
+   ]
+  },
+  {
+   "name": "hook-command-other-binary",
+   "ops": [
+    {
+     "op": "render",
+     "path": "$MS",
+     "command": "/opt/other/ballast"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_hooks"
+   ]
+  },
+  {
+   "name": "hook-args-wrong",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "hooks"
+     ],
+     "value": {
+      "Stop": [
+       {
+        "hooks": [
+         {
+          "type": "command",
+          "command": "$SELF",
+          "args": [
+           "hook",
+           "--event",
+           "Stop"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_hooks"
+   ]
+  },
+  {
+   "name": "hook-args-too-short",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "hooks"
+     ],
+     "value": {
+      "Stop": [
+       {
+        "hooks": [
+         {
+          "type": "command",
+          "command": "$SELF",
+          "args": [
+           "hook"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_hooks"
+   ]
+  },
+  {
+   "name": "hook-type-not-command",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "hooks"
+     ],
+     "value": {
+      "Stop": [
+       {
+        "hooks": [
+         {
+          "type": "http",
+          "command": "$SELF",
+          "args": [
+           "hook",
+           "--client",
+           "claude-code"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_hooks"
+   ]
+  },
+  {
+   "name": "hook-command-symlink-to-self",
+   "note": "forms are computed from the command string as written (dir /usr/local/bin)",
+   "ops": [
+    {
+     "op": "symlink",
+     "path": "/usr/local/bin/ballast",
+     "target": "$SELF"
+    },
+    {
+     "op": "render",
+     "path": "$MS",
+     "command": "/usr/local/bin/ballast"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "hook-command-symlink-forms-use-self-dir",
+   "note": "denyWrite/permissions.deny cover dir(Self) but not dir(command)",
+   "ops": [
+    {
+     "op": "symlink",
+     "path": "/usr/local/bin/ballast",
+     "target": "$SELF"
+    },
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "hooks"
+     ],
+     "value": {
+      "Stop": [
+       {
+        "hooks": [
+         {
+          "type": "command",
+          "command": "/usr/local/bin/ballast",
+          "args": [
+           "hook",
+           "--client",
+           "claude-code"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write",
+    "permissions_deny"
+   ]
+  },
+  {
+   "name": "sandbox-enabled-false",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "enabled"
+     ],
+     "value": false
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "sandbox-enabled-absent",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "enabled"
+     ],
+     "delete": true
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "allow-unsandboxed-commands-true",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "allowUnsandboxedCommands"
+     ],
+     "value": true
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "allow-unsandboxed-commands-absent",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "allowUnsandboxedCommands"
+     ],
+     "delete": true
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "fail-if-unavailable-false",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "failIfUnavailable"
+     ],
+     "value": false
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "fail-if-unavailable-absent",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "failIfUnavailable"
+     ],
+     "delete": true
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "managed-excluded-commands-npm",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "excludedCommands"
+     ],
+     "value": [
+      "npm"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "managed-excluded-commands-absent",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "excludedCommands"
+     ],
+     "delete": true
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "managed-allow-unix-sockets",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "network",
+      "allowUnixSockets"
+     ],
+     "value": [
+      "/var/run/docker.sock"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "managed-allow-unix-sockets-empty",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "network",
+      "allowUnixSockets"
+     ],
+     "value": []
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "managed-weaker-nested-sandbox",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "enableWeakerNestedSandbox"
+     ],
+     "value": true
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "managed-weaker-nested-sandbox-false",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "enableWeakerNestedSandbox"
+     ],
+     "value": false
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "managed-allow-all-unix-sockets",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "network",
+      "allowAllUnixSockets"
+     ],
+     "value": true
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "managed-allowed-domains-is-admin-choice",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "network",
+      "allowedDomains"
+     ],
+     "value": [
+      "example.com"
+     ]
+    },
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "allowWrite"
+     ],
+     "value": [
+      "/srv/cache"
+     ]
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "allow-managed-permission-rules-only-false",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "allowManagedPermissionRulesOnly"
+     ],
+     "value": false
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_permissions_only"
+   ]
+  },
+  {
+   "name": "allow-managed-permission-rules-only-absent",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "allowManagedPermissionRulesOnly"
+     ],
+     "delete": true
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_permissions_only"
+   ]
+  },
+  {
+   "name": "deny-write-missing-etc_claude-code_ballast",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "~/.ballast",
+      "./.ballast",
+      "**/.ballast",
+      "/usr/local/libexec/ballast",
+      "~/.config/acme/ci-token",
+      "~/.claude/settings*.json",
+      "./.claude/settings*.json",
+      "**/.claude/settings*.json"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-missing-~_.ballast",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "/etc/claude-code/ballast",
+      "./.ballast",
+      "**/.ballast",
+      "/usr/local/libexec/ballast",
+      "~/.config/acme/ci-token",
+      "~/.claude/settings*.json",
+      "./.claude/settings*.json",
+      "**/.claude/settings*.json"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-missing-._.ballast",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "/etc/claude-code/ballast",
+      "~/.ballast",
+      "**/.ballast",
+      "/usr/local/libexec/ballast",
+      "~/.config/acme/ci-token",
+      "~/.claude/settings*.json",
+      "./.claude/settings*.json",
+      "**/.claude/settings*.json"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-missing-SS_.ballast",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "/etc/claude-code/ballast",
+      "~/.ballast",
+      "./.ballast",
+      "/usr/local/libexec/ballast",
+      "~/.config/acme/ci-token",
+      "~/.claude/settings*.json",
+      "./.claude/settings*.json",
+      "**/.claude/settings*.json"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-missing-usr_local_libexec_ballast",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "/etc/claude-code/ballast",
+      "~/.ballast",
+      "./.ballast",
+      "**/.ballast",
+      "~/.config/acme/ci-token",
+      "~/.claude/settings*.json",
+      "./.claude/settings*.json",
+      "**/.claude/settings*.json"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-missing-~_.config_acme_ci-token",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "/etc/claude-code/ballast",
+      "~/.ballast",
+      "./.ballast",
+      "**/.ballast",
+      "/usr/local/libexec/ballast",
+      "~/.claude/settings*.json",
+      "./.claude/settings*.json",
+      "**/.claude/settings*.json"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-missing-~_.claude_settingsS.json",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "/etc/claude-code/ballast",
+      "~/.ballast",
+      "./.ballast",
+      "**/.ballast",
+      "/usr/local/libexec/ballast",
+      "~/.config/acme/ci-token",
+      "./.claude/settings*.json",
+      "**/.claude/settings*.json"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-missing-._.claude_settingsS.json",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "/etc/claude-code/ballast",
+      "~/.ballast",
+      "./.ballast",
+      "**/.ballast",
+      "/usr/local/libexec/ballast",
+      "~/.config/acme/ci-token",
+      "~/.claude/settings*.json",
+      "**/.claude/settings*.json"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-missing-SS_.claude_settingsS.json",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "/etc/claude-code/ballast",
+      "~/.ballast",
+      "./.ballast",
+      "**/.ballast",
+      "/usr/local/libexec/ballast",
+      "~/.config/acme/ci-token",
+      "~/.claude/settings*.json",
+      "./.claude/settings*.json"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-empty",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": []
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-absent",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem"
+     ],
+     "value": {}
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "deny-write-has-extras-and-reordered",
+   "note": "coverage is set inclusion, not order",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "sandbox",
+      "filesystem",
+      "denyWrite"
+     ],
+     "value": [
+      "**/.claude/settings*.json",
+      "./.claude/settings*.json",
+      "~/.claude/settings*.json",
+      "~/.config/acme/ci-token",
+      "/usr/local/libexec/ballast",
+      "**/.ballast",
+      "./.ballast",
+      "~/.ballast",
+      "/etc/claude-code/ballast",
+      "/more"
+     ]
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "perm-deny-missing-Edit(**/.ballast/**)",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "permissions",
+      "deny"
+     ],
+     "value": [
+      "Edit(/etc/claude-code/ballast/**)",
+      "Edit(~/.ballast/**)",
+      "Edit(./.ballast/**)",
+      "Edit(/usr/local/libexec/ballast/**)",
+      "Edit(~/.config/acme/ci-token)",
+      "Edit(~/.config/acme/ci-token/**)",
+      "Edit(~/.claude/settings*.json)",
+      "Edit(./.claude/settings*.json)",
+      "Edit(**/.claude/settings*.json)",
+      "Write(/etc/claude-code/ballast/**)",
+      "Write(~/.ballast/**)",
+      "Write(./.ballast/**)",
+      "Write(**/.ballast/**)",
+      "Write(/usr/local/libexec/ballast/**)",
+      "Write(~/.config/acme/ci-token)",
+      "Write(~/.config/acme/ci-token/**)",
+      "Write(~/.claude/settings*.json)",
+      "Write(./.claude/settings*.json)",
+      "Write(**/.claude/settings*.json)",
+      "NotebookEdit(/etc/claude-code/ballast/**)",
+      "NotebookEdit(~/.ballast/**)",
+      "NotebookEdit(./.ballast/**)",
+      "NotebookEdit(**/.ballast/**)",
+      "NotebookEdit(/usr/local/libexec/ballast/**)",
+      "NotebookEdit(~/.config/acme/ci-token)",
+      "NotebookEdit(~/.config/acme/ci-token/**)",
+      "NotebookEdit(~/.claude/settings*.json)",
+      "NotebookEdit(./.claude/settings*.json)",
+      "NotebookEdit(**/.claude/settings*.json)"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "permissions_deny"
+   ]
+  },
+  {
+   "name": "perm-deny-missing-Write(./.ballast/**)",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "permissions",
+      "deny"
+     ],
+     "value": [
+      "Edit(/etc/claude-code/ballast/**)",
+      "Edit(~/.ballast/**)",
+      "Edit(./.ballast/**)",
+      "Edit(**/.ballast/**)",
+      "Edit(/usr/local/libexec/ballast/**)",
+      "Edit(~/.config/acme/ci-token)",
+      "Edit(~/.config/acme/ci-token/**)",
+      "Edit(~/.claude/settings*.json)",
+      "Edit(./.claude/settings*.json)",
+      "Edit(**/.claude/settings*.json)",
+      "Write(/etc/claude-code/ballast/**)",
+      "Write(~/.ballast/**)",
+      "Write(**/.ballast/**)",
+      "Write(/usr/local/libexec/ballast/**)",
+      "Write(~/.config/acme/ci-token)",
+      "Write(~/.config/acme/ci-token/**)",
+      "Write(~/.claude/settings*.json)",
+      "Write(./.claude/settings*.json)",
+      "Write(**/.claude/settings*.json)",
+      "NotebookEdit(/etc/claude-code/ballast/**)",
+      "NotebookEdit(~/.ballast/**)",
+      "NotebookEdit(./.ballast/**)",
+      "NotebookEdit(**/.ballast/**)",
+      "NotebookEdit(/usr/local/libexec/ballast/**)",
+      "NotebookEdit(~/.config/acme/ci-token)",
+      "NotebookEdit(~/.config/acme/ci-token/**)",
+      "NotebookEdit(~/.claude/settings*.json)",
+      "NotebookEdit(./.claude/settings*.json)",
+      "NotebookEdit(**/.claude/settings*.json)"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "permissions_deny"
+   ]
+  },
+  {
+   "name": "perm-deny-missing-NotebookEdit(~/.claude/settings*.json)",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "permissions",
+      "deny"
+     ],
+     "value": [
+      "Edit(/etc/claude-code/ballast/**)",
+      "Edit(~/.ballast/**)",
+      "Edit(./.ballast/**)",
+      "Edit(**/.ballast/**)",
+      "Edit(/usr/local/libexec/ballast/**)",
+      "Edit(~/.config/acme/ci-token)",
+      "Edit(~/.config/acme/ci-token/**)",
+      "Edit(~/.claude/settings*.json)",
+      "Edit(./.claude/settings*.json)",
+      "Edit(**/.claude/settings*.json)",
+      "Write(/etc/claude-code/ballast/**)",
+      "Write(~/.ballast/**)",
+      "Write(./.ballast/**)",
+      "Write(**/.ballast/**)",
+      "Write(/usr/local/libexec/ballast/**)",
+      "Write(~/.config/acme/ci-token)",
+      "Write(~/.config/acme/ci-token/**)",
+      "Write(~/.claude/settings*.json)",
+      "Write(./.claude/settings*.json)",
+      "Write(**/.claude/settings*.json)",
+      "NotebookEdit(/etc/claude-code/ballast/**)",
+      "NotebookEdit(~/.ballast/**)",
+      "NotebookEdit(./.ballast/**)",
+      "NotebookEdit(**/.ballast/**)",
+      "NotebookEdit(/usr/local/libexec/ballast/**)",
+      "NotebookEdit(~/.config/acme/ci-token)",
+      "NotebookEdit(~/.config/acme/ci-token/**)",
+      "NotebookEdit(./.claude/settings*.json)",
+      "NotebookEdit(**/.claude/settings*.json)"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "permissions_deny"
+   ]
+  },
+  {
+   "name": "perm-deny-missing-Edit(~/.config/acme/ci-token/**)",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "permissions",
+      "deny"
+     ],
+     "value": [
+      "Edit(/etc/claude-code/ballast/**)",
+      "Edit(~/.ballast/**)",
+      "Edit(./.ballast/**)",
+      "Edit(**/.ballast/**)",
+      "Edit(/usr/local/libexec/ballast/**)",
+      "Edit(~/.config/acme/ci-token)",
+      "Edit(~/.claude/settings*.json)",
+      "Edit(./.claude/settings*.json)",
+      "Edit(**/.claude/settings*.json)",
+      "Write(/etc/claude-code/ballast/**)",
+      "Write(~/.ballast/**)",
+      "Write(./.ballast/**)",
+      "Write(**/.ballast/**)",
+      "Write(/usr/local/libexec/ballast/**)",
+      "Write(~/.config/acme/ci-token)",
+      "Write(~/.config/acme/ci-token/**)",
+      "Write(~/.claude/settings*.json)",
+      "Write(./.claude/settings*.json)",
+      "Write(**/.claude/settings*.json)",
+      "NotebookEdit(/etc/claude-code/ballast/**)",
+      "NotebookEdit(~/.ballast/**)",
+      "NotebookEdit(./.ballast/**)",
+      "NotebookEdit(**/.ballast/**)",
+      "NotebookEdit(/usr/local/libexec/ballast/**)",
+      "NotebookEdit(~/.config/acme/ci-token)",
+      "NotebookEdit(~/.config/acme/ci-token/**)",
+      "NotebookEdit(~/.claude/settings*.json)",
+      "NotebookEdit(./.claude/settings*.json)",
+      "NotebookEdit(**/.claude/settings*.json)"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "permissions_deny"
+   ]
+  },
+  {
+   "name": "perm-deny-missing-Write(/etc/claude-code/ballast/**)",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "permissions",
+      "deny"
+     ],
+     "value": [
+      "Edit(/etc/claude-code/ballast/**)",
+      "Edit(~/.ballast/**)",
+      "Edit(./.ballast/**)",
+      "Edit(**/.ballast/**)",
+      "Edit(/usr/local/libexec/ballast/**)",
+      "Edit(~/.config/acme/ci-token)",
+      "Edit(~/.config/acme/ci-token/**)",
+      "Edit(~/.claude/settings*.json)",
+      "Edit(./.claude/settings*.json)",
+      "Edit(**/.claude/settings*.json)",
+      "Write(~/.ballast/**)",
+      "Write(./.ballast/**)",
+      "Write(**/.ballast/**)",
+      "Write(/usr/local/libexec/ballast/**)",
+      "Write(~/.config/acme/ci-token)",
+      "Write(~/.config/acme/ci-token/**)",
+      "Write(~/.claude/settings*.json)",
+      "Write(./.claude/settings*.json)",
+      "Write(**/.claude/settings*.json)",
+      "NotebookEdit(/etc/claude-code/ballast/**)",
+      "NotebookEdit(~/.ballast/**)",
+      "NotebookEdit(./.ballast/**)",
+      "NotebookEdit(**/.ballast/**)",
+      "NotebookEdit(/usr/local/libexec/ballast/**)",
+      "NotebookEdit(~/.config/acme/ci-token)",
+      "NotebookEdit(~/.config/acme/ci-token/**)",
+      "NotebookEdit(~/.claude/settings*.json)",
+      "NotebookEdit(./.claude/settings*.json)",
+      "NotebookEdit(**/.claude/settings*.json)"
+     ]
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "permissions_deny"
+   ]
+  },
+  {
+   "name": "perm-deny-empty",
+   "ops": [
+    {
+     "op": "jsonset",
+     "path": "$MS",
+     "key": [
+      "permissions",
+      "deny"
+     ],
+     "value": []
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "permissions_deny"
+   ]
+  },
+  {
+   "name": "protected-extra-not-in-settings",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/ballast/org.json",
+     "content": "{\"v\":1,\"tier\":\"T1\",\"protected_extra\":[\"~/.config/acme/ci-token\",\"/srv/policy\"]}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write",
+    "permissions_deny"
+   ]
+  },
+  {
+   "name": "protected-extra-rendered",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$M/ballast/org.json",
+     "content": "{\"v\":1,\"tier\":\"T1\",\"protected_extra\":[\"/srv/policy\"]}"
+    },
+    {
+     "op": "render",
+     "path": "$MS",
+     "command": "$SELF",
+     "extra": [
+      "/srv/policy"
+     ]
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "claude-config-dir-elsewhere",
+   "env": {
+    "CLAUDE_CONFIG_DIR": "$HOME/alt"
+   },
+   "ops": [],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write"
+   ]
+  },
+  {
+   "name": "claude-config-dir-trailing-slash-same",
+   "env": {
+    "CLAUDE_CONFIG_DIR": "$HOME/.claude/"
+   },
+   "ops": [],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "claude-config-dir-unclean-same",
+   "env": {
+    "CLAUDE_CONFIG_DIR": "$HOME/./x/../.claude"
+   },
+   "ops": [],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "claude-config-dir-elsewhere-and-home-claude-weak",
+   "note": "both <claude dir> and <home>/.claude are checked",
+   "env": {
+    "CLAUDE_CONFIG_DIR": "$HOME/alt"
+   },
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\":{\"excludedCommands\":[\"npm\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write",
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "claude-config-dir-elsewhere-weak-there",
+   "env": {
+    "CLAUDE_CONFIG_DIR": "$HOME/alt"
+   },
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/alt/settings.json",
+     "content": "{\"sandbox\":{\"excludedCommands\":[\"npm\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "sandbox_deny_write",
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-sandbox-excluded-commands",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"excludedCommands\": [\"npm\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-sandbox-excluded-commands-docker",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"excludedCommands\": [\"docker\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-network-allow-unix-sockets",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"network\": {\"allowUnixSockets\": [\"/var/run/docker.sock\"]}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-network-allow-all-unix-sockets",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"network\": {\"allowAllUnixSockets\": true}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-network-allow-local-binding",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"network\": {\"allowLocalBinding\": true}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-network-allowed-domains",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"network\": {\"allowedDomains\": [\"evil.example\"]}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-network-http-proxy-port",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"network\": {\"httpProxyPort\": 8080}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-network-socks-proxy-port",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"network\": {\"socksProxyPort\": 1080}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-filesystem-allow-write",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"filesystem\": {\"allowWrite\": [\"~/.ballast\"]}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-enable-weaker-nested-sandbox",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"enableWeakerNestedSandbox\": true}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-sandbox-enabled-false",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"enabled\": false}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-allow-unsandboxed-commands-true",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"allowUnsandboxedCommands\": true}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-fail-if-unavailable-false",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"failIfUnavailable\": false}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-sandbox-not-object",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": \"yes\"}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-sandbox-unknown-key",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"someFutureSwitch\": \"on\"}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-permissions-additional-directories",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"permissions\": {\"additionalDirectories\": [\"/\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-permissions-default-mode-bypass",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"permissions\": {\"defaultMode\": \"bypassPermissions\"}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-permissions-unknown-key",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"permissions\": {\"foo\": 1}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-enable-all-project-mcp-servers",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"enableAllProjectMcpServers\": true}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.json-unknown-top-level-key",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"futureSetting\": {\"a\": 1}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-sandbox-excluded-commands",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"excludedCommands\": [\"npm\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-sandbox-excluded-commands-docker",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"excludedCommands\": [\"docker\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-network-allow-unix-sockets",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"network\": {\"allowUnixSockets\": [\"/var/run/docker.sock\"]}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-network-allow-all-unix-sockets",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"network\": {\"allowAllUnixSockets\": true}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-network-allow-local-binding",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"network\": {\"allowLocalBinding\": true}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-network-allowed-domains",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"network\": {\"allowedDomains\": [\"evil.example\"]}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-network-http-proxy-port",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"network\": {\"httpProxyPort\": 8080}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-network-socks-proxy-port",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"network\": {\"socksProxyPort\": 1080}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-filesystem-allow-write",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"filesystem\": {\"allowWrite\": [\"~/.ballast\"]}}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-enable-weaker-nested-sandbox",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"enableWeakerNestedSandbox\": true}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-sandbox-enabled-false",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"enabled\": false}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-allow-unsandboxed-commands-true",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"allowUnsandboxedCommands\": true}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-fail-if-unavailable-false",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"failIfUnavailable\": false}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-sandbox-not-object",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": \"yes\"}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-sandbox-unknown-key",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"sandbox\": {\"someFutureSwitch\": \"on\"}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-permissions-additional-directories",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"permissions\": {\"additionalDirectories\": [\"/\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-permissions-default-mode-bypass",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"permissions\": {\"defaultMode\": \"bypassPermissions\"}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-permissions-unknown-key",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"permissions\": {\"foo\": 1}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-enable-all-project-mcp-servers",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"enableAllProjectMcpServers\": true}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings.local.json-unknown-top-level-key",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.local.json",
+     "content": "{\"futureSetting\": {\"a\": 1}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-layer-harmless-status-line",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"statusLine\": {\"type\": \"command\", \"command\": \"x\"}}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-layer-harmless-env",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"env\": {\"LD_PRELOAD\": \"/x.so\"}}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-layer-harmless-api-key-helper",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"apiKeyHelper\": \"/bin/key\"}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-layer-harmless-aws-auth-refresh",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"awsAuthRefresh\": \"x\"}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-layer-harmless-aws-credential-export",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"awsCredentialExport\": \"x\"}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-layer-harmless-otel-headers-helper",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"otelHeadersHelper\": \"x\"}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-layer-harmless-enabled-plugins",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"enabledPlugins\": {\"a@b\": true}}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-layer-harmless-extra-known-marketplaces",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"extraKnownMarketplaces\": {\"m\": {}}}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-layer-harmless-harmless-sandbox",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"sandbox\": {\"enabled\": true, \"allowUnsandboxedCommands\": false, \"failIfUnavailable\": true, \"autoAllowBashIfSandboxed\": true, \"filesystem\": {\"denyWrite\": [\"/x\"], \"denyRead\": [\"/y\"]}, \"excludedCommands\": []}}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-layer-harmless-hooks-and-permissions",
+   "note": "LayerUser: human-authored helper keys are not weakening",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{\"hooks\": {\"Stop\": []}, \"disableAllHooks\": false, \"permissions\": {\"allow\": [\"x\"], \"deny\": [\"y\"], \"ask\": [\"z\"], \"defaultMode\": \"acceptEdits\"}}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-settings-invalid-json",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "{oops"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings-not-object",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/settings.json",
+     "content": "[1,2]"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings-unreadable-symlink",
+   "ops": [
+    {
+     "op": "symlink",
+     "path": "$HOME/.claude/settings.json.dangling",
+     "target": "/nowhere"
+    },
+    {
+     "op": "remove",
+     "path": "$HOME/.claude/settings.json.dangling"
+    },
+    {
+     "op": "symlink",
+     "path": "$HOME/.claude/settings.local.json",
+     "target": "/nowhere"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings-symlink-to-harmless-file-ok",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/dotfiles/settings.json",
+     "content": "{\"model\":\"x\"}"
+    },
+    {
+     "op": "remove",
+     "path": "$HOME/.claude/settings.json"
+    },
+    {
+     "op": "symlink",
+     "path": "$HOME/.claude/settings.json",
+     "target": "$HOME/dotfiles/settings.json"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-claude-dir-absent-ok",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$HOME/.claude"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "user-claude-dir-is-file",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$HOME/.claude"
+    },
+    {
+     "op": "write",
+     "path": "$HOME/.claude",
+     "content": "x"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-non-settings-file-ignored",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/notes.json",
+     "content": "{\"sandbox\":{\"excludedCommands\":[\"npm\"]}}"
+    }
+   ],
+   "tier": "T1",
+   "missing": [],
+   "locked": true
+  },
+  {
+   "name": "declared-t1-but-detected-t0",
+   "note": "org.json is fine (host locked) while the managed settings are gone",
+   "ops": [
+    {
+     "op": "remove",
+     "path": "$MS"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "managed_settings"
+   ],
+   "locked": true,
+   "declared": "T1"
+  }
+ ]
+}

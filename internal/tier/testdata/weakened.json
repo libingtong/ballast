@@ -1,0 +1,902 @@
+{
+ "_comment": "Allowlist table for tier.WeakenedSandboxKeys (docs/p2-design.md §3.2 condition 6, §3.6). Every row is run in LayerUser and LayerRepo. 'user' is the expected result in LayerUser; 'repo' defaults to 'user'. 'raw' is used instead of 'doc' when the exact bytes matter.",
+ "rows": [
+  {
+   "name": "empty-object",
+   "doc": {},
+   "user": []
+  },
+  {
+   "name": "harmless-top-level-both-layers",
+   "doc": {
+    "$schema": "x",
+    "model": "opus",
+    "includeCoAuthoredBy": false,
+    "cleanupPeriodDays": 30,
+    "outputStyle": "concise",
+    "spinnerTipsEnabled": true,
+    "alwaysThinkingEnabled": true,
+    "hooks": {
+     "PreToolUse": [
+      {
+       "hooks": [
+        {
+         "type": "command",
+         "command": "/x"
+        }
+       ]
+      }
+     ]
+    },
+    "disableAllHooks": true
+   },
+   "user": []
+  },
+  {
+   "name": "noop-values-of-unknown-keys",
+   "doc": {
+    "foo": null,
+    "bar": [],
+    "baz": {},
+    "qux": false
+   },
+   "user": []
+  },
+  {
+   "name": "noop-values-of-named-keys",
+   "doc": {
+    "enableAllProjectMcpServers": false,
+    "enabledMcpjsonServers": []
+   },
+   "user": []
+  },
+  {
+   "name": "enable-all-project-mcp-servers",
+   "doc": {
+    "enableAllProjectMcpServers": true
+   },
+   "user": [
+    "enableAllProjectMcpServers"
+   ]
+  },
+  {
+   "name": "enabled-mcpjson-servers",
+   "doc": {
+    "enabledMcpjsonServers": [
+     "github"
+    ]
+   },
+   "user": [
+    "enabledMcpjsonServers"
+   ]
+  },
+  {
+   "name": "unknown-top-level-key-string",
+   "doc": {
+    "futureSetting": "x"
+   },
+   "user": [
+    "futureSetting"
+   ]
+  },
+  {
+   "name": "unknown-top-level-key-object-not-descended",
+   "doc": {
+    "futureSetting": {
+     "a": {
+      "b": 1
+     }
+    }
+   },
+   "user": [
+    "futureSetting"
+   ]
+  },
+  {
+   "name": "user-only-env",
+   "doc": {
+    "env": {
+     "LD_PRELOAD": "/x.so"
+    }
+   },
+   "user": [],
+   "repo": [
+    "env"
+   ]
+  },
+  {
+   "name": "user-only-noop-env",
+   "doc": {
+    "env": {}
+   },
+   "user": []
+  },
+  {
+   "name": "user-only-statusLine",
+   "doc": {
+    "statusLine": {
+     "type": "command",
+     "command": "x"
+    }
+   },
+   "user": [],
+   "repo": [
+    "statusLine"
+   ]
+  },
+  {
+   "name": "user-only-noop-statusLine",
+   "doc": {
+    "statusLine": {}
+   },
+   "user": []
+  },
+  {
+   "name": "user-only-apiKeyHelper",
+   "doc": {
+    "apiKeyHelper": "/bin/k"
+   },
+   "user": [],
+   "repo": [
+    "apiKeyHelper"
+   ]
+  },
+  {
+   "name": "user-only-noop-apiKeyHelper",
+   "doc": {
+    "apiKeyHelper": null
+   },
+   "user": []
+  },
+  {
+   "name": "user-only-awsAuthRefresh",
+   "doc": {
+    "awsAuthRefresh": "x"
+   },
+   "user": [],
+   "repo": [
+    "awsAuthRefresh"
+   ]
+  },
+  {
+   "name": "user-only-noop-awsAuthRefresh",
+   "doc": {
+    "awsAuthRefresh": null
+   },
+   "user": []
+  },
+  {
+   "name": "user-only-awsCredentialExport",
+   "doc": {
+    "awsCredentialExport": "x"
+   },
+   "user": [],
+   "repo": [
+    "awsCredentialExport"
+   ]
+  },
+  {
+   "name": "user-only-noop-awsCredentialExport",
+   "doc": {
+    "awsCredentialExport": null
+   },
+   "user": []
+  },
+  {
+   "name": "user-only-otelHeadersHelper",
+   "doc": {
+    "otelHeadersHelper": "x"
+   },
+   "user": [],
+   "repo": [
+    "otelHeadersHelper"
+   ]
+  },
+  {
+   "name": "user-only-noop-otelHeadersHelper",
+   "doc": {
+    "otelHeadersHelper": null
+   },
+   "user": []
+  },
+  {
+   "name": "user-only-enabledPlugins",
+   "doc": {
+    "enabledPlugins": {
+     "a@b": true
+    }
+   },
+   "user": [],
+   "repo": [
+    "enabledPlugins"
+   ]
+  },
+  {
+   "name": "user-only-noop-enabledPlugins",
+   "doc": {
+    "enabledPlugins": {}
+   },
+   "user": []
+  },
+  {
+   "name": "user-only-extraKnownMarketplaces",
+   "doc": {
+    "extraKnownMarketplaces": {
+     "m": {
+      "source": "x"
+     }
+    }
+   },
+   "user": [],
+   "repo": [
+    "extraKnownMarketplaces"
+   ]
+  },
+  {
+   "name": "user-only-noop-extraKnownMarketplaces",
+   "doc": {
+    "extraKnownMarketplaces": {}
+   },
+   "user": []
+  },
+  {
+   "name": "env-null-in-repo",
+   "doc": {
+    "env": null
+   },
+   "user": []
+  },
+  {
+   "name": "env-empty-in-repo",
+   "doc": {
+    "env": {}
+   },
+   "user": []
+  },
+  {
+   "name": "permissions-allow-deny-ask-any-value",
+   "doc": {
+    "permissions": {
+     "allow": [
+      "Bash(*)"
+     ],
+     "deny": [
+      "x"
+     ],
+     "ask": [
+      "y"
+     ],
+     "disableBypassPermissionsMode": "disable"
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "permissions-default-mode-default",
+   "doc": {
+    "permissions": {
+     "defaultMode": "default"
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "permissions-default-mode-acceptEdits",
+   "doc": {
+    "permissions": {
+     "defaultMode": "acceptEdits"
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "permissions-default-mode-plan",
+   "doc": {
+    "permissions": {
+     "defaultMode": "plan"
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "permissions-default-mode-bypassPermissions",
+   "doc": {
+    "permissions": {
+     "defaultMode": "bypassPermissions"
+    }
+   },
+   "user": [
+    "permissions.defaultMode"
+   ]
+  },
+  {
+   "name": "permissions-default-mode-dontAsk",
+   "doc": {
+    "permissions": {
+     "defaultMode": "dontAsk"
+    }
+   },
+   "user": [
+    "permissions.defaultMode"
+   ]
+  },
+  {
+   "name": "permissions-default-mode-auto",
+   "doc": {
+    "permissions": {
+     "defaultMode": "auto"
+    }
+   },
+   "user": [
+    "permissions.defaultMode"
+   ]
+  },
+  {
+   "name": "permissions-default-mode-non-string",
+   "doc": {
+    "permissions": {
+     "defaultMode": 5
+    }
+   },
+   "user": [
+    "permissions.defaultMode"
+   ]
+  },
+  {
+   "name": "permissions-additional-directories-empty",
+   "doc": {
+    "permissions": {
+     "additionalDirectories": []
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "permissions-additional-directories",
+   "doc": {
+    "permissions": {
+     "additionalDirectories": [
+      "/"
+     ]
+    }
+   },
+   "user": [
+    "permissions.additionalDirectories"
+   ]
+  },
+  {
+   "name": "permissions-unknown-key",
+   "doc": {
+    "permissions": {
+     "foo": "bar"
+    }
+   },
+   "user": [
+    "permissions.foo"
+   ]
+  },
+  {
+   "name": "permissions-unknown-key-noop",
+   "doc": {
+    "permissions": {
+     "foo": false
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "permissions-empty-object",
+   "doc": {
+    "permissions": {}
+   },
+   "user": []
+  },
+  {
+   "name": "permissions-null",
+   "doc": {
+    "permissions": null
+   },
+   "user": []
+  },
+  {
+   "name": "permissions-not-object-string",
+   "doc": {
+    "permissions": "all"
+   },
+   "user": [
+    "permissions"
+   ]
+  },
+  {
+   "name": "permissions-not-object-array",
+   "doc": {
+    "permissions": [
+     "x"
+    ]
+   },
+   "user": [
+    "permissions"
+   ]
+  },
+  {
+   "name": "sandbox-absent",
+   "doc": {},
+   "user": []
+  },
+  {
+   "name": "sandbox-null",
+   "doc": {
+    "sandbox": null
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-empty-object",
+   "doc": {
+    "sandbox": {}
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-not-object-string",
+   "doc": {
+    "sandbox": "on"
+   },
+   "user": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "sandbox-not-object-bool",
+   "doc": {
+    "sandbox": true
+   },
+   "user": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "sandbox-not-object-array",
+   "doc": {
+    "sandbox": [
+     "x"
+    ]
+   },
+   "user": [
+    "sandbox"
+   ]
+  },
+  {
+   "name": "sandbox-strict-values",
+   "doc": {
+    "sandbox": {
+     "enabled": true,
+     "allowUnsandboxedCommands": false,
+     "failIfUnavailable": true
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-autoallow-bash-any-bool",
+   "doc": {
+    "sandbox": {
+     "autoAllowBashIfSandboxed": true
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-autoallow-bash-false",
+   "doc": {
+    "sandbox": {
+     "autoAllowBashIfSandboxed": false
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-deny-write-read-only-restrict",
+   "doc": {
+    "sandbox": {
+     "filesystem": {
+      "denyWrite": [
+       "/a",
+       "/b"
+      ],
+      "denyRead": [
+       "~/.ssh"
+      ]
+     }
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-deny-write-not-array",
+   "doc": {
+    "sandbox": {
+     "filesystem": {
+      "denyWrite": "/a"
+     }
+    }
+   },
+   "user": [
+    "sandbox.filesystem.denyWrite"
+   ]
+  },
+  {
+   "name": "sandbox-deny-write-array-of-non-strings",
+   "doc": {
+    "sandbox": {
+     "filesystem": {
+      "denyRead": [
+       1
+      ]
+     }
+    }
+   },
+   "user": [
+    "sandbox.filesystem.denyRead"
+   ]
+  },
+  {
+   "name": "sandbox-enabled-false",
+   "doc": {
+    "sandbox": {
+     "enabled": false
+    }
+   },
+   "user": [
+    "sandbox.enabled"
+   ]
+  },
+  {
+   "name": "sandbox-enabled-null",
+   "doc": {
+    "sandbox": {
+     "enabled": null
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-enabled-string",
+   "doc": {
+    "sandbox": {
+     "enabled": "true"
+    }
+   },
+   "user": [
+    "sandbox.enabled"
+   ]
+  },
+  {
+   "name": "sandbox-allow-unsandboxed-commands-true",
+   "doc": {
+    "sandbox": {
+     "allowUnsandboxedCommands": true
+    }
+   },
+   "user": [
+    "sandbox.allowUnsandboxedCommands"
+   ]
+  },
+  {
+   "name": "sandbox-fail-if-unavailable-false",
+   "doc": {
+    "sandbox": {
+     "failIfUnavailable": false
+    }
+   },
+   "user": [
+    "sandbox.failIfUnavailable"
+   ]
+  },
+  {
+   "name": "sandbox-excluded-commands",
+   "doc": {
+    "sandbox": {
+     "excludedCommands": [
+      "npm"
+     ]
+    }
+   },
+   "user": [
+    "sandbox.excludedCommands"
+   ]
+  },
+  {
+   "name": "sandbox-excluded-commands-empty",
+   "doc": {
+    "sandbox": {
+     "excludedCommands": []
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-weaker-nested",
+   "doc": {
+    "sandbox": {
+     "enableWeakerNestedSandbox": true
+    }
+   },
+   "user": [
+    "sandbox.enableWeakerNestedSandbox"
+   ]
+  },
+  {
+   "name": "sandbox-weaker-nested-false",
+   "doc": {
+    "sandbox": {
+     "enableWeakerNestedSandbox": false
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-network-allow-unix-sockets",
+   "doc": {
+    "sandbox": {
+     "network": {
+      "allowUnixSockets": [
+       "/var/run/docker.sock"
+      ]
+     }
+    }
+   },
+   "user": [
+    "sandbox.network.allowUnixSockets"
+   ]
+  },
+  {
+   "name": "sandbox-network-allow-all-unix-sockets",
+   "doc": {
+    "sandbox": {
+     "network": {
+      "allowAllUnixSockets": true
+     }
+    }
+   },
+   "user": [
+    "sandbox.network.allowAllUnixSockets"
+   ]
+  },
+  {
+   "name": "sandbox-network-allow-local-binding",
+   "doc": {
+    "sandbox": {
+     "network": {
+      "allowLocalBinding": true
+     }
+    }
+   },
+   "user": [
+    "sandbox.network.allowLocalBinding"
+   ]
+  },
+  {
+   "name": "sandbox-network-allowed-domains",
+   "doc": {
+    "sandbox": {
+     "network": {
+      "allowedDomains": [
+       "x.example"
+      ]
+     }
+    }
+   },
+   "user": [
+    "sandbox.network.allowedDomains"
+   ]
+  },
+  {
+   "name": "sandbox-network-http-proxy-port",
+   "doc": {
+    "sandbox": {
+     "network": {
+      "httpProxyPort": 8080
+     }
+    }
+   },
+   "user": [
+    "sandbox.network.httpProxyPort"
+   ]
+  },
+  {
+   "name": "sandbox-network-socks-proxy-port",
+   "doc": {
+    "sandbox": {
+     "network": {
+      "socksProxyPort": 1080
+     }
+    }
+   },
+   "user": [
+    "sandbox.network.socksProxyPort"
+   ]
+  },
+  {
+   "name": "sandbox-network-all-noop",
+   "doc": {
+    "sandbox": {
+     "network": {
+      "allowUnixSockets": [],
+      "allowAllUnixSockets": false,
+      "allowedDomains": []
+     }
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-network-not-object",
+   "doc": {
+    "sandbox": {
+     "network": "all"
+    }
+   },
+   "user": [
+    "sandbox.network"
+   ]
+  },
+  {
+   "name": "sandbox-filesystem-allow-write",
+   "doc": {
+    "sandbox": {
+     "filesystem": {
+      "allowWrite": [
+       "~/.ballast"
+      ]
+     }
+    }
+   },
+   "user": [
+    "sandbox.filesystem.allowWrite"
+   ]
+  },
+  {
+   "name": "sandbox-filesystem-allow-write-empty",
+   "doc": {
+    "sandbox": {
+     "filesystem": {
+      "allowWrite": []
+     }
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-filesystem-not-object",
+   "doc": {
+    "sandbox": {
+     "filesystem": "x"
+    }
+   },
+   "user": [
+    "sandbox.filesystem"
+   ]
+  },
+  {
+   "name": "sandbox-unknown-key-scalar",
+   "doc": {
+    "sandbox": {
+     "someFutureSwitch": "on"
+    }
+   },
+   "user": [
+    "sandbox.someFutureSwitch"
+   ]
+  },
+  {
+   "name": "sandbox-unknown-key-noop",
+   "doc": {
+    "sandbox": {
+     "someFutureSwitch": false
+    }
+   },
+   "user": []
+  },
+  {
+   "name": "sandbox-unknown-key-object-descended",
+   "doc": {
+    "sandbox": {
+     "future": {
+      "deep": {
+       "flag": true
+      },
+      "quiet": {}
+     }
+    }
+   },
+   "user": [
+    "sandbox.future.deep.flag"
+   ]
+  },
+  {
+   "name": "sandbox-unknown-key-array-not-descended",
+   "doc": {
+    "sandbox": {
+     "future": [
+      {
+       "a": 1
+      }
+     ]
+    }
+   },
+   "user": [
+    "sandbox.future"
+   ]
+  },
+  {
+   "name": "several-keys-sorted-and-deduped",
+   "doc": {
+    "sandbox": {
+     "excludedCommands": [
+      "a"
+     ],
+     "network": {
+      "allowUnixSockets": [
+       "/s"
+      ]
+     }
+    },
+    "enableAllProjectMcpServers": true,
+    "permissions": {
+     "additionalDirectories": [
+      "/"
+     ]
+    }
+   },
+   "user": [
+    "enableAllProjectMcpServers",
+    "permissions.additionalDirectories",
+    "sandbox.excludedCommands",
+    "sandbox.network.allowUnixSockets"
+   ]
+  },
+  {
+   "name": "duplicate-key-last-wins",
+   "raw": "{\"sandbox\":{\"excludedCommands\":[]},\"sandbox\":{\"excludedCommands\":[\"npm\"]}}",
+   "user": [
+    "sandbox.excludedCommands"
+   ]
+  },
+  {
+   "name": "whitespace-empty-containers",
+   "raw": "{ \"foo\" : [ ] , \"bar\" : { } , \"sandbox\": { \"excludedCommands\": [  ] } }",
+   "user": []
+  },
+  {
+   "name": "not-json",
+   "raw": "{oops",
+   "error": true
+  },
+  {
+   "name": "json-array",
+   "raw": "[1]",
+   "error": true
+  },
+  {
+   "name": "json-null",
+   "raw": "null",
+   "error": true
+  },
+  {
+   "name": "json-string",
+   "raw": "\"x\"",
+   "error": true
+  },
+  {
+   "name": "json-number",
+   "raw": "1",
+   "error": true
+  },
+  {
+   "name": "empty-input",
+   "raw": "",
+   "error": true
+  }
+ ]
+}

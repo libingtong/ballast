@@ -1,0 +1,627 @@
+{
+ "_comment": "Table for tier.LockedHome (docs/p2-design.md \u00a73.2 \u5bb6\u76ee\u5f55, \u00a73.6). Fake FS: /home (root, 0755) and /home/u (uid 1000, 0755). lookup kinds: ok{home,delay_ms}, noentry, error{msg}, block (never returns; the Timeout bound applies). 'err' is a substring of the error; 'timeout' means errors.Is(err, ErrLockedHomeTimeout). timeout_ms 0 means DefaultLockedHomeTimeout, and the blocking row then takes about 50 ms.",
+ "rows": [
+  {
+   "name": "passwd-success",
+   "euid": 1000,
+   "home": "/agent/home",
+   "lookup": {
+    "kind": "ok",
+    "home": "/real/home"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "want_home": "/real/home",
+   "want_source": "passwd"
+  },
+  {
+   "name": "passwd-success-without-home-env",
+   "euid": 1000,
+   "home": "",
+   "lookup": {
+    "kind": "ok",
+    "home": "/real/home"
+   },
+   "want_home": "/real/home",
+   "want_source": "passwd"
+  },
+  {
+   "name": "passwd-success-differs-from-env-home",
+   "euid": 1000,
+   "home": "/tmp/evil",
+   "lookup": {
+    "kind": "ok",
+    "home": "/home/u"
+   },
+   "want_home": "/home/u",
+   "want_source": "passwd"
+  },
+  {
+   "name": "passwd-empty-home-is-an-error",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "ok",
+    "home": ""
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "not an absolute path"
+  },
+  {
+   "name": "passwd-relative-home-is-an-error",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "ok",
+    "home": "home/u"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "not an absolute path"
+  },
+  {
+   "name": "passwd-other-error-no-fallback",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "error",
+    "msg": "nss exploded"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "passwd lookup"
+  },
+  {
+   "name": "no-entry-without-home-root",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "err": "no home_root"
+  },
+  {
+   "name": "no-entry-with-empty-home-root",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [],
+   "err": "no home_root"
+  },
+  {
+   "name": "home-root-all-clauses-hold",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "want_home": "/home/u",
+   "want_source": "home_root"
+  },
+  {
+   "name": "home-root-nested-layout",
+   "euid": 1000,
+   "home": "/home/corp.example/u",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home/corp.example"
+   ],
+   "ops": [
+    {
+     "op": "mkdir",
+     "path": "/home/corp.example",
+     "uid": 0
+    },
+    {
+     "op": "mkdir",
+     "path": "/home/corp.example/u",
+     "uid": 1000
+    }
+   ],
+   "want_home": "/home/corp.example/u",
+   "want_source": "home_root"
+  },
+  {
+   "name": "home-root-second-entry-matches",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/srv",
+    "/home"
+   ],
+   "want_home": "/home/u",
+   "want_source": "home_root"
+  },
+  {
+   "name": "clause-a-home-unset",
+   "euid": 1000,
+   "home": "",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "(a)"
+  },
+  {
+   "name": "clause-a-home-relative",
+   "euid": 1000,
+   "home": "home/u",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "(a)"
+  },
+  {
+   "name": "clause-a-home-trailing-slash",
+   "euid": 1000,
+   "home": "/home/u/",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "(a)"
+  },
+  {
+   "name": "clause-a-home-double-slash",
+   "euid": 1000,
+   "home": "/home//u",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "(a)"
+  },
+  {
+   "name": "clause-a-home-dotdot",
+   "euid": 1000,
+   "home": "/home/x/../u",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "(a)"
+  },
+  {
+   "name": "clause-b-parent-not-listed",
+   "euid": 1000,
+   "home": "/srv/u",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "mkdir",
+     "path": "/srv",
+     "uid": 0
+    },
+    {
+     "op": "mkdir",
+     "path": "/srv/u",
+     "uid": 1000
+    }
+   ],
+   "err": "(b)"
+  },
+  {
+   "name": "clause-b-nested-below-listed",
+   "euid": 1000,
+   "home": "/home/u/sub",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "mkdir",
+     "path": "/home/u/sub",
+     "uid": 1000
+    }
+   ],
+   "err": "(b)"
+  },
+  {
+   "name": "clause-b-home-is-the-root-entry-itself",
+   "euid": 1000,
+   "home": "/home",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "(b)"
+  },
+  {
+   "name": "clause-c-root-dir-owned-by-user",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "chown",
+     "path": "/home",
+     "uid": 1000
+    }
+   ],
+   "err": "(c)"
+  },
+  {
+   "name": "clause-c-root-dir-group-writable",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "/home",
+     "mode": "0775"
+    }
+   ],
+   "err": "(c)"
+  },
+  {
+   "name": "clause-c-root-dir-other-writable",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "/home",
+     "mode": "0757"
+    }
+   ],
+   "err": "(c)"
+  },
+  {
+   "name": "clause-c-sticky-world-writable",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "/home",
+     "mode": "0777"
+    }
+   ],
+   "err": "(c)"
+  },
+  {
+   "name": "clause-c-ancestor-slash-writable",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "/",
+     "mode": "0777"
+    }
+   ],
+   "err": "(c)"
+  },
+  {
+   "name": "clause-c-ancestor-owned-by-user-nested",
+   "euid": 1000,
+   "home": "/home/corp.example/u",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home/corp.example"
+   ],
+   "ops": [
+    {
+     "op": "mkdir",
+     "path": "/home/corp.example",
+     "uid": 0
+    },
+    {
+     "op": "mkdir",
+     "path": "/home/corp.example/u",
+     "uid": 1000
+    },
+    {
+     "op": "chown",
+     "path": "/home",
+     "uid": 1000
+    }
+   ],
+   "err": "(c)"
+  },
+  {
+   "name": "clause-c-root-dir-is-symlink",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "mkdir",
+     "path": "/data/home",
+     "uid": 0
+    },
+    {
+     "op": "mkdir",
+     "path": "/data/home/u",
+     "uid": 1000
+    },
+    {
+     "op": "remove",
+     "path": "/home"
+    },
+    {
+     "op": "symlink",
+     "path": "/home",
+     "target": "/data/home",
+     "uid": 0
+    }
+   ],
+   "err": "(c)"
+  },
+  {
+   "name": "clause-c-root-dir-missing",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "remove",
+     "path": "/home"
+    }
+   ],
+   "err": "(c)"
+  },
+  {
+   "name": "clause-d-home-is-symlink",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "mkdir",
+     "path": "/elsewhere",
+     "uid": 1000
+    },
+    {
+     "op": "remove",
+     "path": "/home/u"
+    },
+    {
+     "op": "symlink",
+     "path": "/home/u",
+     "target": "/elsewhere",
+     "uid": 1000
+    }
+   ],
+   "err": "(d)"
+  },
+  {
+   "name": "clause-d-home-owned-by-other-uid",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "chown",
+     "path": "/home/u",
+     "uid": 2000
+    }
+   ],
+   "err": "(d)"
+  },
+  {
+   "name": "clause-d-home-owned-by-root",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "chown",
+     "path": "/home/u",
+     "uid": 0
+    }
+   ],
+   "err": "(d)"
+  },
+  {
+   "name": "clause-d-home-group-writable",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "/home/u",
+     "mode": "0775"
+    }
+   ],
+   "err": "(d)"
+  },
+  {
+   "name": "clause-d-home-other-writable",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "chmod",
+     "path": "/home/u",
+     "mode": "0757"
+    }
+   ],
+   "err": "(d)"
+  },
+  {
+   "name": "clause-d-home-is-a-file",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "remove",
+     "path": "/home/u"
+    },
+    {
+     "op": "write",
+     "path": "/home/u",
+     "content": "x",
+     "uid": 1000
+    }
+   ],
+   "err": "(d)"
+  },
+  {
+   "name": "clause-d-home-missing",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "noentry"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "ops": [
+    {
+     "op": "remove",
+     "path": "/home/u"
+    }
+   ],
+   "err": "(d)"
+  },
+  {
+   "name": "blocking-lookup-times-out",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "block"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "timeout_ms": 30,
+   "err": "timeout"
+  },
+  {
+   "name": "blocking-lookup-times-out-default-timeout-field-zero",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "block"
+   },
+   "home_root": [
+    "/home"
+   ],
+   "err": "timeout"
+  },
+  {
+   "name": "slow-but-in-time-lookup",
+   "euid": 1000,
+   "home": "$HOME",
+   "lookup": {
+    "kind": "ok",
+    "home": "/real/home",
+    "delay_ms": 5
+   },
+   "timeout_ms": 200,
+   "want_home": "/real/home",
+   "want_source": "passwd"
+  }
+ ]
+}
