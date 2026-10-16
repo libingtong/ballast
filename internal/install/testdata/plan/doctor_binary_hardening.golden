@@ -1,0 +1,38 @@
+== darwin hardened T1
+tier.binary_hardening [ok]
+  hardened runtime (CS_RUNTIME)
+== darwin no runtime T1
+tier.binary_hardening [fail]
+  ballast 二进制未启用 hardened runtime(signed without hardened runtime (CodeDirectory flags lack 0x10000)):项目层 env 里的 DYLD_INSERT_LIBRARIES 会被托管 hook 加载
+  fix: codesign --force -s - -o runtime <tmp>/bin/noruntime
+== darwin no runtime T0
+tier.binary_hardening [warn]
+  ballast 二进制未启用 hardened runtime(signed without hardened runtime (CodeDirectory flags lack 0x10000)):项目层 env 里的 DYLD_INSERT_LIBRARIES 会被托管 hook 加载
+  fix: codesign --force -s - -o runtime <tmp>/bin/noruntime
+== darwin unsigned T1
+tier.binary_hardening [fail]
+  ballast 二进制未启用 hardened runtime(not code-signed):项目层 env 里的 DYLD_INSERT_LIBRARIES 会被托管 hook 加载
+  fix: codesign --force -s - -o runtime <tmp>/bin/unsigned
+== darwin not a mach-o
+tier.binary_hardening [warn]
+  not evaluated: 无法解析 <tmp>/bin/script 的 Mach-O 代码签名: invalid magic number in record at byte 0x0
+== linux static T1
+tier.binary_hardening [ok]
+  静态链接(无 PT_INTERP)
+== linux dynamic T1
+tier.binary_hardening [warn]
+  ballast 二进制是动态链接的(存在 PT_INTERP,例如自建的 cgo 构建):LD_PRELOAD 会被托管 hook 加载
+  fix: 使用静态构建(CGO_ENABLED=0)
+== linux dynamic T0
+tier.binary_hardening [warn]
+  ballast 二进制是动态链接的(存在 PT_INTERP,例如自建的 cgo 构建):LD_PRELOAD 会被托管 hook 加载
+  fix: 使用静态构建(CGO_ENABLED=0)
+== linux not an elf
+tier.binary_hardening [warn]
+  not evaluated: 无法解析 <tmp>/bin/script 的 ELF 头: cannot read ELF identifier 'EOF' in record at byte 0x0
+== missing file
+tier.binary_hardening [warn]
+  not evaluated: 无法读取 <tmp>/bin/absent: open <tmp>/bin/absent: no such file or directory
+== no path
+tier.binary_hardening [warn]
+  not evaluated: 没有 ballast 二进制路径

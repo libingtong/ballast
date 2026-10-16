@@ -2,12 +2,15 @@ package install
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/libingtong/ballast/internal/model"
+	"github.com/libingtong/ballast/internal/sys"
+	"github.com/libingtong/ballast/internal/tier"
 )
 
 // doctorEnv installs every client with a real (executable) binary file.
@@ -28,7 +31,9 @@ func doctorEnv(t *testing.T, trust bool) (*tenv, Options) {
 }
 
 func (e *tenv) doctor(bin string, mdc []byte, lint func() []model.Diagnostic) []Check {
-	return Doctor(DoctorOptions{Layout: e.lay, FS: e.fs, Env: e.sb.Env(), Binary: bin, MDC: mdc, LintRules: lint})
+	// TierManagedDir keeps tier.Detect away from the real managed directory.
+	return Doctor(DoctorOptions{Layout: e.lay, FS: e.fs, Env: e.sb.Env(), Binary: bin, MDC: mdc, LintRules: lint, TierManagedDir: e.lay.ManagedDir,
+		TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false }})
 }
 
 func byID(cs []Check) map[string]Check {
@@ -275,40 +280,98 @@ func TestDoctorManagedDuplicate(t *testing.T) {
 	}
 }
 
+type fakeProbe struct{ info model.TierInfo }
+
+func (f fakeProbe) Probe() model.TierInfo { return f.info }
+
 func TestDoctorTierLevel(t *testing.T) {
 	e := newTenv(t)
+	// no managed deployment: T0, every failed condition is listed by id.
 	c := byID(e.doctor("", nil, nil))["tier.level"]
-	for _, missing := range []string{"managed hooks", "allowManagedHooksOnly", "sandbox", "permissions.deny", "MCP allowlist"} {
+	for _, missing := range []string{"binary_root_owned", "org_config", "managed_settings"} {
 		if !strings.Contains(c.Message, missing) {
 			t.Errorf("T0 message must list %q: %s", missing, c.Message)
 		}
 	}
-	if c.Status != CheckWarn || !strings.HasPrefix(c.Message, "T0") {
+	if c.Status != CheckWarn || !strings.HasPrefix(c.Message, "T0") || !strings.Contains(c.Fix, "ballast org render") {
 		t.Errorf("tier.level = %+v", c)
 	}
 
-	// the complete org template makes it T1
-	org, err := OrgRender(e.lay, e.fs, OrgRenderOptions{GOOS: "linux", MCPAllow: []string{"github"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.write(filepath.Join(e.lay.ManagedDir, "managed-settings.d", "ballast.json"), string(org))
-	c = byID(e.doctor("", nil, nil))["tier.level"]
+	// a probe that says T1 makes the check pass
+	opt := DoctorOptions{Layout: e.lay, FS: e.fs, Env: e.sb.Env(), Tier: fakeProbe{model.TierInfo{Tier: model.TierT1, Declared: model.TierT1}},
+		TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false }}
+	c = byID(Doctor(opt))["tier.level"]
 	if c.Status != CheckOK || !strings.HasPrefix(c.Message, "T1") {
-		t.Errorf("full template should be T1: %+v", c)
+		t.Errorf("T1 probe: %+v", c)
 	}
 
-	// each missing component is reported
-	var doc map[string]any
-	_ = json.Unmarshal(org, &doc)
-	delete(doc, "sandbox")
-	delete(doc, "allowedMcpServers")
-	delete(doc, "allowManagedMcpServersOnly")
-	b, _ := json.Marshal(doc)
-	e.write(filepath.Join(e.lay.ManagedDir, "managed-settings.d", "ballast.json"), string(b))
-	c = byID(e.doctor("", nil, nil))["tier.level"]
-	if c.Status != CheckWarn || !strings.Contains(c.Message, "sandbox") || !strings.Contains(c.Message, "MCP allowlist") || strings.Contains(c.Message, "managed hooks") {
-		t.Errorf("partial template: %+v", c)
+	// each missing component is reported with its explanation
+	opt.Tier = fakeProbe{model.TierInfo{Tier: model.TierT0, Missing: []string{model.TierMissingSandbox, model.TierMissingPermDeny}}}
+	c = byID(Doctor(opt))["tier.level"]
+	if c.Status != CheckWarn || !strings.Contains(c.Message, "sandbox(") || !strings.Contains(c.Message, "permissions_deny(") || strings.Contains(c.Message, "managed_hooks") {
+		t.Errorf("partial: %+v", c)
+	}
+}
+
+// tier.level calls tier.Detect: the template that `org render` writes is
+// accepted by every condition-5 check (ownership is faked through
+// TierOwner). Whether the whole verdict is T1 depends on the permissions of
+// the real parent directories of the temp dir (a sticky, world-writable /tmp
+// on Linux fails the parent-chain conditions), so only the managed-settings
+// conditions are asserted.
+func TestDoctorTierDetectsRenderedTemplate(t *testing.T) {
+	if !runtimeIsUnix() {
+		t.Skip("Detect is darwin/linux only")
+	}
+	e := newTenv(t)
+	lay := e.lay
+	lay.GOOS = "linux"
+	self := filepath.Join(e.sb.Root, "bin", "ballast")
+	e.write(self, "#!/bin/sh\n")
+	defer func(f func() int) { geteuid = f }(geteuid)
+	geteuid = func() int { return 0 }
+	if _, err := OrgRenderFull(lay, e.fs, OrgRenderOptions{GOOS: "linux", Binary: self, Write: true, IAmAdmin: true, Env: sys.MapEnv{}}); err != nil {
+		t.Fatal(err)
+	}
+	cs := byID(Doctor(DoctorOptions{
+		Layout: lay, FS: e.fs, Env: e.sb.Env(), Self: self, TierManagedDir: lay.ManagedDir,
+		TierOwner: func(fs.FileInfo) (uint32, bool) { return 0, true },
+		TierLock:  func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false },
+	}))
+	c := cs["tier.level"]
+	for _, id := range []string{
+		model.TierMissingManagedFile, model.TierMissingManagedHooks, model.TierMissingManagedOnly, model.TierMissingSandbox,
+		model.TierMissingDenyWrite, model.TierMissingPermDeny, model.TierMissingManagedPerms, model.TierMissingUnreadable,
+	} {
+		if strings.Contains(c.Message, id+"(") {
+			t.Errorf("rendered template fails condition %s: %s", id, c.Message)
+		}
+	}
+}
+
+// v1.5: CLAUDE_CONFIG_DIR pointing elsewhere is listed with its reason.
+func TestDoctorTierLevelClaudeConfigDirRedirect(t *testing.T) {
+	e := newTenv(t)
+	vars := map[string]string{}
+	for k, v := range e.sb.Vars {
+		vars[k] = v
+	}
+	vars["CLAUDE_CONFIG_DIR"] = filepath.Join(e.sb.Home, "alt")
+	mk := func(vars map[string]string) Check {
+		return byID(Doctor(DoctorOptions{
+			Layout: e.lay, FS: e.fs, Env: sys.MapEnv{Vars: vars},
+			Tier:     fakeProbe{model.TierInfo{Tier: model.TierT0, Missing: []string{model.TierMissingDenyWrite}}},
+			TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false },
+		}))["tier.level"]
+	}
+	c := mk(vars)
+	if !strings.Contains(c.Message, "sandbox_deny_write(") || !strings.Contains(c.Message, "CLAUDE_CONFIG_DIR") ||
+		!strings.Contains(c.Message, "挡不住 agent 改写它") {
+		t.Errorf("redirected: %s", c.Message)
+	}
+	vars["CLAUDE_CONFIG_DIR"] = filepath.Join(e.sb.Home, ".claude") + "/" // Clean-equal ⇒ not a redirect
+	if c := mk(vars); strings.Contains(c.Message, "CLAUDE_CONFIG_DIR") {
+		t.Errorf("not redirected, yet: %s", c.Message)
 	}
 }
 

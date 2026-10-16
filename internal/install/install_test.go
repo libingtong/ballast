@@ -11,6 +11,7 @@ import (
 
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
+	"github.com/libingtong/ballast/internal/tier"
 )
 
 // userFiles are realistic pre-existing configs for each client, each with a
@@ -1164,7 +1165,8 @@ func TestNilOptionFieldsFallBackToTheRealSystem(t *testing.T) {
 	if !e.exists(e.claudeSettings()) {
 		t.Fatal("not installed")
 	}
-	if cs := Doctor(DoctorOptions{Layout: e.lay}); len(cs) == 0 {
+	if cs := Doctor(DoctorOptions{Layout: e.lay, TierManagedDir: e.lay.ManagedDir,
+		TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false }}); len(cs) == 0 {
 		t.Error("Doctor with a nil FS returned nothing")
 	}
 	mustUninstall(t, Options{Layout: e.lay})

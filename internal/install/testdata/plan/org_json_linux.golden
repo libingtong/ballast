@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "tier": "T1",
+  "runner_sandbox": "require",
+  "runner_network": "deny",
+  "runner_allow_write": [],
+  "weakened_project": "deny"
+}
