@@ -289,13 +289,13 @@ func TestDoctorTierLockedHome(t *testing.T) {
 	}{
 		{"linux static passwd ok", "linux", false, func(int) (string, error) { return "/home/u", nil }, nil, CheckOK},
 		{"linux static no entry no home_root", "linux", false, func(int) (string, error) { return "", sys.ErrNoPasswdEntry }, nil, CheckFail},
-		{"linux static no entry with a home_root that does not match", "linux", false, func(int) (string, error) { return "", sys.ErrNoPasswdEntry }, []string{"/nonexistent-root"}, CheckFail},
 		{"linux cgo passwd ok", "linux", true, func(int) (string, error) { return "/home/u", nil }, nil, CheckOK},
 		{"linux cgo no entry", "linux", true, func(int) (string, error) { return "", sys.ErrNoPasswdEntry }, nil, CheckFail},
 		{"linux lookup error", "linux", false, func(int) (string, error) { return "", errors.New("nss: backend unavailable") }, []string{"/home"}, CheckFail},
 		{"linux blocked lookup", "linux", false, func(int) (string, error) { <-release; return "", nil }, []string{"/home"}, CheckFail},
 		{"darwin fast lookup", "darwin", false, func(int) (string, error) { return "/Users/u", nil }, nil, CheckOK},
 		{"darwin slow lookup", "darwin", false, func(int) (string, error) { time.Sleep(10 * time.Millisecond); return "/Users/u", nil }, nil, CheckOK},
+		{"darwin blocked lookup", "darwin", false, func(int) (string, error) { <-release; return "", nil }, []string{"/Users"}, CheckFail},
 	}
 	var golden strings.Builder
 	for _, c := range cases {
@@ -314,6 +314,11 @@ func TestDoctorTierLockedHome(t *testing.T) {
 			if !strings.Contains(got.Message, "时限") || !strings.Contains(got.Message, "超时而放行") || !strings.Contains(got.Message, "40ms") {
 				t.Errorf("%s: timeout not explained: %+v", c.name, got)
 			}
+			// the abandoned lookup measured nothing, but a timeout is far
+			// above the slow-lookup threshold: darwin gets the note.
+			if hasNote := strings.Contains(got.Message, "opendirectoryd"); hasNote != (c.goos == "darwin") {
+				t.Errorf("%s: directory-account note present=%v on %s: %+v", c.name, hasNote, c.goos, got)
+			}
 			if d := time.Since(start); d > 2*time.Second {
 				t.Errorf("%s: doctor blocked for %v", c.name, d)
 			}
@@ -325,6 +330,28 @@ func TestDoctorTierLockedHome(t *testing.T) {
 	}
 	once.Do(func() { close(release) })
 	checkGolden(t, "doctor_locked_home", golden.String())
+}
+
+// The parent of the real $HOME is not a home_root entry (rule b). The
+// sandbox $HOME is a POSIX path only on unix hosts (on Windows it is a
+// drive path and the passwd-less rule (a) applies), so this case is unix-only.
+func TestDoctorTierLockedHomeRootMismatch(t *testing.T) {
+	if !runtimeIsUnix() {
+		t.Skip("$HOME is a POSIX path only on unix hosts")
+	}
+	defer func(f func() bool) { cgoEnabled = f }(cgoEnabled)
+	cgoEnabled = func() bool { return false }
+	e := newTenv(t)
+	opt := e.tierOpt("linux")
+	opt.Tier = fakeProbe{model.TierInfo{Tier: model.TierT1, Declared: model.TierT1, Locked: true}}
+	opt.TierLock = lockedWith("/nonexistent-root")
+	opt.HomeLookup = func(int) (string, error) { return "", sys.ErrNoPasswdEntry }
+	opt.HomeTimeout = 40 * time.Millisecond
+	got := byID(Doctor(opt))["tier.locked_home"]
+	if got.Status != CheckFail || !strings.Contains(got.Fix, "--home-root /home") {
+		t.Errorf("%+v", got)
+	}
+	checkGolden(t, "doctor_locked_home_mismatch", renderChecks([]Check{got}, e.sb.Root, "tier.locked_home"))
 }
 
 func TestDoctorTierLockedHomeNotesAreScoped(t *testing.T) {

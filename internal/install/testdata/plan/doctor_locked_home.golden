@@ -5,10 +5,6 @@ tier.locked_home [ok]
 tier.locked_home [fail]
   已锁定主机上无法确定家目录:tier: no passwd entry for uid <euid> and org.json has no home_root: sys: no passwd entry for uid。该用户的每次 hook 调用都会因 layout 失败而放行(B7)。 注意:本构建为静态构建,只读 /etc/passwd。
   fix: 修复方式(按推荐顺序):(1) 在 org.json 写 home_root(org render --home-root /home,推荐);(2) 使用启用 cgo 的构建(走 NSS,仅在 NSS 由本地缓存提供时可用:sssd 本地缓存或 nscd);(3) 把该用户加入本地 /etc/passwd
-== linux static no entry with a home_root that does not match
-tier.locked_home [fail]
-  已锁定主机上无法确定家目录:tier: home_root rule (b): the parent "<tmp>" of $HOME is not a home_root entry。该用户的每次 hook 调用都会因 layout 失败而放行(B7)。 注意:本构建为静态构建,只读 /etc/passwd。
-  fix: 修复方式(按推荐顺序):(1) 在 org.json 写 home_root(org render --home-root /home,推荐);(2) 使用启用 cgo 的构建(走 NSS,仅在 NSS 由本地缓存提供时可用:sssd 本地缓存或 nscd);(3) 把该用户加入本地 /etc/passwd
 == linux cgo passwd ok
 tier.locked_home [ok]
   家目录 /home/u(来源 passwd) 注意:本构建启用 cgo:passwd 查询走 NSS,只有 NSS 由本地缓存(sssd 本地缓存或 nscd)提供时才符合热路径不联网;nss_ldap 或未缓存的 sssd 会让每次 hook 调用可能联网或阻塞,推荐改用 home_root。
@@ -30,3 +26,7 @@ tier.locked_home [ok]
 == darwin slow lookup
 tier.locked_home [ok]
   家目录 /Users/u(来源 passwd) 注意:目录账户(AD/LDAP 绑定、未缓存的移动账户)的 passwd 查询经 opendirectoryd 可能联网或阻塞,违反热路径不联网;请启用移动账户或目录服务本地缓存。
+== darwin blocked lookup
+tier.locked_home [fail]
+  passwd 查询超过 40ms 时限:该账户的每次 hook 调用都会因超时而放行(B7,exit 1,无审计)。 注意:目录账户(AD/LDAP 绑定、未缓存的移动账户)的 passwd 查询经 opendirectoryd 可能联网或阻塞,违反热路径不联网;请启用移动账户或目录服务本地缓存。
+  fix: 修复方式(按推荐顺序):(1) 在 org.json 写 home_root(org render --home-root /home,推荐);(2) 使用启用 cgo 的构建(走 NSS,仅在 NSS 由本地缓存提供时可用:sssd 本地缓存或 nscd);(3) 把该用户加入本地 /etc/passwd

@@ -298,7 +298,8 @@ func TestDoctorTierLevel(t *testing.T) {
 	}
 
 	// a probe that says T1 makes the check pass
-	opt := DoctorOptions{Layout: e.lay, FS: e.fs, Env: e.sb.Env(), Tier: fakeProbe{model.TierInfo{Tier: model.TierT1, Declared: model.TierT1}}}
+	opt := DoctorOptions{Layout: e.lay, FS: e.fs, Env: e.sb.Env(), Tier: fakeProbe{model.TierInfo{Tier: model.TierT1, Declared: model.TierT1}},
+		TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false }}
 	c = byID(Doctor(opt))["tier.level"]
 	if c.Status != CheckOK || !strings.HasPrefix(c.Message, "T1") {
 		t.Errorf("T1 probe: %+v", c)
@@ -335,6 +336,7 @@ func TestDoctorTierDetectsRenderedTemplate(t *testing.T) {
 	cs := byID(Doctor(DoctorOptions{
 		Layout: lay, FS: e.fs, Env: e.sb.Env(), Self: self, TierManagedDir: lay.ManagedDir,
 		TierOwner: func(fs.FileInfo) (uint32, bool) { return 0, true },
+		TierLock:  func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false },
 	}))
 	c := cs["tier.level"]
 	for _, id := range []string{
@@ -358,7 +360,8 @@ func TestDoctorTierLevelClaudeConfigDirRedirect(t *testing.T) {
 	mk := func(vars map[string]string) Check {
 		return byID(Doctor(DoctorOptions{
 			Layout: e.lay, FS: e.fs, Env: sys.MapEnv{Vars: vars},
-			Tier: fakeProbe{model.TierInfo{Tier: model.TierT0, Missing: []string{model.TierMissingDenyWrite}}},
+			Tier:     fakeProbe{model.TierInfo{Tier: model.TierT0, Missing: []string{model.TierMissingDenyWrite}}},
+			TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false },
 		}))["tier.level"]
 	}
 	c := mk(vars)

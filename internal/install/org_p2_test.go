@@ -224,6 +224,8 @@ func TestOrgRenderInputValidation(t *testing.T) {
 		{"root home root", OrgRenderOptions{HomeRoot: []string{"/"}}, `"/"`},
 		{"tilde home root", OrgRenderOptions{HomeRoot: []string{"/home/~u"}}, "glob"},
 		{"glob home root", OrgRenderOptions{HomeRoot: []string{"/home/*"}}, "glob"},
+		{"brace home root", OrgRenderOptions{HomeRoot: []string{"/home/{a,b}"}}, "glob"},
+		{"closing bracket home root", OrgRenderOptions{HomeRoot: []string{"/home/a]"}}, "glob"},
 		{"relative protect", OrgRenderOptions{Protected: []string{"secrets"}}, "--protect"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -243,8 +245,11 @@ func TestOrgRenderWritesValidOrgJSON(t *testing.T) {
 	defer func(f func() int) { geteuid = f }(geteuid)
 	geteuid = func() int { return 0 }
 	env := sys.MapEnv{Vars: map[string]string{}} // no SUDO_UID
+	// org.json exists only for unix targets: render for linux explicitly so
+	// the test does not depend on the host OS (the writes go to the temp dir).
+	e.lay.GOOS = "linux"
 	opt := OrgRenderOptions{
-		Write: true, IAmAdmin: true, Env: env,
+		GOOS: "linux", Write: true, IAmAdmin: true, Env: env,
 		HomeRoot: []string{"/home"}, Protected: []string{"/srv/policy", "~/.config/acme/ci-token"},
 	}
 	r, err := OrgRenderFull(e.lay, e.fs, opt)
@@ -277,7 +282,8 @@ func TestOrgRenderWritesValidOrgJSON(t *testing.T) {
 	}
 	// no home_root, no protect: still valid
 	e2 := newTenv(t)
-	if _, err := OrgRenderFull(e2.lay, e2.fs, OrgRenderOptions{Write: true, IAmAdmin: true, Env: env}); err != nil {
+	e2.lay.GOOS = "linux"
+	if _, err := OrgRenderFull(e2.lay, e2.fs, OrgRenderOptions{GOOS: "linux", Write: true, IAmAdmin: true, Env: env}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tier.LoadOrgConfig(e2.fs, filepath.Join(e2.lay.ManagedDir, "ballast", "org.json")); err != nil {
@@ -334,6 +340,7 @@ func TestOrgRenderWritePreflight(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTenv(t)
+			e.lay.GOOS = "linux" // org.json is a unix-target document
 			vars := map[string]string{}
 			if c.sudoUID != "" {
 				vars["SUDO_UID"] = c.sudoUID
@@ -341,7 +348,7 @@ func TestOrgRenderWritePreflight(t *testing.T) {
 			var gotUID int
 			lookup := func(uid int) (string, error) { gotUID = uid; return c.lookup(uid) }
 			r, err := OrgRenderFull(e.lay, e.fs, OrgRenderOptions{
-				Write: true, IAmAdmin: true, Env: sys.MapEnv{Vars: vars}, LookupHome: lookup, HomeRoot: c.homeRoot,
+				GOOS: "linux", Write: true, IAmAdmin: true, Env: sys.MapEnv{Vars: vars}, LookupHome: lookup, HomeRoot: c.homeRoot,
 			})
 			dst := filepath.Join(e.lay.ManagedDir, "managed-settings.d", "ballast.json")
 			orgPath := filepath.Join(e.lay.ManagedDir, "ballast", "org.json")
@@ -405,5 +412,23 @@ func TestOrgRenderWriteGatesPrecedePreflight(t *testing.T) {
 	})
 	if !errors.Is(err, ErrOrgWriteDenied) {
 		t.Errorf("non-root --write: %v", err)
+	}
+}
+
+// Every rendered org.json is run through tier.LoadOrgConfig before it can be
+// printed or written: a document the hook would refuse must never be
+// deployed (the host would silently stay unlocked).
+func TestOrgRenderRejectsDocumentTierRefuses(t *testing.T) {
+	if err := validateOrgJSON([]byte(`{"v":1,"tier":"T1","home_root":["/home/{a,b}"]}`), "/etc/ballast/org.json"); !errors.Is(err, ErrUsage) {
+		t.Errorf("a home_root tier refuses must be ErrUsage: %v", err)
+	}
+	if err := validateOrgJSON([]byte(`{"v":1,"tier":"T1","home_root":["/home"]}`), "/etc/ballast/org.json"); err != nil {
+		t.Errorf("valid document rejected: %v", err)
+	}
+	// the install-side home_root character set is the tier one
+	for _, h := range []string{"/home/a]", "/home/{", "/home/}"} {
+		if err := validateOrgInputs("linux", nil, []string{h}); !errors.Is(err, ErrUsage) {
+			t.Errorf("home_root %q accepted", h)
+		}
 	}
 }

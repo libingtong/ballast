@@ -264,7 +264,9 @@ func tierLockedHome(opt DoctorOptions, fsys sys.FS, goos string, locked bool, or
 			notes = append(notes, "本构建为静态构建,只读 /etc/passwd")
 		}
 	case "darwin":
-		if elapsed > slowLookupDarwin {
+		// On timeout the lookup goroutine is abandoned and elapsed stays 0,
+		// yet the lookup certainly took longer than the threshold.
+		if elapsed > slowLookupDarwin || errors.Is(err, tier.ErrLockedHomeTimeout) {
 			notes = append(notes, "目录账户(AD/LDAP 绑定、未缓存的移动账户)的 passwd 查询经 opendirectoryd 可能联网或阻塞,违反热路径不联网;请启用移动账户或目录服务本地缓存")
 		}
 	}

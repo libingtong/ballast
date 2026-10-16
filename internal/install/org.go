@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -112,6 +113,30 @@ const homeRootFixes = "修复方式(按推荐顺序):" +
 	"(2) 使用启用 cgo 的构建(走 NSS,仅在 NSS 由本地缓存提供时可用:sssd 本地缓存或 nscd);" +
 	"(3) 把该用户加入本地 /etc/passwd"
 
+// memOrgFS serves one document to tier.LoadOrgConfig, which only reads.
+type memOrgFS struct {
+	sys.FS
+	data []byte
+}
+
+func (m memOrgFS) ReadFile(string) ([]byte, error) { return m.data, nil }
+
+// validateOrgJSON runs the rendered org.json through the decoder and
+// validation Detect and Locked apply (tier.LoadOrgConfig), so that --write
+// never deploys a document the hook would refuse (which would leave the
+// host unlocked while the administrator believes it is T1). The path
+// argument only decides the protected org directory used by the
+// runner_allow_write rules.
+func validateOrgJSON(b []byte, orgPath string) error {
+	if _, err := tier.LoadOrgConfig(memOrgFS{data: b}, orgPath); err != nil {
+		return fmt.Errorf("%w: 渲染出的 org.json 不能通过 tier 校验,拒绝输出:%v", ErrUsage, err)
+	}
+	return nil
+}
+
+// validateOrgInputs checks the flag values. home_root uses path (not
+// filepath) and the same character set as tier.LoadOrgConfig, so the result
+// does not depend on the host OS (org.json is always a POSIX document).
 func validateOrgInputs(goos string, protected, homeRoot []string) error {
 	for _, p := range protected {
 		if !(strings.HasPrefix(p, "/") || strings.HasPrefix(p, "~/") || (goos == "windows" && filepath.IsAbs(p))) {
@@ -120,11 +145,11 @@ func validateOrgInputs(goos string, protected, homeRoot []string) error {
 	}
 	for _, h := range homeRoot {
 		switch {
-		case !strings.HasPrefix(h, "/") || filepath.Clean(h) != h:
+		case !strings.HasPrefix(h, "/") || path.Clean(h) != h:
 			return fmt.Errorf("%w: --home-root %q must be an absolute, clean path", ErrUsage, h)
 		case h == "/":
 			return fmt.Errorf("%w: --home-root must not be \"/\"", ErrUsage)
-		case strings.ContainsAny(h, "~*?["):
+		case strings.ContainsAny(h, "~*?[]{}"):
 			return fmt.Errorf("%w: --home-root %q must not contain ~ or glob characters", ErrUsage, h)
 		}
 	}
@@ -321,6 +346,9 @@ func OrgRenderFull(lay layout.Layout, fsys sys.FS, opt OrgRenderOptions) (*OrgRe
 			ProtectedExtra:   extra,
 		}
 		if res.OrgJSON, err = marshalIndent(&of); err != nil {
+			return nil, err
+		}
+		if err := validateOrgJSON(res.OrgJSON, orgPath); err != nil {
 			return nil, err
 		}
 		res.Stdout = orgStdout(settings, res.OrgJSON, orgPath, of)
