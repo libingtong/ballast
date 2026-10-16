@@ -21,10 +21,19 @@ package hermes
 //     stops at the first strict "*** End Patch" line; the union is the safe
 //     superset of what Hermes may touch (fail towards detecting more
 //     targets, never fewer).
+//   - "Blank" means Python's notion, not Go's: Hermes recognizes headers with
+//     the regexes `\*\*\*\s*Update\s+File:\s*(.+)` and strips the path with
+//     str.strip(), and Python's \s / str.isspace() also count U+001C..U+001F
+//     as whitespace, which strings.Fields / TrimSpace do not. Every blank
+//     test in this file therefore goes through isPySpace; a line that looks
+//     like a file header once such characters are ignored but cannot be
+//     parsed is reported as a diagnostic instead of vanishing silently.
 
 import (
 	"errors"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/libingtong/ballast/internal/model"
 )
@@ -121,7 +130,7 @@ func parsePatch(envelope string) (patchSummary, error) {
 			continue
 		}
 		if strings.HasPrefix(mk, hdrMove) {
-			if dest := strings.TrimSpace(mk[len(hdrMove):]); dest != "" && cur.op == hdrUpdate {
+			if dest := trimPy(mk[len(hdrMove):]); dest != "" && cur.op == hdrUpdate {
 				cur.dest = dest
 			}
 			continue
@@ -170,7 +179,11 @@ func parsePatch(envelope string) (patchSummary, error) {
 	}
 
 	// Merge in headers the section parse did not reach (see the file header).
-	for _, h := range scanHeaders(envelope) {
+	hdrs, odd := scanHeaders(envelope)
+	for _, n := range odd {
+		errs = append(errs, "line "+strconv.Itoa(n)+" looks like a file header but its path cannot be parsed")
+	}
+	for _, h := range hdrs {
 		if h.op == hdrMoveFile {
 			if seen[h.path] && seen[h.dest] {
 				continue
@@ -215,44 +228,74 @@ type header struct {
 //	^\*\*\*\s*(Update|Add|Delete)\s+File:\s*(.+)$
 //	^\*\*\*\s*Move\s+File:\s*(.+?)\s*->\s*(.+)$
 //
-// restricted to one line (blanks, not newlines, between the words).
-func scanHeaders(text string) []header {
-	var out []header
-	for _, line := range strings.Split(text, "\n") {
+// restricted to one line (blanks, not newlines, between the words), with
+// "blank" meaning Python's \s (see isPySpace). The second result lists the
+// 1-based numbers of column-0 lines that read like a file header once blanks,
+// control and format characters are ignored but that could not be parsed
+// into a path: a diagnostic for what the parser cannot attribute to a target.
+func scanHeaders(text string) (out []header, odd []int) {
+	for i, line := range strings.Split(text, "\n") {
 		line = strings.TrimSuffix(line, "\r")
 		if !strings.HasPrefix(line, "***") {
 			continue
 		}
-		rest := strings.TrimLeft(line[3:], " \t")
+		before := len(out)
+		rest := strings.TrimLeftFunc(line[3:], isPySpace)
 		word, tail, found := strings.Cut(rest, ":")
-		if !found {
-			continue
+		if found {
+			kw := strings.FieldsFunc(word, isPySpace)
+			if len(kw) == 2 && kw[1] == "File" {
+				switch kw[0] {
+				case "Update", "Add", "Delete":
+					if p := trimPy(tail); p != "" {
+						op := hdrUpdate
+						if kw[0] == "Add" {
+							op = hdrAdd
+						} else if kw[0] == "Delete" {
+							op = hdrDelete
+						}
+						out = append(out, header{op: op, path: p})
+					}
+				case "Move":
+					if src, dst, ok := splitMoveFile(tail); ok {
+						out = append(out, header{op: hdrMoveFile, path: src, dest: dst})
+					}
+				}
+			}
 		}
-		kw := strings.Fields(word)
-		if len(kw) != 2 || kw[1] != "File" {
-			continue
-		}
-		switch kw[0] {
-		case "Update", "Add", "Delete":
-			p := strings.TrimSpace(tail)
-			if p == "" {
-				continue
-			}
-			op := hdrUpdate
-			if kw[0] == "Add" {
-				op = hdrAdd
-			} else if kw[0] == "Delete" {
-				op = hdrDelete
-			}
-			out = append(out, header{op: op, path: p})
-		case "Move":
-			if src, dst, ok := splitMoveFile(tail); ok {
-				out = append(out, header{op: hdrMoveFile, path: src, dest: dst})
-			}
+		if len(out) == before && lookalikeHeader(line) {
+			odd = append(odd, i+1)
 		}
 	}
-	return out
+	return out, odd
 }
+
+// lookalikeHeader reports whether line, with every blank, control and format
+// character removed, reads "***Update|Add|Delete|MoveFile:".
+func lookalikeHeader(line string) bool {
+	compact := strings.Map(func(r rune) rune {
+		if isPySpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return -1
+		}
+		return r
+	}, line)
+	for _, kw := range [...]string{"Update", "Add", "Delete", "Move"} {
+		if strings.HasPrefix(compact, "***"+kw+"File:") {
+			return true
+		}
+	}
+	return false
+}
+
+// isPySpace is Python's str.isspace() / regex \s for str patterns: Unicode
+// white space plus the separator controls U+001C..U+001F, which Go's
+// unicode.IsSpace does not include.
+func isPySpace(r rune) bool {
+	return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f)
+}
+
+// trimPy is Python's str.strip().
+func trimPy(s string) string { return strings.TrimFunc(s, isPySpace) }
 
 // splitMoveFile splits "a -> b" (blanks around the arrow optional).
 func splitMoveFile(s string) (src, dst string, ok bool) {
@@ -260,7 +303,7 @@ func splitMoveFile(s string) (src, dst string, ok bool) {
 	if !found {
 		return "", "", false
 	}
-	src, dst = strings.TrimSpace(a), strings.TrimSpace(b)
+	src, dst = trimPy(a), trimPy(b)
 	return src, dst, src != "" && dst != ""
 }
 
@@ -270,13 +313,13 @@ func splitMoveFile(s string) (src, dst string, ok bool) {
 // "  ***  Update  File: a" reads as "*** Update File: a". Lines starting
 // with '+' or '-' are content and are never markers.
 func normMarker(line string) string {
-	t := strings.TrimSpace(line)
+	t := trimPy(line)
 	if !strings.HasPrefix(t, "***") || strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
 		return line
 	}
 	rest := t[3:]
 	kw, tail, colon := strings.Cut(rest, ":")
-	n := "*** " + strings.Join(strings.Fields(kw), " ")
+	n := "*** " + strings.Join(strings.FieldsFunc(kw, isPySpace), " ")
 	if colon {
 		n += ":" + tail
 	}
@@ -287,7 +330,7 @@ func normMarker(line string) string {
 func fileHeader(line string) (hdr, path string, ok bool) {
 	for _, h := range [...]string{hdrUpdate, hdrAdd, hdrDelete} {
 		if strings.HasPrefix(line, h) {
-			return h, strings.TrimSpace(line[len(h):]), true
+			return h, trimPy(line[len(h):]), true
 		}
 	}
 	return "", "", false

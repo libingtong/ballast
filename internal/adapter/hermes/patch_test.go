@@ -129,3 +129,68 @@ func TestParsePatchMoveFile(t *testing.T) {
 		t.Errorf("move without arrow: %+v err=%v", sum, err)
 	}
 }
+
+// TestParsePatchPythonBlanks pins the blank set: Hermes matches headers with
+// Python regexes (\s) and strips paths with str.strip(), both of which treat
+// U+001C..U+001F (and the Unicode spaces) as whitespace. Go's strings.Fields /
+// TrimSpace do not, so a header written with such a character used to reach
+// Hermes unseen (no target, hence no path rule could fire).
+func TestParsePatchPythonBlanks(t *testing.T) {
+	const p = "/h/.ballast/rules.json"
+	blanks := []string{"\x1c", "\x1d", "\x1e", "\x1f", " ", "　", " ", "\u0085"}
+	var cases []struct{ name, line string }
+	for _, b := range blanks {
+		cases = append(cases,
+			struct{ name, line string }{"after stars", "***" + b + "Update File: " + p},
+			struct{ name, line string }{"between Update and File", "*** Update" + b + "File: " + p},
+			struct{ name, line string }{"before path", "*** Update File:" + b + p},
+			struct{ name, line string }{"around path", "*** Update File:" + b + p + b},
+			struct{ name, line string }{"add header", "***" + b + "Add" + b + "File:" + b + p + b},
+			struct{ name, line string }{"delete header", "*** Delete" + b + "File: " + p + b},
+		)
+	}
+	for _, c := range cases {
+		for _, wrap := range []string{
+			"*** Begin Patch\n%s\n@@\n-a\n+b\n*** End Patch",
+			"*** Begin Patch\n*** Update File: x.go\n+y\n*** End Patch\n%s\n+b", // after the real End
+			"%s\n+b", // no envelope at all
+		} {
+			env := strings.Replace(wrap, "%s", c.line, 1)
+			sum, _ := parsePatch(env)
+			if !contains(sum.Targets, p) {
+				t.Errorf("%s: %q: targets %q lack %q", c.name, env, sum.Targets, p)
+			}
+		}
+	}
+	// Move File with such blanks around the arrow and the paths.
+	sum, err := parsePatch("*** Begin Patch\n***\x1fMove\x1cFile:\x1d/a.txt\x1e->\x1f/h/.ballast/rules.json\x1c\n*** End Patch")
+	if err != nil || !reflect.DeepEqual(sum.Targets, []string{"/a.txt", p}) {
+		t.Errorf("move with python blanks: %+v err=%v", sum, err)
+	}
+	// Section-parse path (Move to:) is trimmed the same way.
+	sum, _ = parsePatch("*** Begin Patch\n*** Update File: a.go\n***\x1cMove to:\x1f/h/.ballast/rules.json\x1c\n+x\n*** End Patch")
+	if !contains(sum.Targets, p) {
+		t.Errorf("move to with python blanks: %+v", sum)
+	}
+}
+
+// TestParsePatchHeaderLookalike: a column-0 line that reads like a file
+// header once blanks and control characters are ignored, but yields no path,
+// is surfaced as a diagnostic (the targets stay as parsed).
+func TestParsePatchHeaderLookalike(t *testing.T) {
+	for _, line := range []string{
+		"*** Update File:",
+		"*** Update File:\x1c",
+		"***​Update File: /h/.ballast/rules.json", // zero-width space: not blank for Python either
+		"***\x00Delete File: /h/x",
+	} {
+		_, err := parsePatch("*** Begin Patch\n*** Update File: a.go\n+y\n*** End Patch\n" + line + "\n")
+		if err == nil || !strings.Contains(err.Error(), "looks like a file header") {
+			t.Errorf("%q: want lookalike diagnostic, got %v", line, err)
+		}
+	}
+	// Plain content that merely mentions the words is not flagged.
+	if _, err := parsePatch("*** Begin Patch\n*** Update File: a.go\n+*** Update File:\n*** End Patch\n"); err != nil {
+		t.Errorf("content line flagged: %v", err)
+	}
+}

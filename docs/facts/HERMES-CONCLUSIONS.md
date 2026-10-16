@@ -45,9 +45,10 @@
 按设计 §7.1「据此修正 adapter/hermes」落地(取证结果支持):
 
 - **工具表**:`patch` ⇒ Edit(替换模式取 `path`;V4A 模式取信封里的全部目标,与 `path` 取并集,`path` 在前)。`patch_file`/`edit_file` 走同一路径。`execute_code` 保持原名。其余不变。
-- **补丁解析器**:`internal/adapter/hermes/patch.go` 是 `internal/adapter/codex/patch.go`(该文件最后一次变更的提交 `b084d95cf79af695cbb08d3c91f027ba50f096bf`)的**复制**,复制时仓库提交为 `cee8a4c963ce152a24e8da7b38cb289fa1b21ecc`;`adapter/codex` 与 `adapter/common` 没有改动。相对原版的两处扩展(`testdata/patches.json` 里 20 行原用例保留,仅 1 行按 Hermes 语义改写并在行名里说明,另加 6 行 Hermes 专用):
+- **补丁解析器**:`internal/adapter/hermes/patch.go` 是 `internal/adapter/codex/patch.go`(该文件最后一次变更的提交 `b084d95cf79af695cbb08d3c91f027ba50f096bf`)的**复制**,复制时仓库提交为 `cee8a4c963ce152a24e8da7b38cb289fa1b21ecc`;`adapter/codex` 与 `adapter/common` 没有改动。相对原版的三处扩展(`testdata/patches.json` 里 20 行原用例保留,仅 1 行按 Hermes 语义改写并在行名里说明,另加 6 行 Hermes 专用):
   1. Hermes 方言 `*** Move File: a -> b`(源与目的都是目标)。
   2. 全文表头扫描:Hermes 自己的路径检查用整段文本的行正则(`tools/file_tools.py` 的 `_V4A_*_HEADER_RE`)收集表头,而它的应用器在第一条严格的 `*** End Patch` 处停止;Codex 版解析器对 `*** End Patchx` 这类相似行也会提前结束,会漏掉后面的目标。扫描把第 0 列出现的任何表头并入目标集(取超集:宁可多报,不能漏报)。
+  3. 空白判定与 Python 一致:Hermes 用 Python 正则(`\*\*\*\s*Update\s+File:\s*(.+)`)识别表头并以 `str.strip()` 处理路径,Python 的 `\s` / `isspace()` 把 U+001C..U+001F 也算空白,Go 的 `strings.Fields`/`TrimSpace` 不算。`patch.go` 的全部空白判定(标记归一化、全文扫描、路径修剪、`Move File` 拆分)统一走 `isPySpace`(`unicode.IsSpace` 加 U+001C..U+001F)。并对第 0 列上「忽略空白、控制符与格式符后像表头、却解析不出路径」的行给出诊断(`looks like a file header`)。已用 Hermes 提交 `9a0a162536` 的 `parse_v4a_patch` 对 4000 条带随机空白/控制字符的表头做差分比对,Python 识别的目标 Go 侧无一遗漏(Go 侧为超集)。
 - **`pre_verify`**:`NativeEventTable[hermes]` 新增行(`EventStop`,`Install: true`);`hermesCaps` 的 `RuleEvents` 加入 `Stop`,Stop deny 置为支持;`Render` 无需改动(deny ⇒ `{"decision":"block","reason":R}`,warn/ask 在 Stop 上仍不支持)。
 - **Verified**:`NativeEventTable[hermes]` 六行与三个能力单元格(PreToolUse deny、UserPromptSubmit warn、Stop deny)的 `Verified` 置为 `true`;单元格 `Note` 写明「离线核验(hooks test),触发时机未核验」。`evidence_test.go` 要求每个 `Verified` 行都被某个 `pass` 用例的 `events` 覆盖。
 - **lint**:`internal/dsl/lint.go` 只追加警告码 `hermes-stop-continue`(Hermes 上 Stop 的 deny 是续跑,不是阻止停止;受 `agent.max_verify_nudges` 限制,默认 3),判定分支与 Cursor 的 `cursor-stop-followup` 平行。
