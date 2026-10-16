@@ -131,6 +131,10 @@ jobs:
       # 验证"拿到判定后的行为",只在 Windows 另设 BALLAST_TEST_DEADLINE_MS 拉长 deadline;
       # bench 照常逐场景打印超过 120ms / 150ms 的样本数。Linux / macOS 不设,即产品的 120ms。
       BALLAST_TEST_DEADLINE_MS: ${{ matrix.os == 'windows-latest' && '15000' || '' }}
+      # 托管 macOS 上偶尔有单次进程被停顿 250ms 以上(实测 6d 一次 283ms),生产的 120ms deadline 下
+      # 那一次的快照会变 unknown(不 deny)。这类运行由 bench 单独计为 degraded 并打印,最多占样本的
+      # 2%(其余平台为 0:Linux 没有这种停顿,Windows 已拉长 deadline),超过照样失败。
+      BALLAST_BENCH_MAX_DEGRADED_PCT: ${{ matrix.os == 'macos-latest' && '2' || '0' }}
     strategy:
       fail-fast: false
       matrix:

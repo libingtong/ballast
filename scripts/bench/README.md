@@ -38,6 +38,8 @@ CI 在 Linux 上强制 30ms;在托管 macOS 设 45 / 80、Windows 设 150 / 400(
 CI 把看门狗放宽到 15s(`BALLAST_TEST_WATCHDOG_MS`),但这**只拉长强杀计时**,昂贵谓词的 120ms deadline 默认不变,所以 Linux / macOS 上 bench 看到的是产品的判定。
 托管 Windows 上 10k 文件工作区的 S 快照 / verify_fresh 本身就要 150ms 以上(最近一次:6d p50 158ms,300/300 个样本越过 120ms,168 个越过 150ms),
 不拉长 deadline 就拿不到判定(`commit` 不 deny),所以只在 Windows 另设 `BALLAST_TEST_DEADLINE_MS=15000`(独立开关,会改变判定,见 `scripts/README.md`)。
+遍历工作区的场景里,因 120ms deadline 到期而没得到预期判定的运行(退出码 0、stderr 为空、耗时 ≥ 120ms)单独计为 degraded,上限
+`BALLAST_BENCH_MAX_DEGRADED_PCT`(默认 0,即算 Bad;CI 只在托管 macOS 设 2,因为那里偶发单次 250ms+ 的停顿),超过则失败。
 因为 deadline 在 Windows 被拉长,p95 上限不是唯一守卫:bench 逐场景统计 `>120ms`(生产里谓词变 unknown)与 `>150ms`(生产里 fail-open)的样本数
 (从进程创建量到退出,比进程内的时间略高),报告里单独成列并在备注里给出百分比。
 **Windows 的 HEAVY 上限 400ms 高于 150ms 看门狗**:这意味着在 Windows 大工作区里生产会降级为 unknown 甚至 fail-open,

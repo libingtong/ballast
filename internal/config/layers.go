@@ -224,7 +224,7 @@ func (l *Loader) refreshLKG(p LayerPath, data []byte, hash string) bool {
 	if old, err := l.fs().ReadFile(path); err == nil && hashHex(old) == hash {
 		return true
 	}
-	if err := sys.WriteFileAtomicWithin(l.fs(), l.ids(), path, data, 0o600, false, hotWriteRenameBudget); err != nil {
+	if err := sys.WriteFileAtomic(l.fs(), l.ids(), path, data, 0o600, false); err != nil {
 		l.diag("cannot write last-known-good for %s: %v", p.Path, err)
 		return false
 	}

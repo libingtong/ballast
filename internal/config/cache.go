@@ -129,8 +129,9 @@ func (l *Loader) cacheLookup(idx statIndex, key string, stats []model.StatKey) (
 }
 
 // hotWriteRenameBudget bounds the rename retry of the writes the hook does on
-// its hot path (rules cache, stat index, last-known-good). They are
-// disposable: a failed write only costs one cache miss on the next call, so
+// its hot path (rules cache, stat index). They are disposable (the
+// last-known-good file is NOT: it keeps the default budget, it is the fallback
+// that makes a bad rules edit harmless and a contended rewrite must not lose it): a failed write only costs one cache miss on the next call, so
 // they must not spend the 100 ms default of sys.renameRetryBudget (which, on
 // top of Windows' ~40 ms baseline, would collide with the 150 ms watchdog).
 const hotWriteRenameBudget = 20 * time.Millisecond
