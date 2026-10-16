@@ -91,8 +91,9 @@ spawn_workers() {
 # machine is oversubscribed (N > CPUs) the state lock's 20 ms wall-clock budget
 # is lost to CPU starvation, not to long transactions: measured on a 3-vCPU
 # macOS runner with the real hooks, 2% timeouts at N=3, 43% at N=4, 63% at
-# N=6, 75% at N=8 (Windows, 4 CPUs: 61% at N=6, 66% at N=8; Linux, 4 CPUs: 0%
-# throughout), while the same Store.Commit hammered by 8 processes without the
+# N=6, 75% at N=8 (Windows, 4 CPUs: 61% at N=6, 66% at N=8, later 43% / 50%
+# once the state write stopped retrying a rename for 100 ms under the lock;
+# Linux, 4 CPUs: 0% throughout), while the same Store.Commit hammered by 8 processes without the
 # hooks' own CPU bursts times out 0.4% of the time (transactions take ~0.4 ms,
 # p95 ~2 ms), and the same script with a 100 ms budget loses 4% / 14% / 35% and
 # with 400 ms none. That is a known availability limit of the 20 ms budget on
