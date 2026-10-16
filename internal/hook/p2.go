@@ -36,7 +36,6 @@ const (
 	maxWeakenedEntries    = 8
 	maxWeakenedEntryRunes = 80
 	weakenedMoreFmt       = "…等 %d 项"
-	weakenedTotalKey      = "entries_total"
 )
 
 // maxSpawnErrRunes bounds the spawn error quoted in the deny reason and audit.
@@ -101,7 +100,8 @@ func (inv *invocation) weakenedEntries(ev *model.Event, repo *model.RepoInfo) []
 
 // boundEntries caps the entry list shown to the agent and written to the
 // audit: at most maxWeakenedEntries entries of at most maxWeakenedEntryRunes
-// runes each (single line), plus the total when anything was left out.
+// runes each (single line); total is the full count so callers can say how
+// many were left out.
 func boundEntries(entries []string) (shown []string, total int) {
 	total = len(entries)
 	n := total
@@ -137,11 +137,12 @@ func (inv *invocation) firstEventDiags(ev *model.Event, repo *model.RepoInfo) []
 	if d.ProjectSandbox != nil && isClaude(ev) {
 		if entries := inv.weakenedEntries(ev, repo); len(entries) > 0 {
 			shown, total := boundEntries(entries)
-			fields := map[string]any{"entries": shown}
+			// The frozen detail shape is {entries:[…]}: a cut list is marked by a
+			// trailing placeholder entry, not by an extra key.
 			if total > len(shown) {
-				fields[weakenedTotalKey] = total
+				shown = append(shown, fmt.Sprintf(weakenedMoreFmt, total-len(shown)))
 			}
-			out = append(out, diag{name: model.DiagLowerSandboxWeakened, fields: fields})
+			out = append(out, diag{name: model.DiagLowerSandboxWeakened, fields: map[string]any{"entries": shown}})
 		}
 	}
 	return out
@@ -249,8 +250,10 @@ func (inv *invocation) startVerify(ev *model.Event, key model.ScopeKey, vr model
 	if reqID != "" {
 		failFields["request_id"] = reqID
 	}
+	// A failed spawn is audited as verify_spawn_failed only (design §3.3 step
+	// 4); verify_hook_start means a verify was actually started.
 	return &synthetic{reason: fmt.Sprintf(verifyFailFmt, msg, cmd)},
-		[]diag{{name: model.DiagVerifyHookStart, fields: fields}, {name: model.DiagVerifySpawnFailed, fields: failFields}}
+		[]diag{{name: model.DiagVerifySpawnFailed, fields: failFields}}
 }
 
 func nonNilStrings(s []string) []string {
@@ -405,8 +408,12 @@ func (inv *invocation) protectedPath(ev *model.Event, pc model.PathContext, repo
 	}
 	settingsDirs := []string{lay.ClaudeDir, pc.Home + "/.claude"}
 	if repo != nil && repo.Toplevel != "" {
-		dirs = append(dirs, filepath.Join(repo.Toplevel, ".ballast"))
-		settingsDirs = append(settingsDirs, filepath.Join(repo.Toplevel, ".claude"))
+		// Joined as strings on the normalized top level, not with
+		// filepath.Join: Normalize already yields '/' separators on every OS.
+		if top := strings.TrimRight(d.Paths.Normalize(repo.Toplevel, "", pc), "/"); top != "" {
+			dirs = append(dirs, top+"/.ballast")
+			settingsDirs = append(settingsDirs, top+"/.claude")
+		}
 	}
 	if pc.ProjectRoot != "" {
 		settingsDirs = append(settingsDirs, pc.ProjectRoot+"/.claude")

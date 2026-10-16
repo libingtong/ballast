@@ -132,7 +132,8 @@
 //     new session from an old one, so these diags are skipped (and state_
 //     unreadable is audited) instead of repeating on every event. The
 //     entries come from repo-controlled files and are bounded: at most 8
-//     entries of 80 runes each, with the total in entries_total when cut.
+//     entries of 80 runes each; a cut list ends with a "…等 N 项" entry (the
+//     detail stays {entries}).
 //   - Synthetic deny (claude-code PreToolUse only), merged with the rule
 //     verdict after the capability check: deny is the strictest action, the
 //     synthetic reason comes first, rule reasons follow within BudgetReason;
@@ -147,7 +148,8 @@
 //     <id>.spawn.log), deny with the frozen reason, diag verify_hook_start
 //     {request_id, names, spawn_ok}; a spawn failure (also no IDs, no
 //     Spawner/Self, non-absolute cwd) still denies with the failure reason and
-//     additionally audits verify_spawn_failed {request_id, names, error}. T0
+//     audits only verify_spawn_failed {request_id, names, error} (no
+//     verify_hook_start: nothing was started). T0
 //     or no Tier ⇒ ordinary evaluation (declared T1 but detected T0 ⇒ diag
 //     tier_mismatch {declared, missing}). With Tier == nil the command is not
 //     even parsed here. The spawn happens before the commit point, so a later

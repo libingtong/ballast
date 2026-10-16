@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -148,7 +149,7 @@ func TestHookStartRefusesWithoutCapabilities(t *testing.T) {
 				_ = json.Unmarshal(r.Detail, &m)
 				names = append(names, m["diag"].(string))
 			}
-			if !reflect.DeepEqual(names, []string{"verify_hook_start", "verify_spawn_failed"}) {
+			if !reflect.DeepEqual(names, []string{"verify_spawn_failed"}) {
 				t.Errorf("diags = %v", names)
 			}
 			if name != "spawn failure" && len(h.spawner.spawned()) != 0 {
@@ -321,6 +322,12 @@ func TestConfigChangeAudit(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			if runtime.GOOS == "windows" && (strings.Contains(c.file, home) || strings.HasPrefix(c.file, "~")) {
+				// The sandbox home is a drive-letter path there, which the
+				// POSIX-only fakePaths cannot normalize; the pure /repo
+				// cases above still run on every platform.
+				t.Skip("needs a POSIX sandbox home")
+			}
 			h := newHarness(t)
 			got, raw := runConfigChange(t, h, c.source, strings.ReplaceAll(c.file, home, h.sb.Home))
 			if !reflect.DeepEqual(got, c.want) {
@@ -473,15 +480,22 @@ func TestWeakenedEntriesAreBounded(t *testing.T) {
 		var m struct {
 			Diag    string   `json:"diag"`
 			Entries []string `json:"entries"`
-			Total   int      `json:"entries_total"`
 		}
 		_ = json.Unmarshal(r.Detail, &m)
 		if m.Diag != model.DiagLowerSandboxWeakened {
 			continue
 		}
 		found = true
-		if len(m.Entries) != maxWeakenedEntries || m.Total != len(entries) {
-			t.Errorf("entries = %d, total = %d; want %d / %d", len(m.Entries), m.Total, maxWeakenedEntries, len(entries))
+		var raw map[string]json.RawMessage
+		_ = json.Unmarshal(r.Detail, &raw)
+		if len(raw) != 2 {
+			t.Errorf("detail keys = %v, want only diag and entries", raw)
+		}
+		if len(m.Entries) != maxWeakenedEntries+1 {
+			t.Fatalf("entries = %d, want %d plus the placeholder", len(m.Entries), maxWeakenedEntries)
+		}
+		if last, want := m.Entries[maxWeakenedEntries], fmt.Sprintf("…等 %d 项", rest); last != want {
+			t.Errorf("placeholder = %q, want %q", last, want)
 		}
 		for _, e := range m.Entries {
 			if utf8.RuneCountInString(e) > maxWeakenedEntryRunes || strings.ContainsAny(e, "\r\n") {
@@ -494,7 +508,7 @@ func TestWeakenedEntriesAreBounded(t *testing.T) {
 	}
 }
 
-// Few entries are written exactly as before: no entries_total key.
+// Few entries are written exactly as before: no placeholder entry.
 func TestWeakenedEntriesUnderTheCapAreUntouched(t *testing.T) {
 	skipWithoutPosixPaths(t)
 	h := newHarness(t)
