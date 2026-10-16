@@ -12,17 +12,17 @@ defaults:
     shell: bash
 env:
   GOFLAGS: -mod=readonly
-  GOPROXY: "off"
 jobs:
   win:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: actions/setup-go@v5.5.0
+      - uses: actions/checkout@v6.1.0
+      - uses: actions/setup-go@v6.5.0
         with:
           go-version-file: go.mod
           cache: true
+      - run: go mod download
       - uses: actions/setup-dotnet@v5.4.0
         with:
           dotnet-version: "8.0.x"
@@ -67,6 +67,10 @@ jobs:
           for i in 1 2 3 4; do (while :; do :; done) & done
           for i in $(seq 1 25); do s=$(date +%s%N); r=$(run_hook load t$i PreToolUse); echo "loaded PreToolUse #$i: $(ms $s)ms $r $(head -c 120 $T/err)"; done
           kill $(jobs -p) 2>/dev/null || true
+      - name: state lock contention (windows)
+        run: |
+          set +e
+          GOPROXY=off go run .github/diag/commit.go
       - name: hook p95 via bench script (idle)
         run: |
           bash scripts/bench.sh 2>&1 | tail -40 || true
@@ -77,15 +81,20 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: actions/setup-go@v5.5.0
+      - uses: actions/checkout@v6.1.0
+      - uses: actions/setup-go@v6.5.0
         with:
           go-version-file: go.mod
           cache: true
+      - run: go mod download
       - name: machine
         run: |
           sysctl -n hw.ncpu hw.memsize; sw_vers; uptime
           go test -run '^$' -bench . -benchtime 200x ./internal/state 2>&1 | tail -20 || true
+      - name: state lock contention (mac)
+        run: |
+          set +e
+          GOPROXY=off go run .github/diag/commit.go
       - name: concurrency detail
         run: |
           go build -o ballast ./cmd/ballast
