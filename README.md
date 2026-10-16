@@ -93,7 +93,7 @@ ballast doctor                                    # 自检:层级、各客户端
 |---|---|---|
 | Claude Code | `~/.claude/settings.json` | 遵循 `CLAUDE_CONFIG_DIR`。每个事件一组 `{type, command, args}`,命令与参数分开写,路径含空格也不需要拼接 |
 | Codex | `~/.codex/hooks.json`、`~/.codex/config.toml` | 遵循 `CODEX_HOME`。`config.toml` 里只确保 `[features]` 下 `hooks = true`。**trust 哈希默认不写**,需要时显式加 `--codex-trust`;不加则要在 Codex TUI 里用 `/hooks` 批准 |
-| Cursor | `~/.cursor/hooks.json`、`~/.cursor/rules/ballast.mdc` | `ballast.mdc` 是整文件托管的 `alwaysApply` 规则,作为注入的可靠通道;安装后需要 Reload Window。规则变更后重新运行 `ballast install --client cursor` 刷新它 |
+| Cursor | `~/.cursor/hooks.json`、`~/.cursor/rules/ballast.mdc` | `ballast.mdc` 是整文件托管的 `alwaysApply` 规则,作为注入的可靠通道;安装后需要 Reload Window。它是安装时按当时规则生成的快照:放入或修改规则后重新运行 `ballast install --client cursor` 刷新;没有任何规则时安装会给出警告 |
 | Hermes | `~/.hermes/config.yaml` | 遵循 `HERMES_HOME`。只改顶层 `hooks:` 段,段外字节不变;`hooks:` 用 flow 风格或锚点时拒绝写入。启动 Hermes 时需要 `--accept-hooks` |
 
 安全措施:
@@ -108,14 +108,9 @@ ballast doctor                                    # 自检:层级、各客户端
 
 ## 快速上手
 
-### 1. 安装 hook
+顺序很重要:**先放规则,再安装 hook**。Cursor 的 `ballast.mdc` 是安装时按当时的规则生成的快照,先装后放规则会得到一个只有 front matter、没有规则文本的 mdc(此时 `ballast install --client cursor` 会向 stderr 打印警告)。
 
-```sh
-ballast install --client claude-code
-ballast doctor
-```
-
-### 2. 放入规则
+### 1. 放入规则
 
 把默认规则复制为你的用户层规则(对所有仓库生效),或放进某个仓库的 `.ballast/rules.json`(只对该仓库生效):
 
@@ -126,7 +121,22 @@ ballast test-rules rules/default.json          # 运行规则内的 examples
 ballast config show --explain                  # 查看当前生效的 org / repo / user 三层规则
 ```
 
-规则文件变更会热更新,不需要重启客户端。
+### 2. 安装 hook
+
+```sh
+ballast install --client claude-code
+ballast doctor
+```
+
+规则文件变更后,**hook 通道**(Claude Code、Codex、Hermes,以及 Cursor 的 hook 部分)下一次事件就会读到新规则,不需要重启客户端,也不需要重新安装。
+
+**Cursor 例外**:`~/.cursor/rules/ballast.mdc` 是安装时生成的快照,规则变更后不会自动更新(`ballast doctor` 的 `cursor.mdc_current` 会报告它已过期)。改了规则后重新运行一次
+
+```sh
+ballast install --client cursor
+```
+
+即可刷新它(hooks.json 无变化,只重写 mdc),然后在 Cursor 里 Reload Window。
 
 ### 3. 声明验证命令:init
 
@@ -317,7 +327,7 @@ git 在提交阶段会把 `GIT_INDEX_FILE` 指向真正要提交的索引,`commi
 - **PowerShell 只做保守分词**,覆盖面窄于 bash;无法分词时按"不确定"处理(放行并写审计)。
 - **`git add … && git commit …` 写在同一条命令里**会被判为证据过期(Ballast 不模拟同一命令里前序节点的副作用)。请分两次执行。
 - **新鲜度只看已跟踪文件**。新建的文件要先 `git add` 再 `verify`;测试依赖未跟踪文件的情况交给 CI。
-- **shell 的读写目标只覆盖列出的常见命令**。`python -c "open(...).write()"` 这类语言内写入不会被识别;`find … | xargs cat` 之类的读取不计入"已读"。后者只会让 `read-before-edit` 更严,不会更松。
+- **shell 的读写目标只覆盖列出的常见命令**,`no-tamper` 因此只能检测、不能保证。会被识别的写入:重定向、`tee`、`cp`/`mv`/`install`/`rsync` 的目标、`sed -i`、`perl -i`/`ruby -i`、`git checkout [<rev>] -- <path>`、`git restore <path>`、`rm`、`truncate`、`dd of=`、`touch`、`ln`。**未覆盖**(尽力列举,完整清单见 [`docs/trust-model.md`](docs/trust-model.md) §2.1):语言运行时内部的写入(`python -c "open(...).write()"`、`node -e`、`php -r`、不带 `-i` 的 `perl -e`/`ruby -e`、`gawk -i inplace`、`yq -i`);先写脚本再执行或经管道交给解释器;`patch`、`git apply`、`ed`/`vim -es`、`curl -o`/`wget -O`、`tar -x`/`unzip`、`find -delete`/`-exec`、`xargs` 间接调用;`git reset --hard`、`git stash`、`git switch`/`git checkout <分支>`、`git merge`/`pull`、不带 `--` 的 `git checkout <path>`;命令词是变量或 `eval`。`find … | xargs cat` 之类的读取不计入"已读",只会让 `read-before-edit` 更严,不会更松。
 - **`git -c core.hooksPath=<路径> commit` 能绕过 git hooks**(包括 `hooks/pre-commit` 模板),默认的 `no-skip-verify` 只匹配 `--no-verify` / `-n`,不拦它:DSL 里 `flags` 与 `args_regex` 是 AND,无法在不误报提交说明的前提下并入同一条规则,理由见 [`docs/pinrule-mapping.md`](docs/pinrule-mapping.md) §2.6。`evidence-before-commit` 不受影响:提交前仍要有一致的 `ballast verify` 记录,与 hooks 是否运行无关。
 - **`no-tamper` 不拦"搬走"**:`mv ~/.ballast/rules.json /tmp/x` 的源路径不算写入目标(只有目标算),所以不命中;这是 T0 只检测不防止的一个具体表现,见 [`docs/trust-model.md`](docs/trust-model.md)。
 - `flags` 匹配不知道哪些选项带值(`git commit -m -n` 会把 `-n` 当作标志)。

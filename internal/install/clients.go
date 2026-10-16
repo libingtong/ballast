@@ -144,7 +144,10 @@ func (cursorClient) Targets(lay layout.Layout, spec EntrySpec) []Target {
 }
 
 func (cursorClient) PostInstallNotes() []string {
-	return []string{"Cursor: run \"Developer: Reload Window\" for the hooks and ballast.mdc to take effect."}
+	return []string{
+		"Cursor: run \"Developer: Reload Window\" for the hooks and ballast.mdc to take effect.",
+		"Cursor: ballast.mdc is a snapshot of the rules in effect now; after changing rules run `ballast install --client cursor` again to refresh it.",
+	}
 }
 
 // ---- Hermes --------------------------------------------------------------

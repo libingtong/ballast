@@ -164,6 +164,38 @@ func TestInstallRoundTripFromEmptyHome(t *testing.T) {
 	}
 }
 
+// Cursor's ballast.mdc is a snapshot taken at install time. Without any rule
+// in effect it holds only a front matter: install says so, and re-running it
+// after the rules were added refreshes the file (audit round 4).
+func TestInstallCursorWithoutRulesWarnsAndRefreshes(t *testing.T) {
+	s := newSandbox(t)
+	seedClientConfigs(t, s)
+	mdcPath := filepath.Join(s.sb.Home, ".cursor", "rules", "ballast.mdc")
+
+	r := s.mustExit(0, "", "", "install", "--client", "cursor", "--binary", ballastBin)
+	for _, want := range []string{"warning", "ballast.mdc", "ballast install --client cursor"} {
+		if !strings.Contains(r.stderr, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, r.stderr)
+		}
+	}
+	if strings.Contains(readFile(t, mdcPath), "no-long-sleep") {
+		t.Fatal("premise: no rules, so no rule text in the mdc")
+	}
+	r = s.mustExit(0, "", "", "install", "--client", "claude-code", "--binary", ballastBin)
+	if strings.Contains(r.stderr, "ballast.mdc") {
+		t.Errorf("a non-Cursor install must not mention ballast.mdc:\n%s", r.stderr)
+	}
+
+	installE2ERules(t, s)
+	r = s.mustExit(0, "", "", "install", "--client", "cursor", "--binary", ballastBin)
+	if strings.Contains(r.stderr, "ballast.mdc") {
+		t.Errorf("rules exist now, no warning expected:\n%s", r.stderr)
+	}
+	if !strings.Contains(readFile(t, mdcPath), "no-long-sleep") {
+		t.Errorf("re-running install did not refresh ballast.mdc:\n%s", readFile(t, mdcPath))
+	}
+}
+
 func keys(m map[string]string) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

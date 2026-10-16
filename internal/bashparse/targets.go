@@ -6,7 +6,8 @@ import (
 	"github.com/libingtong/ballast/internal/model"
 )
 
-// WriteTargets derives write targets from a node's argv (tee/cp/mv/sed -i/...);
+// WriteTargets derives write targets from a node's argv (tee/cp/mv/sed -i,
+// perl/ruby -i, git checkout -- / git restore, ...);
 // redirect targets are added by Parse. name is the command's basename and
 // argv[0] the command word.
 func WriteTargets(name string, argv []model.Word) []model.WriteTarget {
@@ -14,6 +15,12 @@ func WriteTargets(name string, argv []model.Word) []model.WriteTarget {
 		return nil
 	}
 	args := argv[1:]
+	if isGitName(argv[0].Lit) {
+		return gitTargets(argv)
+	}
+	if lang := interpreterName(name); lang != "" {
+		return inPlaceScriptTargets(lang, args)
+	}
 	switch name {
 	case "tee":
 		return targets(scanArgs(args, nil, noopOpt), "tee", nil)
@@ -291,4 +298,144 @@ func awkTargets(name string, args []model.Word) []model.WriteTarget {
 		}
 	}
 	return targets(files, name, nil)
+}
+
+// interpreterName maps perl and ruby (also versioned names such as perl5.38
+// or ruby3.2) to "perl" / "ruby"; other commands give "".
+func interpreterName(name string) string {
+	for _, lang := range []string{"perl", "ruby"} {
+		rest, ok := strings.CutPrefix(name, lang)
+		if !ok {
+			continue
+		}
+		for _, c := range rest {
+			if (c < '0' || c > '9') && c != '.' {
+				return ""
+			}
+		}
+		return lang
+	}
+	return ""
+}
+
+// inPlaceScriptTargets handles `perl -i[ext] ... FILE...` and
+// `ruby -i[ext] ... FILE...`: with -i every file operand is edited in place.
+// Switches are read like the interpreters do: up to the first operand (or
+// "--"); -e/-E take the script (attached or next word); without -e the first
+// operand is the script file. A script that writes by itself (perl -e
+// 'open ...') is not recognized, only the -i switch.
+func inPlaceScriptTargets(lang string, args []model.Word) []model.WriteTarget {
+	// switches whose value is the rest of the cluster, or the next word
+	// when nothing follows; and those whose value is only ever attached.
+	valued, attached := "eEI", "iMmFxCdDV"
+	if lang == "ruby" {
+		valued, attached = "eIrCXE", "iKFxWT"
+	}
+	inPlace, scriptGiven := false, false
+	i := 0
+	for ; i < len(args); i++ {
+		a := args[i]
+		s := a.Lit
+		if a.Dynamic || len(s) < 2 || s[0] != '-' {
+			break
+		}
+		if s == "--" {
+			i++
+			break
+		}
+		if s[1] == '-' {
+			if lang == "ruby" && !strings.Contains(s, "=") {
+				switch s {
+				case "--encoding", "--external-encoding", "--internal-encoding":
+					i++ // takes the next word
+				}
+			}
+			continue
+		}
+		for j := 1; j < len(s); j++ {
+			c := s[j]
+			switch {
+			case c == 'i':
+				inPlace = true
+				j = len(s)
+			case strings.IndexByte(valued, c) >= 0:
+				if c == 'e' || (c == 'E' && lang == "perl") {
+					scriptGiven = true
+				}
+				if j+1 >= len(s) {
+					i++ // the value is the next word
+				}
+				j = len(s)
+			case strings.IndexByte(attached, c) >= 0:
+				j = len(s)
+			case c == 'l' || c == '0':
+				for j+1 < len(s) && s[j+1] >= '0' && s[j+1] <= '9' {
+					j++
+				}
+			}
+		}
+	}
+	if !inPlace || i > len(args) {
+		return nil
+	}
+	ops := args[i:]
+	if !scriptGiven && len(ops) > 0 {
+		ops = ops[1:] // the script file
+	}
+	return targets(ops, lang+" -i", nil)
+}
+
+// restoreSpec lists the git restore options that take a value.
+var restoreSpec = optSpec{short: "sU", long: []string{
+	"source", "pathspec-from-file", "unified", "inter-hunk-context", "conflict"}}
+
+// gitTargets handles the git subcommands that overwrite working-tree files
+// from a tree-ish: `git checkout [<rev>] -- <path>...` and
+// `git restore [options] <path>...` (also with --staged: the path is still
+// the subject of the write). `git checkout <path>` without "--" is
+// indistinguishable from a branch switch and is not recognized.
+func gitTargets(argv []model.Word) []model.WriteTarget {
+	g := ParseGit(argv)
+	if g == nil || g.SubDynamic {
+		return nil
+	}
+	var paths []model.Word
+	switch g.Sub {
+	case "checkout":
+		for i, a := range g.Args {
+			if !a.Dynamic && a.Lit == "--" {
+				paths = g.Args[i+1:]
+				break
+			}
+		}
+	case "restore":
+		paths = scanArgs(g.Args, &restoreSpec, noopOpt)
+	default:
+		return nil
+	}
+	var out []model.WriteTarget
+	for _, p := range paths {
+		if t, ok := gitPath(g, p, "git "+g.Sub); ok {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// gitPath resolves a pathspec against `git -C <dir>` the way git does.
+func gitPath(g *model.GitInvocation, w model.Word, via string) (model.WriteTarget, bool) {
+	if w.Dynamic || g.CwdDynamic {
+		return model.WriteTarget{Dynamic: true, Via: via}, true
+	}
+	if w.Lit == "" {
+		return model.WriteTarget{}, false
+	}
+	if g.Cwd != "" && !model.IsAbsShellPath(w.Lit) {
+		sep := "/"
+		if strings.HasSuffix(g.Cwd, "/") || strings.HasSuffix(g.Cwd, `\`) {
+			sep = ""
+		}
+		w.Lit = g.Cwd + sep + w.Lit
+	}
+	return model.WriteTarget{Path: w.Lit, Via: via}, true
 }

@@ -617,6 +617,12 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - **`proto/`(M0c 原型)保留到仓库所有者决定删除**,取代"M1 前删除";`accept-m0.sh` 依赖它做 vet,删除时同步调整该脚本的原型段。
 - **CI**:`accept-m0.sh` … `accept-m4.sh` 全部在三个平台上执行;`accept-m1.sh` 的 `go test -race` 与 bench 在 CI 里由独立步骤承担,用 `BALLAST_ACCEPT_SKIP_GOTEST` / `BALLAST_ACCEPT_SKIP_BENCH` 显式 SKIP。
 
+### 6. 第 4 轮系统审计后的修订(v0.4.3,优先于正文)
+- **M4 的"往返 diff 为空"对 JSON 目标是逐字节的**:安装只插入自己的条目、卸载只删除自己插入的部分,兄弟成员之间的空白与空行、冒号两侧的空格、缩进风格、末尾换行与 CRLF 一律不动;用户原有的空事件数组与 0 字节文件卸载后原样保留(`json:hooks.<event>`、`json:blank` 标记)。
+- **Cursor `ballast.mdc` 是安装时的快照**:没有规则时 `install --client cursor` 打警告,规则变更后重新运行该命令刷新;README 快速上手先放规则再安装。
+- **`no-tamper` 的写入目标表**加入 perl/ruby `-i`、`git checkout -- <path>`、`git restore <path>`;语言内写入(`python -c`、`node -e`)仍无法识别,已在 trust-model 与 README 登记。
+- **历史 blob 中残留的本机标识需由仓库所有者决定是否 `git filter-repo`**(与作者邮箱同属发布动作,见 `docs/architecture.md` §13);实现任务不改写历史。
+
 ## 已定事项(无需再裁决)
 - 合并语义:采用 B4 的方案,org 整体不可变,原问题 3 的备选方案升格为正式方案,以消除歧义。
 - ~~Codex:只预留 Adapter 接口~~ → 已被 v0.4 多客户端支持取代(用户 2026-10-16 要求)。

@@ -14,7 +14,7 @@
 | `matrix.sh --mode stub` | 9 种栈 × {成功, 失败},用桩工具链(`accutil` 的拷贝),始终运行 |
 | `matrix.sh --mode real` | 真实工具链;本地缺工具链时显式 SKIP,`CI=true` 时缺失即失败。CI 下每个系统只负责计划里分配的栈(Linux 8 个、macOS swift、Windows dotnet)。要下载插件/依赖的栈(maven、gradle、dotnet、ruby)本地默认 SKIP,`CI=true` 或 `BALLAST_MATRIX_ALLOW_NET=1` 时才跑 |
 | `replay.sh` | 读 `$BALLAST_HOME/replay-set.txt`(每行一个 transcript 路径,`#` 为注释):至少 3 份、其中一份 > 10 MB,报告符合 schema,内存 < 200 MB,`$BALLAST_HOME/labels` 中标注 ≥ 20 条且都能关联到样本 id。文件不存在时显式 SKIP(退出 0);`BALLAST_REQUIRE_REPLAY=1` 时视为失败。只输出统计,不输出路径和内容 |
-| `install-e2e.sh` | 四个客户端:dry-run、往返(逐字节相同)、幂等、保留用户已有与事后另加的 hook、用户改过的条目、原文件缺失、客户端未检测到、托管层已部署、配置损坏、备份上限 10、doctor |
+| `install-e2e.sh` | 四个客户端:dry-run、往返(逐字节相同)、幂等、保留用户已有与事后另加的 hook、用户改过的条目、原文件缺失、客户端未检测到、托管层已部署、配置损坏、备份上限 10、doctor、非规范 JSON 布局(tab、CRLF、空行、紧凑、0 字节、用户的空事件数组)逐字节往返 |
 | `accept-m0.sh` … `accept-m4.sh` | 里程碑编排,见各文件头注释。M1 含 `go test -race ./...`;M2 含 freshness 与 matrix stub;M3 含 audit lint、stats golden 与用合成 transcript 跑的 replay;M4 含 install-e2e、org render、doctor |
 
 `lib.sh` 是共用函数(沙箱、断言、运行 ballast、构建二进制)。`tools/accutil/` 是脚本用的小工具(JSON 取值、带超时的运行与峰值内存、目录哈希、桩工具链、合成 transcript 等),每次运行时自动构建到临时目录。

@@ -25,6 +25,27 @@
 //     DEST (last non-option arg, or -t DIR), rsync DEST, sed -i/-i.bak/--in-place
 //     FILE..., rm FILE..., truncate FILE..., dd of=FILE, touch FILE..., ln
 //     TARGET LINK (LINK). Dynamic targets ⇒ Dynamic:true.
+//   - In-place interpreters (Via "perl -i" / "ruby -i"): perl and ruby
+//     (also perl5.38, ruby3.2) with a -i[EXT] switch, alone or in a cluster
+//     (-pi, -pi.bak, -lpi): every file operand is a write. Switches are read
+//     up to the first operand or "--"; -e/-E (perl) and -e (ruby) take the
+//     script (attached or next word); without -e the first operand is the
+//     script file and is skipped. Without -i nothing is recorded.
+//   - git paths overwritten from a tree-ish (Via "git checkout" / "git
+//     restore"): `git checkout [<rev>] -- <path>...` (the operands after the
+//     first "--"; without "--" it may be a branch switch and records
+//     nothing) and `git restore [options] <path>...` (-s/--source,
+//     --pathspec-from-file, -U/--unified, --inter-hunk-context, --conflict
+//     take a value; --staged is still recorded). Paths are resolved against
+//     `git -C <dir>` (relative path ⇒ <dir>/<path>); a dynamic path or dynamic
+//     -C ⇒ Dynamic:true.
+//   - NOT recognized as writes (see docs/trust-model.md "已知局限"): writes
+//     done inside a language runtime (python -c, node -e, perl/ruby -e
+//     without -i, php -r ...), gawk -i inplace, yq -i, ed/ex/vim -c, patch,
+//     git apply/reset --hard/stash/switch/merge/cherry-pick/clean,
+//     git checkout <path> without "--", curl -o / wget -O, tar/unzip -x,
+//     find -delete/-exec, xargs, sponge, scripts written first and run later,
+//     a dynamic command word, eval.
 //   - Reads (frozen; feeds read_this_session for clients without a Read
 //     tool, e.g. Codex exec_command). Operands below are argv words after
 //     wrapper stripping; "-" (stdin) is skipped; after "--" every word is an

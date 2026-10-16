@@ -267,11 +267,10 @@ func (t *codexConfigTarget) desiredTrust(spec EntrySpec, goos string, peer *Plan
 	if len(events) == 0 {
 		events = defaultEvents(model.ClientCodex)
 	}
-	f := jfmt{unit: "  ", eol: "\n"}
 	want := map[string]string{}
 	for _, ne := range events {
 		h, _, _ := t.hooks.handler(spec.Binary, ne, goos)
-		want[ne.Native] = h.hash(f)
+		want[ne.Native] = h.hash()
 	}
 	doc, err := t.hooks.parse(peer.After)
 	if err != nil {
@@ -300,7 +299,7 @@ func (t *codexConfigTarget) desiredTrust(spec EntrySpec, goos string, peer *Plan
 		}
 		present := false
 		t.hooks.eachHandler(list, func(l located) bool {
-			if l.groupIdx == g && l.handleIdx == h && l.node.hash(f) == e.Hash {
+			if l.groupIdx == g && l.handleIdx == h && l.node.hash() == e.Hash {
 				present = true
 				return false
 			}

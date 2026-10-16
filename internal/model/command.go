@@ -68,7 +68,8 @@ type WriteTarget struct {
 	Path    string `json:"path"` // raw (not normalized); "" when Dynamic
 	Dynamic bool   `json:"dynamic,omitempty"`
 	// Via for Writes: "redirect", "tee", "cp", "mv", "install", "rsync",
-	// "sed -i", "rm", "truncate", "dd", "touch", "ln", "out-file",
+	// "sed -i", "perl -i", "ruby -i", "git checkout", "git restore", "rm",
+	// "truncate", "dd", "touch", "ln", "out-file",
 	// "set-content", "add-content", "remove-item", "copy-item", "move-item",
 	// "new-item".
 	// Via for Reads: "redirect" (input redirection `< FILE`), "cat", "tac",

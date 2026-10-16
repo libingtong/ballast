@@ -46,9 +46,22 @@
 // removed; features.hooks is left on and reported. Load/parse failure ⇒
 // non-zero exit (never pinrule's silent `return 0`).
 //
+// JSON editing is surgical down to the byte (contract v1.7, jsonast.go):
+// every source byte is kept in the tree (node text, the whitespace around
+// each member, the text between key and value, the inside of an empty
+// container, the lead/trail of the document). Install inserts only its own
+// entries; a new member takes its separator from the adjacent member (blank
+// lines are not copied; indentation, tabs, CRLF, "key":value spacing and the
+// missing final newline follow the document). Uninstall removes exactly what
+// was inserted, so install followed by uninstall reproduces the original
+// file byte for byte. Containers that were empty before install come back
+// as written ("[ ]", "{\n}") through their flag; a file that held only
+// whitespace (also 0 bytes) is restored as it was.
+//
 // Structural flags (contract v1.3, internal/install/structflags.go): Plan
-// records in ManagedFlag (keys "json:hooks", "json:version",
-// "yaml:hooks", "yaml:hooks.<event>", "dir:kept") whether each container it
+// records in ManagedFlag (keys "json:hooks", "json:hooks.<event>",
+// "json:version", "json:root", "json:blank", "yaml:hooks",
+// "yaml:hooks.<event>", "dir:kept") whether each container it
 // fills existed before the first install (with its original YAML text) or
 // was created by Ballast; re-installs carry the record over. Uninstall then
 // deletes an emptied container only when Ballast created it (or nothing is

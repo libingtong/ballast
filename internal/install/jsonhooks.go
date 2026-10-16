@@ -1,6 +1,7 @@
 package install
 
 import (
+	"bytes"
 	"fmt"
 	"runtime"
 
@@ -200,7 +201,6 @@ func (t *jsonHooksTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManif
 	if err != nil {
 		return nil, err
 	}
-	f := jfmt{unit: doc.unit, eol: doc.eol}
 	root := doc.root
 	events := spec.Events
 	if len(events) == 0 {
@@ -223,7 +223,10 @@ func (t *jsonHooksTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManif
 		return nil, err
 	}
 	sf := structFlags(m, t.client, t.path)
-	noteStruct(sf, t.client, t.path, flagJSONHooks, hooks != nil, len(recs) > 0, "")
+	noteStruct(sf, t.client, t.path, flagJSONHooks, hooks != nil, len(recs) > 0, emptyRaw(hooks))
+	if cur != nil {
+		t.noteFileShape(sf, cur, root)
+	}
 	if t.client == model.ClientCursor && root.get("version") == nil {
 		root.setFront("version", newInt(1))
 		if cur != nil {
@@ -242,7 +245,7 @@ func (t *jsonHooksTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManif
 	for _, ne := range events {
 		processed[ne.Native] = true
 		want, command, args := t.handler(spec.Binary, ne, goos)
-		wantHash := want.hash(f)
+		wantHash := want.hash()
 		list, err := t.eventList(hooks, ne.Native)
 		if err != nil {
 			return nil, err
@@ -254,7 +257,7 @@ func (t *jsonHooksTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManif
 			if !t.isBallast(l.node, binaries, goos) {
 				return true
 			}
-			h := l.node.hash(f)
+			h := l.node.hash()
 			if r, ok := byHash[h]; ok && r.Native == ne.Native && owned == nil {
 				ll := l
 				owned = &ll
@@ -270,7 +273,7 @@ func (t *jsonHooksTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManif
 		}
 		switch {
 		case owned != nil:
-			if owned.node.hash(f) != wantHash {
+			if owned.node.hash() != wantHash {
 				owned.handlers.replaceItem(owned.handleIdx, want)
 			}
 			entry.Key = t.key(ne.Native, *owned)
@@ -286,6 +289,7 @@ func (t *jsonHooksTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManif
 			}
 		default:
 			ensureHooks()
+			noteStruct(sf, t.client, t.path, flagJSONEventPrefix+ne.Native, list != nil, hasNative(recs, ne.Native), emptyRaw(list))
 			if list == nil {
 				list = newArray()
 				hooks.set(ne.Native, list)
@@ -316,6 +320,32 @@ func (t *jsonHooksTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManif
 	return res, nil
 }
 
+func hasNative(recs []model.ManagedEntry, native string) bool {
+	for _, r := range recs {
+		if r.Native == native {
+			return true
+		}
+	}
+	return false
+}
+
+// noteFileShape records what the file looked like when install first
+// touched it: only whitespace (flagJSONBlank), or an empty top-level
+// object (flagJSONRoot).
+func (t *jsonHooksTarget) noteFileShape(sf map[string]model.ManagedFlag, cur []byte, root *jnode) {
+	if len(bytes.TrimSpace(bytes.TrimPrefix(cur, []byte("\xef\xbb\xbf")))) == 0 {
+		if _, ok := sf[flagJSONBlank]; !ok {
+			sf[flagJSONBlank] = model.ManagedFlag{Client: t.client, File: t.path, Key: flagJSONBlank, Value: string(cur)}
+		}
+		return
+	}
+	if raw := emptyRaw(root); raw != "" {
+		if _, ok := sf[flagJSONRoot]; !ok {
+			sf[flagJSONRoot] = model.ManagedFlag{Client: t.client, File: t.path, Key: flagJSONRoot, Value: raw}
+		}
+	}
+}
+
 // Remove implements Target.
 func (t *jsonHooksTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanResult, error) {
 	m = nonNilManifest(m)
@@ -328,7 +358,6 @@ func (t *jsonHooksTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanRes
 	if err != nil {
 		return nil, err
 	}
-	f := jfmt{unit: doc.unit, eol: doc.eol}
 	root := doc.root
 	recs := entriesFor(m, t.client, t.path)
 	prior := fileRec(m, t.path)
@@ -338,6 +367,8 @@ func (t *jsonHooksTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanRes
 		return nil, err
 	}
 
+	sf := structFlags(m, t.client, t.path)
+
 	for _, r := range recs {
 		list, err := t.eventList(hooks, r.Native)
 		if err != nil {
@@ -346,7 +377,7 @@ func (t *jsonHooksTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanRes
 		var hit *located
 		foreign := false
 		t.eachHandler(list, func(l located) bool {
-			if l.node.hash(f) == r.Hash {
+			if l.node.hash() == r.Hash {
 				ll := l
 				hit = &ll
 				return false
@@ -358,19 +389,22 @@ func (t *jsonHooksTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanRes
 		})
 		switch {
 		case hit != nil:
-			t.removeHandler(hooks, r.Native, *hit)
+			t.removeHandler(hooks, r.Native, *hit, sf)
 		case foreign:
 			res.Warnings = append(res.Warnings, fmt.Sprintf(
 				"%s: %s entry for %q was modified by the user; kept", t.path, t.client, r.Native))
 			res.Entries = append(res.Entries, r)
 		}
 	}
-	sf := structFlags(m, t.client, t.path)
-	if hooks != nil && hooks.isEmptyContainer() && createdByBallast(sf, flagJSONHooks) {
-		root.del("hooks")
+	if hooks != nil && hooks.isEmptyContainer() {
+		if createdByBallast(sf, flagJSONHooks) {
+			root.del("hooks")
+		} else {
+			hooks.restoreEmpty(sf[flagJSONHooks].Value)
+		}
 	}
 	if f, ok := sf[flagJSONVersion]; ok && f.SetByBallast {
-		if h := root.get("hooks"); (h == nil || h.isEmptyContainer()) && root.get("version").isInt(1) {
+		if noHandlers(root.get("hooks")) && root.get("version").isInt(1) {
 			root.del("version")
 		}
 	}
@@ -382,19 +416,49 @@ func (t *jsonHooksTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanRes
 		res.After = nil
 		return res, nil
 	}
+	if root.isEmptyContainer() {
+		if f, ok := sf[flagJSONBlank]; ok && len(res.Entries) == 0 {
+			res.After = []byte(f.Value) // the file held nothing but whitespace
+			return res, nil
+		}
+		root.restoreEmpty(sf[flagJSONRoot].Value)
+	}
 	res.After = doc.bytes()
 	return res, nil
 }
 
 // removeHandler deletes a handler and any group/event/array left empty.
-func (t *jsonHooksTarget) removeHandler(hooks *jnode, native string, l located) {
+func (t *jsonHooksTarget) removeHandler(hooks *jnode, native string, l located, sf map[string]model.ManagedFlag) {
 	l.handlers.removeItem(l.handleIdx)
 	if t.nested() && l.handlers.isEmptyContainer() && onlyKeys(l.group, "matcher", "hooks") {
 		l.list.removeItem(l.groupIdx)
 	}
 	if l.list.isEmptyContainer() {
+		// An event array that was empty before install stays (flagged with
+		// its source text); one Ballast created, or that held only user
+		// entries which are gone now, is deleted.
+		if f, ok := sf[flagJSONEventPrefix+native]; ok && !f.SetByBallast && f.Value != "" {
+			l.list.restoreEmpty(f.Value)
+			return
+		}
 		hooks.del(native)
 	}
+}
+
+// noHandlers: no hooks object, or one whose event arrays are all empty.
+func noHandlers(hooks *jnode) bool {
+	if hooks == nil {
+		return true
+	}
+	if hooks.kind != jObject {
+		return false
+	}
+	for _, m := range hooks.members {
+		if m.val.kind != jArray || len(m.val.items) > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func onlyKeys(o *jnode, keys ...string) bool {

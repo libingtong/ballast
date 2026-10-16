@@ -13,6 +13,9 @@
 #                   it needs, uninstall removes it again
 #   not detected    without --force a client that is not there is refused (2)
 #   managed layer   a managed Ballast deployment refuses the user-level install
+#   layouts         non-canonical JSON (tabs, CRLF, blank lines, compact, 0 bytes,
+#                   a user's empty event array) keeps every foreign byte and
+#                   round-trips byte for byte
 #   broken config   unparsable configuration is refused (3) and never written
 #   backups         at most 10 are kept, and they hold the original bytes
 #   doctor          is happy afterwards
@@ -416,6 +419,49 @@ check_ne "cursor: and the content really changed" "$(cat "$mdc")" "$mdc_before"
 bl uninstall --client cursor
 check_no_file "cursor: uninstall deletes the managed ballast.mdc" "$mdc"
 check_file "cursor: but not the user's rule" "$SB_HOME/.cursor/rules/mine.mdc"
+
+section "non-canonical JSON layouts: install inserts only its own entries, uninstall restores the bytes"
+# Fixtures a user may well have: tabs, no space after the colon, blank lines
+# between members, CRLF, no final newline, compact, padded, empty containers,
+# and a 0-byte file. Install must keep every other byte; install followed by
+# uninstall must give the file back byte for byte.
+layout_case() { # CLIENT NAME CONTENT [MARKER: text that must survive the install verbatim]
+  local c=$1 name=$2 content=$3 marker=${4:-} f saved
+  new_client_sandbox "$c"
+  f="$(cfg_file "$c")"
+  write_file "$f" "$content"
+  saved="$(mktmp layout-saved)"
+  cp "$f" "$saved"
+  install_c "$c"
+  expect_rc "$c/$name: install" 0
+  if cmp -s "$f" "$saved"; then bad "$c/$name: install changed the file" "unchanged"; else ok "$c/$name: install changed the file"; fi
+  if [ -n "$marker" ]; then
+    # compare as a file test: grep -F with CR/tab in the pattern, no echo mangling
+    if LC_ALL=C grep -qF -- "$marker" "$f"; then ok "$c/$name: the user's own bytes are still there verbatim"; else bad "$c/$name: the user's own bytes are still there verbatim" "$(od -c "$f" | head -5)"; fi
+  fi
+  bl doctor
+  expect_rc "$c/$name: doctor is happy" 0
+  bl uninstall --client "$c"
+  expect_rc "$c/$name: uninstall" 0
+  if [ -e "$f" ] && cmp -s "$f" "$saved"; then
+    ok "$c/$name: install -> uninstall restored the file byte for byte"
+  else
+    bad "$c/$name: install -> uninstall restored the file byte for byte" "$(od -c "$f" 2>&1 | head -8)"
+  fi
+}
+
+for c in claude-code codex cursor; do
+  case $c in cursor) ev=stop ver='"version":1,' ;; *) ev=Stop ver='' ;; esac
+  layout_case "$c" zero-bytes ''
+  layout_case "$c" tab-no-colon-space $'{\n\t"theme":"dark"\n}\n' $'{\n\t"theme":"dark",\n\t"'
+  layout_case "$c" blank-line-between-members $'{\n  "theme": "dark",\n\n  "model": "opus"\n}\n' $'"theme": "dark",\n\n  "model": "opus",'
+  layout_case "$c" crlf-no-final-newline $'{\r\n  "theme": "dark"\r\n}' $'{\r\n  "theme": "dark",\r\n  "'
+  layout_case "$c" compact "{${ver}\"a\":1}" '"a":1,'
+  layout_case "$c" padded "{ ${ver}\"a\" : 1 }"
+  layout_case "$c" empty-object $'{ }\n'
+  layout_case "$c" users-empty-event "{${ver}\"hooks\":{\"$ev\":[]}}" "\"$ev\":["
+  layout_case "$c" inline-hooks-in-multiline-root $'{\n  "theme":"dark",\n  "hooks": {"Other":[]}\n}' $'"theme":"dark",\n  "hooks": {"Other":[],'
+done
 
 section "all four clients at once"
 new_client_sandbox all

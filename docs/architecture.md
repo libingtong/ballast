@@ -1,6 +1,6 @@
 # Ballast 架构与接口契约(冻结版 v1.5)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -254,7 +254,8 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 - **卸载以 manifest 为准**(覆盖已卸载的客户端);配置解析失败返回非 0。
 - 托管层(Claude managed settings)已部署 Ballast 时拒绝用户层安装(A15)。
 - 不在 `init` 时自动安装;不按子串识别;不绑定解释器;备份轮转。
-- **结构标记**(v1.3):安装时在 `ManagedFlag` 中记录被填充的容器(JSON `hooks` 对象、Hermes `hooks:` 表头与各事件键)原本是否存在及其原文,以及新建文件上方最近的已存在目录;卸载只删除 Ballast 创建的空容器,还原用户原有的空 `hooks` 对象、`hooks: {}`/`hooks: # 注释` 表头与 `pre_tool_call: []`,目录只清理到安装前已存在的那一层(`--force` 新建的客户端根目录一并清理)。键名见 `internal/install/doc.go`。
+- **JSON 逐字节外科式**(v1.7):`internal/install/jsonast.go` 保留源文本的每一个字节(节点原文、成员前后的空白与空行、冒号两侧的空格、空容器内部、文档首尾)。安装只**插入**自己的条目,新成员的分隔符取自相邻成员(空行不复制;缩进、tab、CRLF、`"k":v` 紧凑写法、无末尾换行都沿用文档);卸载只**删除**自己插入的部分,所以 install → uninstall 与原文件逐字节相同。此前"整个脏容器按缩进单位重排"会吃掉兄弟成员间的空行、改写 `"k":"v"`,已修正。往返属性测试 `internal/install/jsonroundtrip_test.go`(对 Claude settings.json、Codex hooks.json、Cursor hooks.json 各 204 种布局(48 种手写 + 156 种组合))与 `scripts/install-e2e.sh` 的非规范格式夹具钉住这一点。
+- **结构标记**(v1.3):安装时在 `ManagedFlag` 中记录被填充的容器(JSON `hooks` 对象、Hermes `hooks:` 表头与各事件键)原本是否存在及其原文,以及新建文件上方最近的已存在目录;卸载只删除 Ballast 创建的空容器,还原用户原有的空 `hooks` 对象、`hooks: {}`/`hooks: # 注释` 表头与 `pre_tool_call: []`,目录只清理到安装前已存在的那一层(`--force` 新建的客户端根目录一并清理)。键名见 `internal/install/doc.go`。v1.7 补全 JSON 侧:`json:hooks.<event>`(事件数组,原本为空时 `Value` 为其原文,卸载按原文保留,与 `yaml:hooks.<event>` 对齐)、`json:root`(顶层对象原本为空时的原文)、`json:blank`(文件存在但只含空白,含 0 字节;卸载后回到原内容)。缺少这些标记的旧 manifest 沿用旧行为(空事件数组删除)。
 
 ### 5.1 Claude Code
 
@@ -513,11 +514,23 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 | ConfigChange 审计 hook(计划 M4 内容列) | 归入 P2,本期不实现,也不在安装事件列表中 | M0a 没抓过该事件的 payload(字段【未核验】);T0 下 `no-tamper` 已能检测对 settings 的改写,ConfigChange 只是更晚的第二信号;补抓 payload 后再做(计划 v0.4 变更 §4) |
 | 卸载不关闭 `[features] hooks = true`(§5.2) | 维持;计划 M4"往返 diff 为空"改为"除 `features.hooks` 外为空",`install-e2e.sh` 对"原文件没有 hooks 键"的夹具显式断言该残留 | 同一 `hooks.json` 里可能有别的工具的 hook 依赖该开关,关掉会静默失效;manifest 里的 `set_by_ballast` 只用于提示 |
 | 提交作者邮箱 | 发布前由仓库所有者决定是否改写历史(`git filter-repo --mailmap` → noreply 邮箱,并设置仓库级 `user.email`) | 历史里的工作邮箱公开后无法撤回;发布动作不由实现任务代做 |
+| 历史 blob 中的本机标识(v1.7) | **历史 blob 中残留的本机标识需由仓库所有者决定是否 `git filter-repo`**(`--replace-text` 替换用户名、`claude-<uid>`、家目录下的项目路径等;或发布前 squash 历史)。HEAD 内容已干净(卡点:`git grep` 对这些模式为 0,`dist/` 已被忽略),但早期提交的 blob 仍含取证样本里的旧路径片段和旧测试数据里的示例家目录。**发布步骤**:① 在干净克隆里 `git log -p --all \| grep -E '<用户名>\|claude-[0-9]+\|家目录下的项目路径'` 复核;② 所有者决定改写则先 `git filter-repo --replace-text`(需要同时 `--mailmap` 处理作者邮箱),再重复 ① 直到为 0;③ 不改写则在发布说明里承认历史保留这些标识。实现任务**不改写历史** | 改写历史会改变所有提交 id、使既有分支与审计引用失效,且公开后无法撤回,必须由所有者决定;发布动作不由实现任务代做 |
 | `git add && git commit` 同一命令 | 不并入 commit 形式,列为已知局限并在 message 中提示 | 模拟前序节点副作用会让 FreshQuery 依赖整条 CommandList,收益小、风险大 |
 
 ---
 
 ## 14. 修订记录
+
+### v1.7(2026-10-16,第 4 轮系统审计修复)
+
+| 审计项 | 级别 | 处理 | 涉及文件 |
+|---|---|---|---|
+| JSON 写入不是外科式:容器一旦变脏,所有兄弟成员之间的空白按缩进单位重新生成(空行被删、多行对象里 `"k":"v"` 被改成 `"k": "v"`),install 本身就改了无关字节,uninstall 也回不到原文件 | major | **改为逐字节外科式**:解析时保留每个成员/数组项前后的空白(`jgap`)、对象成员冒号处的原文、空容器内部、文档首尾;脏容器按这些原文重新拼接,只有新插入的成员生成空白(取自相邻成员,空行不复制,缩进推断自邻居,单成员内联对象 `{"a": 1}` 沿用冒号后的空格)。删除时把被删成员的空白交还给邻居(末尾成员的 `post` 给新的末尾,其他的 `pre` 给后继),因此"删掉自己插入的东西"精确还原。新增往返属性测试:3 个客户端 × 204 种布局(48 种手写 + 156 种组合)(缩进 无/2/4/tab × LF/CRLF × 冒号 `": "`/`":"`/`" : "` × 有无空行 × 有无末尾换行 × 有无 hooks),断言原文是安装结果的子序列、install→uninstall 逐字节相同、二次安装不变;模糊测试 `FuzzJSONHooksPlan` 加同样的逐字节断言;`install-e2e.sh` 为三个 JSON 客户端各加 9 个非规范格式夹具。Cursor 例外沿用 §5.3:用户 hooks 仍在时保留卸载前添加的 `version:1` | `internal/install/jsonast.go`、`jsonhooks.go`、`jsonroundtrip_test.go`、`jsonast_test.go`、`fuzz_test.go`、`scripts/install-e2e.sh` |
+| 用户原有的空事件数组卸载后被删(`{"Stop":[]}` → `{}`),YAML 侧已有 `yaml:hooks.<event>` | minor | 新增 `json:hooks.<event>` 标记:安装填充一个事件数组时记录它原本是否存在;原本为空则 `Value` 为其原文,卸载按原文保留(`[ ]`、`[\n  ]` 也原样回来),由 Ballast 新建的或只含用户条目的数组清空后照旧删除。没有该标记的旧 manifest 沿用旧行为。`json:hooks` 的 `Value` 同样记录空 `hooks` 对象原文 | `internal/install/structflags.go`、`jsonhooks.go` |
+| 0 字节配置文件 install 后 uninstall 变成 `"{}\n"` | minor | 新增 `json:blank` 标记(`Value` = 原内容,含只有空白或 BOM 的文件),卸载后若顶层对象已空就写回原内容(0 字节仍是 0 字节,文件不被删除);顶层原本是空对象(`{}`、`{ }`)时 `json:root` 记原文并同样还原 | `internal/install/jsonhooks.go`、`structflags.go` |
+| Cursor `ballast.mdc` 在没有任何规则时安装,写出只有 front matter 的文件且不报警;README 先 install 后放规则,并说规则热更新 | minor | **采纳"重跑 install 刷新"这一条路径**(不做 SessionStart 过期检测):`ballast install --client cursor` 在当前生效规则为空时向 stderr 打印警告(退出码不变);安装后提示补充"mdc 是快照,规则变更后重新运行 install";README 快速上手改为先放规则再安装,"热更新"限定为 hook 通道,并写清 Cursor 的 mdc 需要在规则变更后刷新;`docs/clients.md` 同步。`doctor` 的 `cursor.mdc_current` 仍报告过期 | `internal/cli/cmd_install.go`、`internal/inject/build.go`、`internal/install/clients.go`、`README.md`、`docs/clients.md` |
+| `no-tamper` 的覆盖面:`perl -pi`、`git checkout -- <path>`、`git restore` 未命中,文档也没登记 | minor | **扩展检测并如实登记**:`bashparse` 写入目标表加入 perl/ruby 的 `-i`(含 `-pi`、`-pi.bak`、`-lpi`、版本化名字,Via `perl -i`/`ruby -i`)与 `git checkout [<rev>] -- <path>...`、`git restore [opts] <path>...`(Via `git checkout`/`git restore`,按 `git -C` 解析相对路径)。`python -c`、`node -e`、不带 `-i` 的 `perl -e`/`ruby -e` 等语言内写入仍无法识别;`trust-model.md` 与 README 的已知局限登记全部未覆盖写法。默认包 `no-tamper` 增加 4 个示例(3 hit、`git checkout main` miss) | `internal/bashparse/targets.go`、`doc.go`、`targets_test.go`、`testdata/expect.json`、`rules/default.json`、`docs/dsl-semantics.md` §6、`docs/trust-model.md`、`README.md` |
+| git 历史 blob 里还有本机标识(旧取证样本路径片段、uid、旧测试数据的示例家目录),发布清单只有 `git filter-repo --mailmap`(只改作者) | minor | **不改写历史**(需所有者决定):确认 HEAD 干净;§13 发布步骤写明"历史 blob 中残留的本机标识需由仓库所有者决定是否 filter-repo",并给出复核命令与处理选项 | `docs/architecture.md` §13、`docs/ballast-plan.md` |
 
 ### v1.6(2026-10-16,第 3 轮系统审计修复)
 

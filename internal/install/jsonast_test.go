@@ -59,7 +59,9 @@ func TestSerializationPreservesStyle(t *testing.T) {
 		{"four spaces", "{\n    \"a\": 1\n}\n", "{\n    \"a\": 1,\n    \"n\": {\n        \"x\": [\n            1\n        ]\n    }\n}\n"},
 		{"tabs", "{\n\t\"a\": 1\n}", "{\n\t\"a\": 1,\n\t\"n\": {\n\t\t\"x\": [\n\t\t\t1\n\t\t]\n\t}\n}"},
 		{"compact", `{"a":1}`, `{"a":1,"n":{"x":[1]}}`},
-		{"inline spaced", `{ "a": 1 }`, `{"a": 1, "n": {"x": [1]}}`},
+		{"inline spaced", `{ "a": 1 }`, `{ "a": 1, "n": {"x": [1]} }`},
+		{"inline colon space only", `{"a": 1}`, `{"a": 1, "n": {"x": [1]}}`},
+		{"blank lines and no colon space", "{\n  \"a\":1,\n\n  \"b\":2\n}\n", "{\n  \"a\":1,\n\n  \"b\":2,\n  \"n\":{\n    \"x\":[\n      1\n    ]\n  }\n}\n"},
 		{"crlf", "{\r\n  \"a\": 1\r\n}\r\n", "{\r\n  \"a\": 1,\r\n  \"n\": {\r\n    \"x\": [\r\n      1\r\n    ]\r\n  }\r\n}\r\n"},
 		{"empty object grows multi-line", "{}\n", "{\n  \"n\": {\n    \"x\": [\n      1\n    ]\n  }\n}\n"},
 	}
@@ -150,4 +152,52 @@ func FuzzParseJSONDoc(f *testing.F) {
 			}
 		}
 	})
+}
+
+// Whatever is inserted at the end or the front is taken out again without
+// leaving a trace, for any spacing the neighbours use.
+func TestInsertThenRemoveRestoresBytes(t *testing.T) {
+	docs := []string{
+		"{}", "{ }", "{\n}\n", "{\r\n}\r\n", `{"a":1}`, `{ "a" : 1 }`, `{"a": 1, "b": [ 1 , 2 ]}`,
+		"{\n\t\"a\":1,\n\n\t\"b\":{ }\n}\n", "{\r\n  \"a\": [\r\n    1,\r\n    2\r\n  ]\r\n}",
+		"{\n  \"a\": 1 ,\n  \"b\": 2   \n}\n\n", "\xef\xbb\xbf  {\n \"a\": []\n }  ",
+	}
+	for _, d := range docs {
+		for _, front := range []bool{false, true} {
+			doc, err := parseJSONDoc([]byte(d))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if front {
+				doc.root.setFront("zz", newInt(1))
+			} else {
+				doc.root.set("zz", objOf("k", arrOf(newInt(1), newInt(2))))
+			}
+			mid := doc.bytes()
+			if !json.Valid([]byte(strings.TrimPrefix(string(mid), "\xef\xbb\xbf"))) {
+				t.Errorf("%q front=%v: invalid JSON %q", d, front, mid)
+			}
+			doc2, err := parseJSONDoc(mid)
+			if err != nil {
+				t.Fatalf("%q: %v", d, err)
+			}
+			doc2.root.del("zz")
+			if front && len(doc.root.members) == 1 || !front && len(doc.root.members) == 1 {
+				// the root was empty: its text comes back through restoreEmpty
+				doc2.root.restoreEmpty(emptyRaw(mustParseRoot(t, d)))
+			}
+			if got := string(doc2.bytes()); got != d {
+				t.Errorf("%q front=%v: inserted %q, removed %q", d, front, mid, got)
+			}
+		}
+	}
+}
+
+func mustParseRoot(t *testing.T, s string) *jnode {
+	t.Helper()
+	doc, err := parseJSONDoc([]byte(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc.root
 }

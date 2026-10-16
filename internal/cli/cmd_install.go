@@ -40,18 +40,25 @@ func parseClients(vals []string) ([]model.ClientID, error) {
 }
 
 // cursorMDC renders the managed Cursor rules file from the rules currently
-// in effect for the working directory.
-func (a *app) cursorMDC() ([]byte, error) {
+// in effect for the working directory. empty reports that there are none:
+// the file would hold nothing but its front matter.
+func (a *app) cursorMDC() (mdc []byte, empty bool, err error) {
 	req, err := a.loadRequest(model.ClientCursor)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	rs, err := a.loader(true, a.errw).Load(req)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return inject.RenderMDC(rs), nil
+	return inject.RenderMDC(rs), !inject.MDCHasRules(rs), nil
 }
+
+// cursorMDCEmptyWarning: ballast.mdc is rendered when install runs, so rules
+// added later reach Cursor through the hook channel only until install is
+// run again.
+const cursorMDCEmptyWarning = "Cursor 的 ballast.mdc 不含任何规则(当前生效的规则为空)。它在安装时按当时的规则生成、不会自动更新:" +
+	"放入规则(~/.ballast/rules.json 或仓库的 .ballast/rules.json)后,请重新运行 `ballast install --client cursor` 刷新它"
 
 // installExit maps install/uninstall errors to the architecture §7 codes.
 func (a *app) installExit(err error) int {
@@ -125,18 +132,22 @@ func runInstall(a *app, c *command, args []string) int {
 		Layout: a.lay, FS: a.fs, Env: a.env, Clock: a.clock, IDs: a.ids,
 		Clients: clients, Binary: binary, DryRun: dry, CodexTrust: codexTrust, Force: force,
 	}
+	noRules := false
 	for _, cl := range clients {
 		if cl == model.ClientCursor {
-			mdc, err := a.cursorMDC()
+			mdc, empty, err := a.cursorMDC()
 			if err != nil {
 				return a.errorf(ExitInfra, "cannot render the Cursor rules file: %v", err)
 			}
-			opt.MDC = mdc
+			opt.MDC, noRules = mdc, empty
 		}
 	}
 	rep, err := install.Install(opt)
 	if err != nil {
 		return a.installExit(err)
+	}
+	if noRules {
+		rep.Warnings = append(rep.Warnings, cursorMDCEmptyWarning)
 	}
 	a.printInstallReport(rep, "已写入")
 	return ExitOK
@@ -231,7 +242,7 @@ func runDoctor(a *app, c *command, args []string) int {
 	}
 	for _, e := range manifest.Entries {
 		if e.Client == model.ClientCursor {
-			if mdc, err := a.cursorMDC(); err == nil {
+			if mdc, _, err := a.cursorMDC(); err == nil {
 				dopt.MDC = mdc
 			}
 			break

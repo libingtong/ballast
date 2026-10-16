@@ -212,6 +212,12 @@ func Digest(rs *model.CompiledRuleSet) map[string]model.Action {
 // rules file; install uses it (plus the manifest hash) to recognize ownership.
 const MDCMarker = "<!-- ballast-managed: do not edit; regenerate with `ballast install --client cursor` -->"
 
+// MDCHasRules reports whether RenderMDC would carry any rule text; without
+// it the managed file is only a front matter.
+func MDCHasRules(rs *model.CompiledRuleSet) bool {
+	return fullText(rulesFor(rs, model.ClientCursor), rs.Generation, model.BudgetSessionStart) != ""
+}
+
 // RenderMDC renders ~/.cursor/rules/ballast.mdc:
 //
 //	---

@@ -55,9 +55,8 @@ func locateEntry(c model.ClientID, data []byte, path, goos string, rec model.Man
 	if err != nil {
 		return state, err
 	}
-	f := jfmt{unit: doc.unit, eol: doc.eol}
 	t.eachHandler(list, func(l located) bool {
-		if l.node.hash(f) == rec.Hash {
+		if l.node.hash() == rec.Hash {
 			state = entryOK
 			return false
 		}

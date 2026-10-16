@@ -24,7 +24,20 @@ hook、规则文件、状态与证据文件都和 agent 以**同一个用户**�
 - 默认规则 `no-tamper` 检查文件工具和 shell 对 Ballast 规则、状态、证据以及客户端 hook 配置的写入,命中会写入审计。
 - 证据只认 `ballast verify` 写下的退出码与内容快照,不采信输出文本;快照与待提交内容不一致就判为过期。
 - 审计日志记录每次命中与诊断(见 `ballast audit lint`、`ballast stats`)。
-- 这些检测本身也运行在 agent 可触及的环境里:`python -c "open(...).write()"` 之类的语言内写入不会被 shell 解析识别,`mv ~/.ballast/rules.json /tmp/x` 这样把被保护文件"搬走"也不会(`mv` 只有目标算写入目标,见 `docs/pinrule-mapping.md` §2.4),都是已知局限。**不要把 T0 当成安全边界。**
+- 这些检测本身也运行在 agent 可触及的环境里,**识别写入靠的是 shell 命令的静态解析**,所以有下面这些已知局限。**不要把 T0 当成安全边界。**
+
+  **识别的写入**(`bashparse` 写入目标表,契约见 `internal/bashparse/doc.go`、`docs/dsl-semantics.md` §6):重定向 `> >> &> >|`;`tee`;`cp`/`mv`/`install`/`rsync` 的**目标**;`sed -i`;`perl -i`/`ruby -i`(含 `-pi`、`-pi.bak`);`git checkout [<rev>] -- <path>`、`git restore <path>`;`rm`、`truncate`、`dd of=`、`touch`、`ln` 的链接;PowerShell 的 `Set-Content` 等(覆盖面窄于 bash)。
+
+  **未覆盖的写法**(尽力列举,不穷尽;命中不了就不会进审计):
+  1. 语言运行时内部的写入:`python -c "open(...).write()"`、`node -e`、`php -r`、不带 `-i` 的 `perl -e`/`ruby -e`、`lua`/`awk` 程序里的 `print > file`、`jq`/`yq` 的 `-i`、`gawk -i inplace`;
+  2. 先写脚本再执行(`./fix.sh`、`make`、`npm run …`、`python script.py`),或经管道/heredoc 交给解释器(`python <<EOF`、`curl … | sh`、`base64 -d | sh`);
+  3. 其他会改写文件的命令:`patch`、`git apply`、`ed`/`ex`/`vim -es`/`emacs --batch`、`sponge`、`curl -o`/`wget -O`、`tar -x`/`unzip`、`find … -delete`/`-exec`、`xargs` 间接调用、`chmod`/`chattr`;
+  4. 用 git 把工作区回退到别的状态:`git reset --hard`、`git stash`、`git switch`/`git checkout <分支>`、`git merge`/`pull`/`cherry-pick`、`git clean`,以及不带 `--` 的 `git checkout <path>`(与切换分支无法区分);`git restore` 的 `--pathspec-from-file` 也不展开;
+  5. "搬走"与目录级操作:`mv ~/.ballast/rules.json /tmp/x` 的**源**不算写入目标(见 `docs/pinrule-mapping.md` §2.4),`rm -r ~/.ballast`、`cp -r` 到父目录这类目标是目录本身而非受保护文件的写法也不一定命中路径匹配;
+  6. 动态内容:命令词本身是变量或 `eval`(`CommandList.Unknown`,按"不确定"放行并审计)、`sh -c "$CMD"`、递归深度超过 2 层的 `sh -c`;
+  7. 其他通道:MCP 工具、编辑器/IDE 的自带写文件能力、另一个进程(包括 agent 先启动的后台进程)稍后改写。
+
+  这些都只能靠 T1(沙箱的 `denyWrite`、`permissions.deny`)才拦得住。
 
 原生 Windows 上 Claude Code 没有沙箱,因此永远是 T0(**文档依据,未核验,待 M0b**)。
 
@@ -133,7 +146,7 @@ T1 完全依赖客户端的**托管设置**机制。设计中的组成如下(全
 | 项 | T1 期望 | T0 期望 |
 |---|---|---|
 | agent 用 `Edit` / `Write` 改 org 规则、`~/.ballast`、`<repo>/.ballast` | 被拒绝 | 能写入,但被 `no-tamper` 命中并写审计 |
-| agent 用 `echo >`、`sed -i`、`python -c` 写受保护路径 | 沙箱内被拒绝 | `echo >`、`sed -i` 被检测并审计;`python -c` 不被识别 |
+| agent 用 `echo >`、`sed -i`、`perl -pi`、`git checkout -- <path>`、`python -c` 写受保护路径 | 沙箱内被拒绝 | `echo >`、`sed -i`、`perl -pi`、`git checkout -- <path>`/`git restore` 被检测并审计;`python -c`、`node -e` 等语言内写入不被识别(完整清单见 §2.1) |
 | agent 把伪造的 `ballast` 放进 `PATH` | 托管 hook 用绝对路径,不受影响 | 不适用(用户层安装同样用绝对路径) |
 | agent 直接写 evidence 文件 | 沙箱内被拒绝 | 能写入;`verify --check` 仍要求快照一致 |
 | agent 通过 MCP 写受保护路径 | 只能靠白名单收口(残余风险) | 不适用 |

@@ -21,12 +21,23 @@ import (
 //
 // Remove deletes an emptied container only when it was created by Ballast
 // (or when no flag is recorded, the pre-v1.3 behaviour) and otherwise
-// restores the original text. Keys:
+// restores the original text (JSON: the source text of containers that were
+// empty before install; a file that held only whitespace). Keys:
 const (
-	flagJSONHooks       = "json:hooks"   // top-level "hooks" object
-	flagJSONVersion     = "json:version" // Cursor "version": 1 (SetByBallast only)
-	flagYAMLHooks       = "yaml:hooks"   // top-level hooks: header
-	flagYAMLEventPrefix = "yaml:hooks."  // + native event key
+	flagJSONHooks   = "json:hooks"   // top-level "hooks" object
+	flagJSONVersion = "json:version" // Cursor "version": 1 (SetByBallast only)
+	// flagJSONEventPrefix + native event: the event array. Value = its
+	// source text when it existed and was empty ("[]", "[ ]"): uninstall
+	// puts it back instead of deleting it.
+	flagJSONEventPrefix = "json:hooks."
+	// flagJSONRoot: the top-level object existed and was empty; Value = its
+	// source text, restored when uninstall empties it again.
+	flagJSONRoot = "json:root"
+	// flagJSONBlank: the file existed but held only whitespace (usually 0
+	// bytes); Value = its content, restored when nothing else is left.
+	flagJSONBlank       = "json:blank"
+	flagYAMLHooks       = "yaml:hooks"  // top-level hooks: header
+	flagYAMLEventPrefix = "yaml:hooks." // + native event key
 	// flagDirKept: Value = the nearest directory above a file that already
 	// existed when install created the file; uninstall never prunes it or
 	// anything above it (e.g. a user's empty ~/.cursor/rules).

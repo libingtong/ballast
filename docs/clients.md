@@ -122,7 +122,7 @@
 | `afterAgentResponse` | 带 `text`;Ballast 只把它存进会话状态,供后面的 `stop` 规则使用(因为 Cursor 的 stop payload 可能没有 `last_assistant_message`) |
 | 其他 | `transcript_path` 在 sessionStart 时通常为 null;安装后需要 Reload Window |
 
-**托管规则文件**:`~/.cursor/rules/ballast.mdc`(front matter `alwaysApply: true` + 托管标记行 + 全文注入),整文件由 Ballast 托管,卸载时删除。规则变更后需重新运行 `ballast install --client cursor` 刷新;`ballast doctor` 的 `cursor.mdc_current` 检查它是否过期。
+**托管规则文件**:`~/.cursor/rules/ballast.mdc`(front matter `alwaysApply: true` + 托管标记行 + 全文注入),整文件由 Ballast 托管,卸载时删除。它是**安装时按当时生效规则渲染的快照**,不随规则热更新(hook 通道才热更新)。规则变更后需重新运行 `ballast install --client cursor` 刷新(hooks.json 无变化,只重写 mdc);`ballast doctor` 的 `cursor.mdc_current` 检查它是否过期。安装时若当时没有任何生效规则,mdc 只有 front matter,`ballast install --client cursor` 会向 stderr 打印警告("放入规则后重新运行 install")。本版选择"重新安装刷新"这条路径,SessionStart 不做 mdc 过期检测。
 
 ### 4.4 Hermes(三级,尽力支持,全部未核验)
 

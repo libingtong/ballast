@@ -75,18 +75,14 @@ func FuzzJSONHooksPlan(f *testing.F) {
 			if strings.Contains(string(r.After), "ballast") && !strings.Contains(in, "ballast") {
 				t.Fatalf("%s: uninstall left entries: %q", tc.client, r.After)
 			}
-			if !json.Valid(stripBOM(r.After)) {
+			if !json.Valid(stripBOM(r.After)) && strings.TrimSpace(string(stripBOM(r.After))) != "" {
 				t.Fatalf("%s: uninstalled output is not JSON: %q", tc.client, r.After)
 			}
-			// without a pre-existing "hooks" key the original document comes back
-			// (Cursor adds version:1 to files that lack it and keeps it)
-			var root map[string]json.RawMessage
-			if strings.TrimSpace(in) != "" && json.Unmarshal(stripBOM([]byte(in)), &root) == nil {
-				if _, has := root["hooks"]; !has && len(root) > 0 && !(tc.client == model.ClientCursor && root["version"] == nil) {
-					if !sameJSON(t, stripBOM([]byte(in)), stripBOM(r.After)) {
-						t.Fatalf("%s: round trip changed the document:\n%q\n%q", tc.client, in, r.After)
-					}
-				}
+			// install followed by uninstall gives the file back byte for byte
+			// (Cursor keeps the version:1 it added while user hooks remain, §5.3)
+			keptVersion := tc.client == model.ClientCursor && strings.Contains(string(r.After), `"version"`) && !strings.Contains(in, `"version"`)
+			if !strings.Contains(in, "ballast") && !keptVersion && string(r.After) != in {
+				t.Fatalf("%s: round trip changed the file:\n%q\n%q", tc.client, in, r.After)
 			}
 		}
 	})
