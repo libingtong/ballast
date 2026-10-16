@@ -44,11 +44,12 @@
 
 按设计 §7.1「据此修正 adapter/hermes」落地(取证结果支持):
 
+- **`path` 是文件工具的唯一权威键**:Hermes 的 `read_file`/`write_file`/`patch` 处理函数只读 `args["path"]`,不做 schema 校验,多余的 `file_path`/`notebook_path` 被静默忽略。因此 `Targets` 取 `path` 与 `file_path`/`notebook_path` 的并集(`path` 在前,去重),`Edits[].Path` 用 `path`(`path` 缺失时才回退到另两个键)。不再使用 `common.ApplyFile` 的 file_path 优先顺序,避免 `{"path":"~/.ballast/rules.json","file_path":"src/ok.go"}` 让 no-tamper 看不到真实目标。
 - **工具表**:`patch` ⇒ Edit(替换模式取 `path`;V4A 模式取信封里的全部目标,与 `path` 取并集,`path` 在前)。`patch_file`/`edit_file` 走同一路径。`execute_code` 保持原名。其余不变。
 - **补丁解析器**:`internal/adapter/hermes/patch.go` 是 `internal/adapter/codex/patch.go`(该文件最后一次变更的提交 `b084d95cf79af695cbb08d3c91f027ba50f096bf`)的**复制**,复制时仓库提交为 `cee8a4c963ce152a24e8da7b38cb289fa1b21ecc`;`adapter/codex` 与 `adapter/common` 没有改动。相对原版的三处扩展(`testdata/patches.json` 里 20 行原用例保留,仅 1 行按 Hermes 语义改写并在行名里说明,另加 6 行 Hermes 专用):
   1. Hermes 方言 `*** Move File: a -> b`(源与目的都是目标)。
   2. 全文表头扫描:Hermes 自己的路径检查用整段文本的行正则(`tools/file_tools.py` 的 `_V4A_*_HEADER_RE`)收集表头,而它的应用器在第一条严格的 `*** End Patch` 处停止;Codex 版解析器对 `*** End Patchx` 这类相似行也会提前结束,会漏掉后面的目标。扫描把第 0 列出现的任何表头并入目标集(取超集:宁可多报,不能漏报)。
-  3. 空白判定与 Python 一致:Hermes 用 Python 正则(`\*\*\*\s*Update\s+File:\s*(.+)`)识别表头并以 `str.strip()` 处理路径,Python 的 `\s` / `isspace()` 把 U+001C..U+001F 也算空白,Go 的 `strings.Fields`/`TrimSpace` 不算。`patch.go` 的全部空白判定(标记归一化、全文扫描、路径修剪、`Move File` 拆分)统一走 `isPySpace`(`unicode.IsSpace` 加 U+001C..U+001F)。并对第 0 列上「忽略空白、控制符与格式符后像表头、却解析不出路径」的行给出诊断(`looks like a file header`)。已用 Hermes 提交 `9a0a162536` 的 `parse_v4a_patch` 对 4000 条带随机空白/控制字符的表头做差分比对,Python 识别的目标 Go 侧无一遗漏(Go 侧为超集)。
+  3. 空白判定与 Python 一致:Hermes 用 Python 正则(`\*\*\*\s*Update\s+File:\s*(.+)`)识别表头并以 `str.strip()` 处理路径,Python 的 `\s` / `isspace()` 把 U+001C..U+001F 也算空白,Go 的 `strings.Fields`/`TrimSpace` 不算。`patch.go` 的全部空白判定(标记归一化、全文扫描、路径修剪、`Move File` 拆分)统一走 `isPySpace`(`unicode.IsSpace` 加 U+001C..U+001F)。第 0 列上「忽略空白、控制符与格式符后像表头、却解析不出路径」的行只体现在 `NormalizeTool` 返回的错误里(`looks like a file header`);生产路径 `common.FillTools` 目前丢弃该错误,不进审计(Hermes 自己也不把这类行当表头,所以不构成绕过;集成时可由 hook 单元把 normalize 错误记成 diag)。已用 Hermes 提交 `9a0a162536` 的 `parse_v4a_patch` 对 4000 条带随机空白/控制字符的表头做差分比对,Python 识别的目标 Go 侧无一遗漏(Go 侧为超集)。
 - **`pre_verify`**:`NativeEventTable[hermes]` 新增行(`EventStop`,`Install: true`);`hermesCaps` 的 `RuleEvents` 加入 `Stop`,Stop deny 置为支持;`Render` 无需改动(deny ⇒ `{"decision":"block","reason":R}`,warn/ask 在 Stop 上仍不支持)。
 - **Verified**:`NativeEventTable[hermes]` 六行与三个能力单元格(PreToolUse deny、UserPromptSubmit warn、Stop deny)的 `Verified` 置为 `true`;单元格 `Note` 写明「离线核验(hooks test),触发时机未核验」。`evidence_test.go` 要求每个 `Verified` 行都被某个 `pass` 用例的 `events` 覆盖。
 - **lint**:`internal/dsl/lint.go` 只追加警告码 `hermes-stop-continue`(Hermes 上 Stop 的 deny 是续跑,不是阻止停止;受 `agent.max_verify_nudges` 限制,默认 3),判定分支与 Cursor 的 `cursor-stop-followup` 平行。
@@ -156,5 +157,5 @@ Hermes 的 `execute_code`(模型提交的 Python 脚本在 Hermes 的代码执�
 这些改动是设计 §7.1 预先批准的契约变更的必然结果,但落在别的单元的文件里,已做最小修改并在返回说明中列出:
 
 - `internal/model/client.go`、`internal/model/capability.go`:只改 `ClientHermes` 的表项与能力集(§9 明确允许)。
-- `internal/dsl/arbitrate_test.go`、`internal/dsl/decode_test.go`、`internal/dsl/testdata/lint_cases.json`:三个旧用例把「Hermes 没有 Stop」「Hermes 的 UserPromptSubmit warn 未核验」写成了期望;契约变更后这两个前提不再成立。改法:换用 Hermes 上仍不存在的 `SubagentStop` 保留「事件缺失则降级」的覆盖;「未核验」期望改为无诊断。没有删除任何用例或放宽任何断言。
-- `internal/install`(P2-INSTALL 的目录,**未改**)的测试会因为新增 `pre_verify` 行而变红:`TestPlanGolden/hermes_absent` 与另外几个 golden 需要加一个 `pre_verify` 条目,并发测试里的 manifest 条目数 30 ⇒ 31。见返回说明。
+- `internal/dsl/arbitrate_test.go`、`internal/dsl/decode_test.go`、`internal/dsl/testdata/lint_cases.json`:三个旧用例把「Hermes 没有 Stop」「Hermes 的 UserPromptSubmit warn 未核验」写成了期望;契约变更后这两个前提不再成立。改法:换用 Hermes 上仍不存在的 `SubagentStop` 保留「事件缺失则降级」的覆盖;「未核验」期望改为无诊断。没有删除任何用例或放宽任何断言。§9 只列了 `lint.go` 与 `lint_hermes_test.go`,建议集成时在 §9 补记「允许连带更新 dsl 既有测试对 Hermes 能力表的期望」(P2 中没有其他单元改 `internal/dsl`)。
+- `internal/install`(P2-INSTALL 的目录,**未改**)的测试会因为新增 `pre_verify` 行而变红:`TestPlanGolden/hermes_absent` 与另外几个 golden 需要加一个 `pre_verify` 条目,并发测试里的 manifest 条目数 30 ⇒ 31。见返回说明。**合并前置条件**:合并 P2-HERMES 时由 P2-INSTALL(或集成步骤)同批更新 install 的 golden 与条目数,避免 `impl/p2` 出现红测试。

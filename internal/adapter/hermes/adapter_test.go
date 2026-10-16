@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/libingtong/ballast/internal/model"
@@ -93,6 +94,54 @@ func TestNormalizeTool(t *testing.T) {
 			}
 			if tc.check != nil {
 				tc.check(t, got)
+			}
+		})
+	}
+}
+
+// TestPathIsAuthoritative: Hermes' file tools read only args["path"] and
+// ignore other keys, so an agent can send a decoy file_path/notebook_path
+// next to the real path. The real path must stay in Targets (first) and be
+// the Edit path, and a tamper-style path matcher must still fire.
+func TestPathIsAuthoritative(t *testing.T) {
+	const v4a = `*** Begin Patch\n*** Update File: /r/v.go\n+y\n*** End Patch`
+	tests := []struct {
+		raw, in string
+		targets []string
+		edit    *model.FileEdit // expected Edits[0] when non-nil
+	}{
+		{"write_file", `{"path":"~/.ballast/rules.json","file_path":"src/ok.go","content":"c"}`,
+			[]string{"~/.ballast/rules.json", "src/ok.go"}, &model.FileEdit{Path: "~/.ballast/rules.json", NewString: "c"}},
+		{"create_file", `{"path":"~/.ballast/rules.json","file_path":"src/ok.go","notebook_path":"n.ipynb","content":"c"}`,
+			[]string{"~/.ballast/rules.json", "src/ok.go", "n.ipynb"}, &model.FileEdit{Path: "~/.ballast/rules.json", NewString: "c"}},
+		{"patch", `{"path":"~/.ballast/rules.json","file_path":"src/ok.go","old_string":"o","new_string":"n"}`,
+			[]string{"~/.ballast/rules.json", "src/ok.go"}, &model.FileEdit{Path: "~/.ballast/rules.json", OldString: "o", NewString: "n"}},
+		{"patch", `{"mode":"patch","path":"~/.ballast/rules.json","file_path":"src/ok.go","patch":"` + v4a + `"}`,
+			[]string{"~/.ballast/rules.json", "src/ok.go", "/r/v.go"}, &model.FileEdit{Path: "~/.ballast/rules.json"}},
+		{"read_file", `{"path":"~/.ballast/rules.json","file_path":"src/ok.go"}`,
+			[]string{"~/.ballast/rules.json", "src/ok.go"}, nil},
+		// duplicate spellings collapse
+		{"write_file", `{"path":"a.go","file_path":"a.go","content":"c"}`, []string{"a.go"}, &model.FileEdit{Path: "a.go", NewString: "c"}},
+		// without path the other spellings still count (Hermes would reject the call)
+		{"write_file", `{"file_path":"src/ok.go","content":"c"}`, []string{"src/ok.go"}, &model.FileEdit{Path: "src/ok.go", NewString: "c"}},
+		{"patch", `{"file_path":"src/ok.go","old_string":"o","new_string":"n"}`, []string{"src/ok.go"}, &model.FileEdit{Path: "src/ok.go", OldString: "o", NewString: "n"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.raw, func(t *testing.T) {
+			got, err := New().NormalizeTool(tc.raw, json.RawMessage(tc.in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got.Targets, tc.targets) {
+				t.Errorf("targets %v, want %v", got.Targets, tc.targets)
+			}
+			if tc.edit != nil && (len(got.Edits) == 0 || got.Edits[0] != *tc.edit) {
+				t.Errorf("edits %+v, want first %+v", got.Edits, *tc.edit)
+			}
+			if len(tc.targets) > 0 && strings.Contains(tc.targets[0], ".ballast/") {
+				if len(got.Targets) == 0 || got.Targets[0] != tc.targets[0] {
+					t.Errorf("tamper path must lead targets: %v", got.Targets)
+				}
 			}
 		})
 	}

@@ -89,9 +89,39 @@ func (a *Adapter) NormalizeTool(rawName string, input json.RawMessage) (model.To
 	if name == model.ToolBash {
 		common.ApplyShell(&tc, f, model.ShellBash, "command", "cmd")
 	} else {
-		common.ApplyFile(&tc, f, "path")
+		applyFile(&tc, f)
 	}
 	return tc, err
+}
+
+// applyFile fills Targets/Edits for Hermes' file tools. Hermes' handlers
+// (tools/file_tools.py _handle_read_file/_handle_write_file/_handle_patch)
+// read only args["path"] and silently ignore every other key, whereas
+// common.ApplyFile prefers file_path/notebook_path over path. An agent could
+// therefore send {"path":"<protected>","file_path":"<harmless>"} and have
+// Hermes write the protected file while the audit saw the harmless one.
+// Here `path` is authoritative: it comes first in Targets and is the Path of
+// the Edit; file_path / notebook_path are appended as extra targets (union,
+// deduplicated) so that a rule matching either spelling still fires. When
+// `path` is absent Hermes would reject the call; the other spellings are then
+// reported as before.
+func applyFile(tc *model.ToolCall, f common.Fields) {
+	if f.FirstStr("path") == "" {
+		common.ApplyFile(tc, f, "path")
+		return
+	}
+	g := make(common.Fields, len(f))
+	for k, v := range f {
+		if k != "file_path" && k != "notebook_path" {
+			g[k] = v
+		}
+	}
+	common.ApplyFile(tc, g, "path")
+	for _, k := range []string{"file_path", "notebook_path"} {
+		if p := f.FirstStr(k); p != "" && !contains(tc.Targets, p) {
+			tc.Targets = append(tc.Targets, p)
+		}
+	}
 }
 
 // normalizePatchTool maps Hermes' `patch` tool onto Edit. Replace mode
@@ -103,7 +133,7 @@ func (a *Adapter) NormalizeTool(rawName string, input json.RawMessage) (model.To
 // missed ones.
 func normalizePatchTool(rawName string, input json.RawMessage) (model.ToolCall, error) {
 	tc, f, err := common.NewToolCall(rawName, model.ToolEdit, input)
-	common.ApplyFile(&tc, f, "path")
+	applyFile(&tc, f)
 	if len(tc.Edits) == 1 && tc.Edits[0] == (model.FileEdit{}) {
 		tc.Edits = nil // patch mode without path/old/new: nothing to report yet
 	}

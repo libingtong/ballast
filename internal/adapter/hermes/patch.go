@@ -27,7 +27,10 @@ package hermes
 //     as whitespace, which strings.Fields / TrimSpace do not. Every blank
 //     test in this file therefore goes through isPySpace; a line that looks
 //     like a file header once such characters are ignored but cannot be
-//     parsed is reported as a diagnostic instead of vanishing silently.
+//     parsed is reported in the error returned by NormalizeTool only. The
+//     production path (common.FillTools) currently discards that error, so
+//     it does not reach the audit; Hermes itself does not treat such a line
+//     as a header, so nothing is bypassed.
 
 import (
 	"errors"
