@@ -38,6 +38,14 @@ const (
 	flagJSONBlank       = "json:blank"
 	flagYAMLHooks       = "yaml:hooks"  // top-level hooks: header
 	flagYAMLEventPrefix = "yaml:hooks." // + native event key
+	// flagYAMLBlank: the file existed but held only whitespace (usually 0
+	// bytes); Value = its content, restored when nothing else is left.
+	flagYAMLBlank = "yaml:blank"
+	// flagYAMLNoEOL: the file's last line had no line terminator; Value =
+	// that line's text. Install gives the line a newline so it can append
+	// after it; uninstall takes the newline away again when that line is
+	// the last one.
+	flagYAMLNoEOL = "yaml:noeol"
 	// flagDirKept: Value = the nearest directory above a file that already
 	// existed when install created the file; uninstall never prunes it or
 	// anything above it (e.g. a user's empty ~/.cursor/rules).

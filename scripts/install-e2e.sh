@@ -16,6 +16,11 @@
 #   layouts         non-canonical JSON (tabs, CRLF, blank lines, compact, 0 bytes,
 #                   a user's empty event array) keeps every foreign byte and
 #                   round-trips byte for byte
+#                   Hermes config.yaml: 0 bytes, only blank lines and a missing final
+#                   newline come back byte for byte (a 0-byte file is not deleted)
+#   codex hooks     features.hooks = false is warned about on install and written
+#                   back as false on uninstall; an absent key stays the one
+#                   documented residue
 #   broken config   unparsable configuration is refused (3) and never written
 #   backups         at most 10 are kept, and they hold the original bytes
 #   doctor          is happy afterwards
@@ -400,6 +405,51 @@ check_eq "codex: the original text plus the features.hooks switch remain" "$cfg_
 hooks = true"
 check_lacks "codex: and no Ballast text remains" "$cfg_after" "ballast"
 
+section "codex: an explicit features.hooks = false is warned about and restored"
+new_client_sandbox codex
+seed_client codex
+write_file "$SB_HOME/.codex/config.toml" 'model = "gpt"
+
+[features]
+hooks = false # off on purpose
+'
+before="$(mktmp before-hooks-false)"
+snap "$before"
+install_c codex
+expect_rc "codex/hooks=false: install" 0
+expect_err_has "codex/hooks=false: stderr warns that the switch was explicitly false" "features.hooks was explicitly false"
+check_contains "codex/hooks=false: the switch is on while installed" "$(cat "$SB_HOME/.codex/config.toml")" "hooks = true # off on purpose"
+install_c codex
+expect_rc "codex/hooks=false: a second install" 0
+expect_err_lacks "codex/hooks=false: and does not warn again" "explicitly false"
+bl uninstall --client codex
+expect_rc "codex/hooks=false: uninstall" 0
+after="$(mktmp after-hooks-false)"
+snap "$after"
+same_tree "codex/hooks=false: uninstall restores the explicit false (empty diff, no residue)" "$before" "$after"
+check_contains "codex/hooks=false: config.toml says false again" "$(cat "$SB_HOME/.codex/config.toml")" "hooks = false # off on purpose"
+# --codex-trust takes the same way back.
+install_c codex --codex-trust
+expect_rc "codex/hooks=false: install --codex-trust" 0
+bl uninstall --client codex
+expect_rc "codex/hooks=false: uninstall after --codex-trust" 0
+snap "$after"
+same_tree "codex/hooks=false: the trust round trip restores it as well" "$before" "$after"
+
+section "codex: features.hooks = true already on is left alone and not warned about"
+new_client_sandbox codex
+seed_client codex
+before="$(mktmp before-hooks-true)"
+snap "$before"
+install_c codex
+expect_rc "codex/hooks=true: install" 0
+expect_err_lacks "codex/hooks=true: no warning" "explicitly false"
+bl uninstall --client codex
+expect_rc "codex/hooks=true: uninstall" 0
+after="$(mktmp after-hooks-true)"
+snap "$after"
+same_tree "codex/hooks=true: empty diff" "$before" "$after"
+
 section "cursor: the managed ballast.mdc"
 new_client_sandbox cursor
 seed_client cursor
@@ -462,6 +512,24 @@ for c in claude-code codex cursor; do
   layout_case "$c" users-empty-event "{${ver}\"hooks\":{\"$ev\":[]}}" "\"$ev\":["
   layout_case "$c" inline-hooks-in-multiline-root $'{\n  "theme":"dark",\n  "hooks": {"Other":[]}\n}' $'"theme":"dark",\n  "hooks": {"Other":[],'
 done
+
+section "hermes config.yaml layouts: 0 bytes and a missing final newline come back byte for byte"
+layout_case hermes zero-bytes ''
+layout_case hermes blank-lines-only $'\n\n'
+layout_case hermes no-final-newline 'model: x' 'model: x'
+layout_case hermes no-final-newline-crlf $'model: x\r\nterminal:\r\n  a: 1' $'model: x\r\nterminal:\r\n  a: 1'
+layout_case hermes hooks-at-end-no-newline $'a: 1\nhooks:\n  pre_tool_call:\n    - command: "/usr/bin/true"' $'    - command: "/usr/bin/true"\n'
+layout_case hermes empty-hooks-flow-no-newline $'a: 1\nhooks: {}' 'a: 1'
+layout_case hermes comment-last-no-newline $'model: x\n# end' 'model: x'
+# A 0-byte config.yaml is a file that existed: uninstall must not delete it.
+new_client_sandbox hermes
+write_file "$(cfg_file hermes)" ''
+install_c hermes
+bl uninstall --client hermes
+expect_rc "hermes/zero-bytes: uninstall" 0
+check_file "hermes/zero-bytes: the user's empty config.yaml is still there" "$(cfg_file hermes)"
+check_eq "hermes/zero-bytes: and still empty" "$(wc -c <"$(cfg_file hermes)" | tr -d ' ')" "0"
+check_lacks "hermes/zero-bytes: uninstall does not claim to have deleted it" "$BL_OUT$BL_ERR" "deleted"
 
 section "all four clients at once"
 new_client_sandbox all

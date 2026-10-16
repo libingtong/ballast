@@ -61,7 +61,14 @@ func TestFeaturesHooks(t *testing.T) {
 				f = &p.Flags[i]
 			}
 		}
-		if f == nil || f.SetByBallast != c.setByUs || f.Value != "true" || f.Client != model.ClientCodex || f.File != gCodexC {
+		wantOrig := "absent"
+		switch {
+		case !c.setByUs:
+			wantOrig = "true"
+		case c.name == "false flips" || c.name == "dotted false":
+			wantOrig = "false"
+		}
+		if f == nil || f.SetByBallast != c.setByUs || f.Value != wantOrig || f.Client != model.ClientCodex || f.File != gCodexC {
 			t.Errorf("%s: flag = %+v, want SetByBallast=%v", c.name, f, c.setByUs)
 		}
 		// idempotent
@@ -70,8 +77,8 @@ func TestFeaturesHooks(t *testing.T) {
 			t.Errorf("%s: not idempotent", c.name)
 		}
 		for i := range p2.Flags {
-			if p2.Flags[i].Key == "features.hooks" && p2.Flags[i].SetByBallast != c.setByUs {
-				t.Errorf("%s: SetByBallast must survive a second install (got %v)", c.name, p2.Flags[i].SetByBallast)
+			if p2.Flags[i].Key == "features.hooks" && (p2.Flags[i].SetByBallast != c.setByUs || p2.Flags[i].Value != wantOrig) {
+				t.Errorf("%s: the original value must survive a second install (got %+v)", c.name, p2.Flags[i])
 			}
 		}
 	}
@@ -375,5 +382,134 @@ func TestConfigRemoveLeavesFeaturesAndIsLossless(t *testing.T) {
 	}
 	if r.Changed() {
 		t.Error("nothing to remove")
+	}
+}
+
+func featuresFlag(p *PlanResult) *model.ManagedFlag {
+	for i := range p.Flags {
+		if p.Flags[i].Key == flagFeaturesHooks {
+			return &p.Flags[i]
+		}
+	}
+	return nil
+}
+
+// An explicit features.hooks = false is turned on with a warning, and
+// uninstall puts the false back; an absent key stays on (the documented
+// exception) and an already-true key is untouched.
+func TestFeaturesHooksOriginalValueRoundTrip(t *testing.T) {
+	cases := []struct {
+		name, in, wantUninstall string
+		orig                    string
+		warn                    bool
+	}{
+		{"table false", "[features]\nhooks = false\n", "[features]\nhooks = false\n", "false", true},
+		{"table false with comment", "model = 1\n[features]\nfoo = 1\nhooks = false # off on purpose\n[tui]\nx = 1\n",
+			"model = 1\n[features]\nfoo = 1\nhooks = false # off on purpose\n[tui]\nx = 1\n", "false", true},
+		{"dotted false", "features.hooks = false\nmodel = 1\n", "features.hooks = false\nmodel = 1\n", "false", true},
+		{"crlf false", "[features]\r\nhooks = false\r\n", "[features]\r\nhooks = false\r\n", "false", true},
+		{"absent stays on", "model = 1\n", "model = 1\n\n[features]\nhooks = true\n", "absent", false},
+		{"features without hooks stays on", "[features]\nfoo = 1\n", "[features]\nhooks = true\nfoo = 1\n", "absent", false},
+		{"true untouched", "[features]\nhooks = true\n", "[features]\nhooks = true\n", "true", false},
+	}
+	for _, c := range cases {
+		tg := gCodexCT()
+		p, err := tg.Plan([]byte(c.in), gspec(model.ClientCodex), nil)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if f := featuresFlag(p); f == nil || f.Value != c.orig || f.SetByBallast != (c.orig != "true") {
+			t.Errorf("%s: flag = %+v", c.name, f)
+		}
+		warned := false
+		for _, w := range p.Warnings {
+			warned = warned || strings.Contains(w, "features.hooks was explicitly false")
+		}
+		if warned != c.warn {
+			t.Errorf("%s: warnings = %q, want warning=%v", c.name, p.Warnings, c.warn)
+		}
+		if !strings.Contains(string(p.After), "true") {
+			t.Errorf("%s: not switched on: %q", c.name, p.After)
+		}
+		// Re-install on the installed file: no new warning, original kept.
+		m := manifestFrom(gBinary, p)
+		p2, err := tg.Plan(p.After, gspec(model.ClientCodex), m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f := featuresFlag(p2); f == nil || f.Value != c.orig {
+			t.Errorf("%s: re-install flag = %+v", c.name, f)
+		}
+		if len(p2.Warnings) != 0 {
+			t.Errorf("%s: re-install warned: %q", c.name, p2.Warnings)
+		}
+		r, err := tg.Remove(p2.After, manifestFrom(gBinary, p2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(r.After) != c.wantUninstall {
+			t.Errorf("%s: after uninstall\n got %q\nwant %q", c.name, r.After, c.wantUninstall)
+		}
+	}
+}
+
+// The user changed the switch between install and uninstall: their value
+// wins, nothing is forced back.
+func TestFeaturesHooksFalseNotRestoredOverUserEdit(t *testing.T) {
+	tg := gCodexCT()
+	p, err := tg.Plan([]byte("[features]\nhooks = false\n"), gspec(model.ClientCodex), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := manifestFrom(gBinary, p)
+	for name, edited := range map[string]string{
+		"key removed": "[features]\n",
+		"user header": "[features]\nmodel = 1\n",
+	} {
+		r, err := tg.Remove([]byte(edited), m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(r.After) != edited {
+			t.Errorf("%s: got %q want %q", name, r.After, edited)
+		}
+	}
+}
+
+// A manifest from before the original value was recorded (Value "true",
+// set_by_ballast) is the old behaviour: left on, no warning.
+func TestFeaturesHooksLegacyFlag(t *testing.T) {
+	tg := gCodexCT()
+	m := &model.InstallManifest{Flags: []model.ManagedFlag{{Client: model.ClientCodex, File: gCodexC, Key: flagFeaturesHooks, Value: "true", SetByBallast: true}}}
+	cur := "[features]\nhooks = true\n"
+	p, err := tg.Plan([]byte(cur), gspec(model.ClientCodex), m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := featuresFlag(p); f == nil || f.Value != "absent" || !f.SetByBallast {
+		t.Errorf("legacy flag renewed as %+v", f)
+	}
+	r, err := tg.Remove([]byte(cur), m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(r.After) != cur {
+		t.Errorf("legacy uninstall: %q", r.After)
+	}
+}
+
+// With --codex-trust the trust tables go and an original false comes back.
+func TestFeaturesHooksFalseWithTrust(t *testing.T) {
+	hp, cp := trustInstall(t, absent, "[features]\nhooks = false\n", nil)
+	if f := featuresFlag(cp); f == nil || f.Value != "false" {
+		t.Fatalf("flag = %+v", f)
+	}
+	m := manifestFrom(gBinary, hp, cp)
+	r, err := gCodexCT().Remove(cp.After, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(r.After) != "[features]\nhooks = false\n" {
+		t.Errorf("after uninstall:\n%s", r.After)
 	}
 }

@@ -1,6 +1,6 @@
 # Ballast 架构与接口契约(冻结版 v1.5)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -255,7 +255,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 - 托管层(Claude managed settings)已部署 Ballast 时拒绝用户层安装(A15)。
 - 不在 `init` 时自动安装;不按子串识别;不绑定解释器;备份轮转。
 - **JSON 逐字节外科式**(v1.7):`internal/install/jsonast.go` 保留源文本的每一个字节(节点原文、成员前后的空白与空行、冒号两侧的空格、空容器内部、文档首尾)。安装只**插入**自己的条目,新成员的分隔符取自相邻成员(空行不复制;缩进、tab、CRLF、`"k":v` 紧凑写法、无末尾换行都沿用文档);卸载只**删除**自己插入的部分,所以 install → uninstall 与原文件逐字节相同。此前"整个脏容器按缩进单位重排"会吃掉兄弟成员间的空行、改写 `"k":"v"`,已修正。往返属性测试 `internal/install/jsonroundtrip_test.go`(对 Claude settings.json、Codex hooks.json、Cursor hooks.json 各 204 种布局(48 种手写 + 156 种组合))与 `scripts/install-e2e.sh` 的非规范格式夹具钉住这一点。
-- **结构标记**(v1.3):安装时在 `ManagedFlag` 中记录被填充的容器(JSON `hooks` 对象、Hermes `hooks:` 表头与各事件键)原本是否存在及其原文,以及新建文件上方最近的已存在目录;卸载只删除 Ballast 创建的空容器,还原用户原有的空 `hooks` 对象、`hooks: {}`/`hooks: # 注释` 表头与 `pre_tool_call: []`,目录只清理到安装前已存在的那一层(`--force` 新建的客户端根目录一并清理)。键名见 `internal/install/doc.go`。v1.7 补全 JSON 侧:`json:hooks.<event>`(事件数组,原本为空时 `Value` 为其原文,卸载按原文保留,与 `yaml:hooks.<event>` 对齐)、`json:root`(顶层对象原本为空时的原文)、`json:blank`(文件存在但只含空白,含 0 字节;卸载后回到原内容)。缺少这些标记的旧 manifest 沿用旧行为(空事件数组删除)。
+- **结构标记**(v1.3):安装时在 `ManagedFlag` 中记录被填充的容器(JSON `hooks` 对象、Hermes `hooks:` 表头与各事件键)原本是否存在及其原文,以及新建文件上方最近的已存在目录;卸载只删除 Ballast 创建的空容器,还原用户原有的空 `hooks` 对象、`hooks: {}`/`hooks: # 注释` 表头与 `pre_tool_call: []`,目录只清理到安装前已存在的那一层(`--force` 新建的客户端根目录一并清理)。键名见 `internal/install/doc.go`。v1.7 补全 JSON 侧:`json:hooks.<event>`(事件数组,原本为空时 `Value` 为其原文,卸载按原文保留,与 `yaml:hooks.<event>` 对齐)、`json:root`(顶层对象原本为空时的原文)、`json:blank`(文件存在但只含空白,含 0 字节;卸载后回到原内容)。缺少这些标记的旧 manifest 沿用旧行为(空事件数组删除)。v1.8 补全 YAML 侧:`yaml:blank`(Hermes `config.yaml` 存在但只含空白,含 0 字节;`Value` = 原内容,卸载后文档只剩空白就写回原内容,文件不被当作 install 新建的而删除)、`yaml:noeol`(原文件最后一行没有换行;`Value` = 那一行的原文,卸载后若最后一行仍是它,就去掉安装时补上的换行)。
 
 ### 5.1 Claude Code
 
@@ -277,7 +277,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 ### 5.2 Codex
 
 - `<CODEX_HOME>/hooks.json`:`{"hooks":{"<Event>":[{"hooks":[{"type":"command","command":"<quoted argv>","timeout":30}]}]}}`,不带 matcher;6 个原生事件。
-- `<CODEX_HOME>/config.toml`:确保 `[features]` 下 `hooks = true`(按行外科式编辑,原子写);manifest 记 `ManagedFlag{set_by_ballast}`;卸载**不自动关闭**,只提示。
+- `<CODEX_HOME>/config.toml`:确保 `[features]` 下 `hooks = true`(按行外科式编辑,原子写);manifest 记 `ManagedFlag{key:"features.hooks"}`,`Value` 为安装前的原值(v1.8):`absent`(没有该键)、`false`(显式关闭)、`true`(原本就开着),`set_by_ballast` 在前两种为真。原值为显式 `false` 时,安装改成 `true` 之前先向 stderr 警告(开启后 `hooks.json` 里别的工具的 hook 也会跟着生效),卸载**恢复成 `false`**(只在当前值仍是安装写入的 `true` 时;用户已改过则不动)。原值为 `absent` 时**不自动关闭**,只提示(见 §13 的已登记例外)。v1.8 之前的 manifest 是 `Value:"true"` + `set_by_ballast`,按 `absent` 处理。
 - **trust 默认不写**。仅 `--codex-trust` 时写 `[hooks.state.'<hooks.json 绝对路径>:<snake_event>:<组下标>:<条目下标>']`、`enabled = true`、`trusted_hash = "sha256:…"`(`install.CodexTrustHash`,算法照搬 pinrule 引用的 Codex 0.130 源码【未核验于其他版本】);记入 manifest,卸载删除。因 key 含下标,每次写入后按最终位置重算。
 - 提示:hook 仅在交互式 TUI 触发(pinrule 观察【未核验】)。
 
@@ -512,7 +512,7 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 | shell 读取目标 | `CommandNode.Reads`(bashparse/psparse 提取),Bash/PowerShell 的 PostToolUse 把非动态目标并入已读集合 | Codex 没有 Read 工具;否则 `read-before-edit` 在 Codex 上对每个已存在文件的 `apply_patch` 都命中(审核 major 1) |
 | `verify --check` 与 `GIT_INDEX_FILE` | 热路径忽略;`--check --commit` 由 CLI 读取并经 `CheckOptions.IndexFile` 传入 | pre-commit 阶段 git 指向将要提交的索引,`commit -a`/带路径提交才能判对(审核 major 2) |
 | ConfigChange 审计 hook(计划 M4 内容列) | 归入 P2,本期不实现,也不在安装事件列表中 | M0a 没抓过该事件的 payload(字段【未核验】);T0 下 `no-tamper` 已能检测对 settings 的改写,ConfigChange 只是更晚的第二信号;补抓 payload 后再做(计划 v0.4 变更 §4) |
-| 卸载不关闭 `[features] hooks = true`(§5.2) | 维持;计划 M4"往返 diff 为空"改为"除 `features.hooks` 外为空",`install-e2e.sh` 对"原文件没有 hooks 键"的夹具显式断言该残留 | 同一 `hooks.json` 里可能有别的工具的 hook 依赖该开关,关掉会静默失效;manifest 里的 `set_by_ballast` 只用于提示 |
+| 卸载不关闭 `[features] hooks = true`(§5.2) | 维持,**仅限原文件没有该键(`absent`)**;原值为显式 `false` 的,安装前警告、卸载恢复 `false`(v1.8,见 §14);计划 M4"往返 diff 为空"改为"除 `features.hooks` 外为空",`install-e2e.sh` 对"原文件没有 hooks 键"的夹具显式断言该残留 | 同一 `hooks.json` 里可能有别的工具的 hook 依赖该开关,关掉会静默失效;manifest 里的 `set_by_ballast` 只用于提示。用户显式写了 `false` 则相反:卸载后保持 `true` 会把用户原本关掉的其他 hook 静默打开,所以那种情况要恢复 |
 | 提交作者邮箱 | 发布前由仓库所有者决定是否改写历史(`git filter-repo --mailmap` → noreply 邮箱,并设置仓库级 `user.email`) | 历史里的工作邮箱公开后无法撤回;发布动作不由实现任务代做 |
 | 历史 blob 中的本机标识(v1.7) | **历史 blob 中残留的本机标识需由仓库所有者决定是否 `git filter-repo`**(`--replace-text` 替换用户名、`claude-<uid>`、家目录下的项目路径等;或发布前 squash 历史)。HEAD 内容已干净(卡点:`git grep` 对这些模式为 0,`dist/` 已被忽略),但早期提交的 blob 仍含取证样本里的旧路径片段和旧测试数据里的示例家目录。**发布步骤**:① 在干净克隆里 `git log -p --all \| grep -E '<用户名>\|claude-[0-9]+\|家目录下的项目路径'` 复核;② 所有者决定改写则先 `git filter-repo --replace-text`(需要同时 `--mailmap` 处理作者邮箱),再重复 ① 直到为 0;③ 不改写则在发布说明里承认历史保留这些标识。实现任务**不改写历史** | 改写历史会改变所有提交 id、使既有分支与审计引用失效,且公开后无法撤回,必须由所有者决定;发布动作不由实现任务代做 |
 | `git add && git commit` 同一命令 | 不并入 commit 形式,列为已知局限并在 message 中提示 | 模拟前序节点副作用会让 FreshQuery 依赖整条 CommandList,收益小、风险大 |
@@ -520,6 +520,13 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 ---
 
 ## 14. 修订记录
+
+### v1.8(2026-10-16,第 5 轮系统审计 minor 修复)
+
+| 审计项 | 级别 | 处理 | 涉及文件 |
+|---|---|---|---|
+| Hermes `config.yaml` 往返不逐字节:原本存在的 0 字节文件 install 再 uninstall 后被删除;没有末尾换行的文件被补上换行 | minor | 新增 `yaml:blank`(文件只含空白,含 0 字节:`Value` = 原内容,不当作新建文件,卸载写回原内容)与 `yaml:noeol`(最后一行没有换行:`Value` = 该行原文,卸载时若最后一行仍是它就去掉补上的换行);`yamlDoc.bytes()` 对空文档返回非 nil,避免空结果被当成"删除文件" | `internal/install/hermes.go`、`yaml.go`、`structflags.go`、`scripts/install-e2e.sh` |
+| Codex `features.hooks` 原值为显式 `false` 时,安装静默改成 `true`,卸载也不改回,用户原本关掉的其他 hook 被静默打开 | minor | `features.hooks` 标记的 `Value` 记原值(`absent`/`false`/`true`);原值为 `false` 时安装先向 stderr 警告,卸载恢复 `false`(当前值仍是安装写入的 `true` 才恢复);`absent` 维持 §13 已登记的例外;旧 manifest(`Value:"true"` + `set_by_ballast`)按 `absent` 处理 | `internal/install/codex.go`、`run.go`、`scripts/install-e2e.sh`、README、`docs/clients.md` |
 
 ### v1.7(2026-10-16,第 4 轮系统审计修复)
 

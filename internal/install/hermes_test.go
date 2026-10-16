@@ -43,6 +43,18 @@ func TestHermesRoundTrip(t *testing.T) {
 		"block scalar mention":   "terminal:\n  shell: |\n    hooks:\n      pretend\nmodel: x\n",
 		"anchors elsewhere":      "base: &b\n  x: 1\nother:\n  <<: *b\n",
 		"multi-line string":      "prompt: >\n  line one\n  line two\nmodel: x\n",
+		"zero bytes":             "",
+		"whitespace only":        "   \n",
+		"whitespace no eol":      "  ",
+		"bom only":               "\xef\xbb\xbf",
+		"no final newline":       "model: x",
+		"no final newline crlf":  "model: x\r\nterminal:\r\n  a: 1",
+		"no eol hooks at end":    "a: 1\nhooks:\n  pre_tool_call:\n    - command: \"x\"",
+		"no eol bare header":     "hooks:",
+		"no eol header comment":  "a: 1\nhooks: # none",
+		"no eol inline empty":    "a: 1\nhooks: {}",
+		"no eol empty event":     "hooks:\n  pre_tool_call: []",
+		"no eol comment last":    "model: x\n# end",
 	}
 	for name, orig := range cases {
 		installed, r := hermesRoundTrip(t, orig)
@@ -50,9 +62,6 @@ func TestHermesRoundTrip(t *testing.T) {
 			t.Errorf("%s: nothing installed", name)
 		}
 		if r.After == nil || string(r.After) != orig {
-			if orig == "" && r.After == nil {
-				continue
-			}
 			t.Errorf("%s: round trip changed the file\n--- want\n%q\n--- got\n%q", name, orig, r.After)
 		}
 		// everything outside the hooks block is byte-identical after install
@@ -426,4 +435,136 @@ func FuzzHermesPlan(f *testing.F) {
 			t.Fatalf("uninstall left our entries: %q", r.After)
 		}
 	})
+}
+
+// A 0-byte config.yaml that existed before install is not a file install
+// created: uninstall gives it back as a 0-byte file instead of deleting it
+// (finding: yaml:blank).
+func TestHermesBlankFileIsRestored(t *testing.T) {
+	for _, in := range []string{"", "\n", " \t\r\n", "  ", "\xef\xbb\xbf"} {
+		tg := gHermesT()
+		p, err := tg.Plan([]byte(in), gspec(model.ClientHermes), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Created {
+			t.Errorf("%q: an existing blank file must not be Created", in)
+		}
+		var blank *model.ManagedFlag
+		for i := range p.Flags {
+			if p.Flags[i].Key == flagYAMLBlank {
+				blank = &p.Flags[i]
+			}
+		}
+		if blank == nil || blank.Value != in || blank.SetByBallast {
+			t.Errorf("%q: yaml:blank flag = %+v", in, blank)
+		}
+		if len(p.Files) != 1 || p.Files[0].Created {
+			t.Errorf("%q: file record = %+v", in, p.Files)
+		}
+		// a second install keeps the original content on record
+		p2, err := tg.Plan(p.After, gspec(model.ClientHermes), manifestFrom(gBinary, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := tg.Remove(p2.After, manifestFrom(gBinary, p2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.After == nil || string(r.After) != in {
+			t.Errorf("%q: restored as %q (nil=%v)", in, r.After, r.After == nil)
+		}
+		if len(r.Flags) != 0 || len(r.Entries) != 0 {
+			t.Errorf("%q: leftovers after uninstall: %+v %+v", in, r.Flags, r.Entries)
+		}
+	}
+	// A file that Ballast created is still deleted, and records neither flag.
+	p, err := gHermesT().Plan(nil, gspec(model.ClientHermes), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range p.Flags {
+		if f.Key == flagYAMLBlank || f.Key == flagYAMLNoEOL {
+			t.Errorf("created file recorded %s", f.Key)
+		}
+	}
+}
+
+// A last line without a newline gets one for the install; uninstall takes
+// it away again, but only while that line is still the last one.
+func TestHermesNoEOLFlag(t *testing.T) {
+	tg := gHermesT()
+	orig := "a: 1\nhooks:\n  pre_tool_call:\n    - command: \"x\""
+	p, err := tg.Plan([]byte(orig), gspec(model.ClientHermes), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f *model.ManagedFlag
+	for i := range p.Flags {
+		if p.Flags[i].Key == flagYAMLNoEOL {
+			f = &p.Flags[i]
+		}
+	}
+	if f == nil || f.Value != `    - command: "x"` {
+		t.Fatalf("yaml:noeol flag = %+v", f)
+	}
+	if !strings.HasSuffix(string(p.After), "\n") {
+		t.Errorf("installed file lacks a final newline: %q", p.After)
+	}
+	// The record survives a re-install.
+	p2, err := tg.Plan(p.After, gspec(model.ClientHermes), manifestFrom(gBinary, p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := tg.Remove(p2.After, manifestFrom(gBinary, p2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(r.After) != orig {
+		t.Errorf("round trip: got %q", r.After)
+	}
+	// The user appended a line after install: it keeps its own newline.
+	edited := string(p.After) + "tail: 1\n"
+	r, err = tg.Remove([]byte(edited), manifestFrom(gBinary, p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := orig + "\ntail: 1\n"; string(r.After) != want {
+		t.Errorf("edited: got %q want %q", r.After, want)
+	}
+	// A file that ends with a newline records no such flag.
+	p, err = tg.Plan([]byte("a: 1\n"), gspec(model.ClientHermes), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fl := range p.Flags {
+		if fl.Key == flagYAMLNoEOL {
+			t.Error("yaml:noeol recorded for a file that ends with a newline")
+		}
+	}
+}
+
+// Without the new flags (a manifest written before they existed) uninstall
+// behaves as it did: nothing is stripped, nothing is restored.
+func TestHermesLegacyManifestNoShapeFlags(t *testing.T) {
+	tg := gHermesT()
+	p, err := tg.Plan([]byte("model: x"), gspec(model.ClientHermes), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := manifestFrom(gBinary, p)
+	kept := m.Flags[:0]
+	for _, f := range m.Flags {
+		if f.Key != flagYAMLNoEOL {
+			kept = append(kept, f)
+		}
+	}
+	m.Flags = kept
+	r, err := tg.Remove(p.After, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(r.After) != "model: x\n" {
+		t.Errorf("got %q", r.After)
+	}
 }

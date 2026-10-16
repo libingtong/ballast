@@ -1,6 +1,7 @@
 package install
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"runtime"
@@ -78,6 +79,7 @@ func (t *hermesTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManifest
 		hdrText = doc.lines[orig.hdr].text
 	}
 	noteStruct(sf, model.ClientHermes, t.path, flagYAMLHooks, orig.hdr >= 0, len(recs) > 0, hdrText)
+	t.noteFileShape(sf, cur, doc)
 	for _, ne := range events {
 		e := orig.event(ne.Native)
 		text := ""
@@ -168,6 +170,27 @@ func (t *hermesTarget) Plan(cur []byte, spec EntrySpec, m *model.InstallManifest
 	res.Files = []model.ManagedFile{{Client: model.ClientHermes, Path: t.path, Hash: sha256Hex(res.After), Created: res.Created}}
 	res.Flags = flagList(sf)
 	return res, nil
+}
+
+// noteFileShape records what the file looked like when install first
+// touched it: only whitespace (flagYAMLBlank, usually 0 bytes), or a last
+// line without a line terminator (flagYAMLNoEOL). It reads doc before any
+// edit; a flag recorded by an earlier install is kept.
+func (t *hermesTarget) noteFileShape(sf map[string]model.ManagedFlag, cur []byte, doc *yamlDoc) {
+	if cur == nil {
+		return // install creates the file; nothing to give back
+	}
+	if len(bytes.TrimSpace(bytes.TrimPrefix(cur, []byte("\xef\xbb\xbf")))) == 0 {
+		if _, ok := sf[flagYAMLBlank]; !ok {
+			sf[flagYAMLBlank] = model.ManagedFlag{Client: model.ClientHermes, File: t.path, Key: flagYAMLBlank, Value: string(cur)}
+		}
+		return
+	}
+	if n := len(doc.lines); n > 0 && doc.lines[n-1].eol == "" {
+		if _, ok := sf[flagYAMLNoEOL]; !ok {
+			sf[flagYAMLNoEOL] = model.ManagedFlag{Client: model.ClientHermes, File: t.path, Key: flagYAMLNoEOL, Value: doc.lines[n-1].text}
+		}
+	}
 }
 
 func (t *hermesTarget) addItem(doc *yamlDoc, sec *ySection, ev *yEvent, native, cmd string) {
@@ -278,6 +301,13 @@ func (t *hermesTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanResult
 	}
 	if prior != nil && prior.Created && doc.isBlankDoc() {
 		return res, nil // After == nil: delete
+	}
+	if f, ok := sf[flagYAMLBlank]; ok && len(res.Entries) == 0 && doc.isBlankDoc() {
+		res.After = []byte(f.Value) // the file held nothing but whitespace (also 0 bytes)
+		return res, nil
+	}
+	if f, ok := sf[flagYAMLNoEOL]; ok {
+		doc.dropFinalEOL(f.Value)
 	}
 	res.After = doc.bytes()
 	return res, nil

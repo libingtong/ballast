@@ -87,7 +87,7 @@
 
 **原生事件**(6 个,均未核验):SessionStart、UserPromptSubmit、PreToolUse、**PermissionRequest→PreToolUse**、PostToolUse、Stop。没有 PostToolUseFailure、SubagentStop、compact 事件。
 
-**条目格式**:`{"hooks":[{"type":"command","command":"<带引号的整条命令>","timeout":30}]}`,不带 matcher;写入 `hooks.json`,并在 `config.toml` 确保 `[features]` 下 `hooks = true`。
+**条目格式**:`{"hooks":[{"type":"command","command":"<带引号的整条命令>","timeout":30}]}`,不带 matcher;写入 `hooks.json`,并在 `config.toml` 确保 `[features]` 下 `hooks = true`。manifest 记下该开关的原值(`absent` / `false` / `true`):原本没有这个键时,卸载后保留 `hooks = true`(登记的例外);原值为显式 `false` 时,安装改成 `true` 之前先向 stderr 警告,卸载恢复成 `false`。
 
 **需要的额外步骤**:hook 默认处于未受信状态,要在 Codex TUI 里用 `/hooks` 批准;或显式 `ballast install --client codex --codex-trust` 由 Ballast 写入 trust 哈希(算法照搬 pinrule 引用的 Codex 0.130 源码,**未核验于其他版本**;key 含条目下标,所以每次写入后都会按最终位置重算)。
 
@@ -137,7 +137,7 @@ hooks:
       timeout: 30
 ```
 
-Ballast 不依赖 YAML 库,按行外科式编辑,**只认块状 YAML**;`hooks:` 段用 flow 风格或锚点时拒绝写入。需要用户以 `--accept-hooks` 启动 Hermes 表示同意。
+Ballast 不依赖 YAML 库,按行外科式编辑,**只认块状 YAML**;`hooks:` 段用 flow 风格或锚点时拒绝写入。段外字节原样保留,往返逐字节一致,包括 0 字节文件(不会被当作新建文件删除)和没有末尾换行的文件(`yaml:blank`、`yaml:noeol` 标记)。需要用户以 `--accept-hooks` 启动 Hermes 表示同意。
 
 **payload / 协议假设**(来自 pinrule,未核验):
 

@@ -8,8 +8,20 @@ import (
 	"github.com/libingtong/ballast/internal/model"
 )
 
+// features.hooks flag (contract v1.8): Value = the switch as install found
+// it, so uninstall can tell "never written" from "written false".
+//
+//	"absent"  no features.hooks key        SetByBallast=true, stays on (documented exception)
+//	"false"   an explicit false            SetByBallast=true, restored to false on uninstall
+//	"true"    already on                   SetByBallast=false, untouched
+//
+// A manifest from before v1.8 holds Value "true" with SetByBallast=true; it
+// reads as "absent" (the old behaviour: left enabled).
 const (
 	flagFeaturesHooks = "features.hooks"
+	featuresAbsent    = "absent"
+	featuresFalse     = "false"
+	featuresTrue      = "true"
 	trustKeyPrefix    = "hooks.state."
 )
 
@@ -326,24 +338,46 @@ func (t *codexConfigTarget) planWith(cur []byte, spec EntrySpec, m *model.Instal
 		res.Created = true
 	}
 
-	prevFeature := false
+	var prevFeature *model.ManagedFlag
 	var prevTrust []model.ManagedFlag
 	for _, fl := range flagsFor(m, model.ClientCodex, t.path) {
 		switch {
 		case fl.Key == flagFeaturesHooks:
-			prevFeature = fl.SetByBallast
+			fl := fl
+			prevFeature = &fl
 		case strings.HasPrefix(fl.Key, trustKeyPrefix):
 			prevTrust = append(prevTrust, fl)
 		}
 	}
 
-	changed, err := doc.ensureFeaturesHooks()
+	_, _, curVal, err := doc.featuresHooks()
 	if err != nil {
 		return nil, t.parseErr(err)
 	}
+	if _, err := doc.ensureFeaturesHooks(); err != nil {
+		return nil, t.parseErr(err)
+	}
+	if curVal == "false" {
+		res.Warnings = append(res.Warnings, fmt.Sprintf(
+			"%s: features.hooks was explicitly false; switching it to true so the Ballast hooks run. Other hooks in hooks.json now run too. Uninstall restores false",
+			t.path))
+	}
+	orig := featuresTrue
+	switch {
+	case prevFeature != nil && prevFeature.SetByBallast:
+		// An earlier install changed the switch: its record is the original.
+		orig = featuresAbsent
+		if prevFeature.Value == featuresFalse {
+			orig = featuresFalse
+		}
+	case curVal == "false":
+		orig = featuresFalse
+	case curVal == "":
+		orig = featuresAbsent
+	}
 	res.Flags = append(res.Flags, model.ManagedFlag{
-		Client: model.ClientCodex, File: t.path, Key: flagFeaturesHooks, Value: "true",
-		SetByBallast: changed || prevFeature,
+		Client: model.ClientCodex, File: t.path, Key: flagFeaturesHooks, Value: orig,
+		SetByBallast: orig != featuresTrue,
 	})
 
 	if !spec.CodexTrust {
@@ -393,7 +427,8 @@ func (t *codexConfigTarget) planWith(cur []byte, spec EntrySpec, m *model.Instal
 }
 
 // Remove implements Target: trust entries recorded in the manifest are
-// removed, features.hooks is left on.
+// removed. features.hooks goes back to an explicit false when that is what
+// install found; when the key was absent (or already true) it is left on.
 func (t *codexConfigTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanResult, error) {
 	m = nonNilManifest(m)
 	res := &PlanResult{Path: t.path, Format: FormatTOML, Before: cur}
@@ -405,6 +440,13 @@ func (t *codexConfigTarget) Remove(cur []byte, m *model.InstallManifest) (*PlanR
 		return nil, t.parseErr(err)
 	}
 	for _, fl := range flagsFor(m, model.ClientCodex, t.path) {
+		if fl.Key == flagFeaturesHooks && fl.SetByBallast && fl.Value == featuresFalse {
+			// Only while the switch is still the "true" install wrote.
+			if idx, _, val, err := doc.featuresHooks(); err == nil && idx >= 0 && val == "true" {
+				doc.setValue(idx, "false")
+			}
+			continue
+		}
 		k, ok := parseTrustFlagKey(fl.Key)
 		if !ok {
 			continue

@@ -92,9 +92,9 @@ ballast doctor                                    # 自检:层级、各客户端
 | 客户端 | 写入的文件 | 说明 |
 |---|---|---|
 | Claude Code | `~/.claude/settings.json` | 遵循 `CLAUDE_CONFIG_DIR`。每个事件一组 `{type, command, args}`,命令与参数分开写,路径含空格也不需要拼接 |
-| Codex | `~/.codex/hooks.json`、`~/.codex/config.toml` | 遵循 `CODEX_HOME`。`config.toml` 里只确保 `[features]` 下 `hooks = true`。**trust 哈希默认不写**,需要时显式加 `--codex-trust`;不加则要在 Codex TUI 里用 `/hooks` 批准 |
+| Codex | `~/.codex/hooks.json`、`~/.codex/config.toml` | 遵循 `CODEX_HOME`。`config.toml` 里只确保 `[features]` 下 `hooks = true`:原本没有这个键时,卸载后保留 `hooks = true`(同一个 `hooks.json` 里别的工具的 hook 可能依赖它,是唯一登记的往返残留);原本显式写着 `false` 时,安装会先向 stderr 警告再改成 `true`,卸载时恢复成 `false`。**trust 哈希默认不写**,需要时显式加 `--codex-trust`;不加则要在 Codex TUI 里用 `/hooks` 批准 |
 | Cursor | `~/.cursor/hooks.json`、`~/.cursor/rules/ballast.mdc` | `ballast.mdc` 是整文件托管的 `alwaysApply` 规则,作为注入的可靠通道;安装后需要 Reload Window。它是安装时按当时规则生成的快照:放入或修改规则后重新运行 `ballast install --client cursor` 刷新;没有任何规则时安装会给出警告 |
-| Hermes | `~/.hermes/config.yaml` | 遵循 `HERMES_HOME`。只改顶层 `hooks:` 段,段外字节不变;`hooks:` 用 flow 风格或锚点时拒绝写入。启动 Hermes 时需要 `--accept-hooks` |
+| Hermes | `~/.hermes/config.yaml` | 遵循 `HERMES_HOME`。只改顶层 `hooks:` 段,段外字节不变(0 字节文件仍是 0 字节、没有末尾换行的文件仍没有);`hooks:` 用 flow 风格或锚点时拒绝写入。启动 Hermes 时需要 `--accept-hooks` |
 
 安全措施:
 

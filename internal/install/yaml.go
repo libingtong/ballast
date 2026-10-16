@@ -47,7 +47,7 @@ func parseYAMLDoc(src []byte) *yamlDoc {
 }
 
 func (d *yamlDoc) bytes() []byte {
-	var b bytes.Buffer
+	b := bytes.NewBuffer(make([]byte, 0, 64)) // never nil: nil means "delete the file"
 	b.WriteString(d.bom)
 	for _, l := range d.lines {
 		b.WriteString(l.text)
@@ -69,6 +69,14 @@ func (d *yamlDoc) insert(at int, texts ...string) {
 
 func (d *yamlDoc) remove(from, to int) { // [from,to)
 	d.lines = append(d.lines[:from], d.lines[to:]...)
+}
+
+// dropFinalEOL takes the line terminator off the last line again when that
+// line is the one (text) that had none before install.
+func (d *yamlDoc) dropFinalEOL(text string) {
+	if n := len(d.lines); n > 0 && d.lines[n-1].text == text {
+		d.lines[n-1].eol = ""
+	}
 }
 
 func (d *yamlDoc) blank(i int) bool { return strings.TrimSpace(d.lines[i].text) == "" }

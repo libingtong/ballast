@@ -297,7 +297,7 @@ func planUninstall(opt Options) (*uninstallPlan, error) {
 			}
 		}
 		for _, fl := range old.Flags {
-			if fl.Client == c.ID() && fl.Key == flagFeaturesHooks && fl.SetByBallast {
+			if fl.Client == c.ID() && fl.Key == flagFeaturesHooks && fl.SetByBallast && fl.Value != featuresFalse {
 				rep.Notes = append(rep.Notes, fmt.Sprintf("Codex features.hooks was left enabled in %s; disable it manually if no longer wanted", fl.File))
 			}
 		}

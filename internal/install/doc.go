@@ -43,7 +43,9 @@
 // and an empty "hooks" object are removed; a file created by install that
 // becomes empty ({} / {"version":1} / blank YAML) is deleted; whole owned
 // files (.mdc) are deleted; Codex trust entries recorded in Flags are
-// removed; features.hooks is left on and reported. Load/parse failure ⇒
+// removed; features.hooks is restored to false when install found an
+// explicit false (and warned), and left on and reported when the key was
+// absent. Load/parse failure ⇒
 // non-zero exit (never pinrule's silent `return 0`).
 //
 // JSON editing is surgical down to the byte (contract v1.7, jsonast.go):
@@ -61,7 +63,7 @@
 // Structural flags (contract v1.3, internal/install/structflags.go): Plan
 // records in ManagedFlag (keys "json:hooks", "json:hooks.<event>",
 // "json:version", "json:root", "json:blank", "yaml:hooks",
-// "yaml:hooks.<event>", "dir:kept") whether each container it
+// "yaml:hooks.<event>", "yaml:blank", "yaml:noeol", "dir:kept") whether each container it
 // fills existed before the first install (with its original YAML text) or
 // was created by Ballast; re-installs carry the record over. Uninstall then
 // deletes an emptied container only when Ballast created it (or nothing is
