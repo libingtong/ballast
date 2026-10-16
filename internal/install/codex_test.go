@@ -476,6 +476,45 @@ func TestFeaturesHooksFalseNotRestoredOverUserEdit(t *testing.T) {
 	}
 }
 
+// absent -> install -> the user switches it to false -> reinstall -> uninstall:
+// the user's latest explicit false wins, matching the "Uninstall restores
+// false" warning shown on the reinstall.
+func TestFeaturesHooksAbsentThenUserFalse(t *testing.T) {
+	tg := gCodexCT()
+	p, err := tg.Plan([]byte("model = 1\n"), gspec(model.ClientCodex), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := featuresFlag(p); f == nil || f.Value != "absent" {
+		t.Fatalf("first install flag = %+v", f)
+	}
+	edited := strings.Replace(string(p.After), "hooks = true", "hooks = false", 1)
+	if edited == string(p.After) {
+		t.Fatalf("no hooks = true to edit in %q", p.After)
+	}
+	p2, err := tg.Plan([]byte(edited), gspec(model.ClientCodex), manifestFrom(gBinary, p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := featuresFlag(p2); f == nil || f.Value != "false" || !f.SetByBallast {
+		t.Fatalf("reinstall flag = %+v, want false", f)
+	}
+	warned := false
+	for _, w := range p2.Warnings {
+		warned = warned || strings.Contains(w, "Uninstall restores false")
+	}
+	if !warned {
+		t.Errorf("reinstall did not warn: %q", p2.Warnings)
+	}
+	r, err := tg.Remove(p2.After, manifestFrom(gBinary, p2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(r.After), "hooks = false") || strings.Contains(string(r.After), "hooks = true") {
+		t.Errorf("after uninstall = %q, want hooks = false", r.After)
+	}
+}
+
 // A manifest from before the original value was recorded (Value "true",
 // set_by_ballast) is the old behaviour: left on, no warning.
 func TestFeaturesHooksLegacyFlag(t *testing.T) {

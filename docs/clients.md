@@ -137,7 +137,7 @@ hooks:
       timeout: 30
 ```
 
-Ballast 不依赖 YAML 库,按行外科式编辑,**只认块状 YAML**;`hooks:` 段用 flow 风格或锚点时拒绝写入。段外字节原样保留,往返逐字节一致,包括 0 字节文件(不会被当作新建文件删除)和没有末尾换行的文件(`yaml:blank`、`yaml:noeol` 标记)。需要用户以 `--accept-hooks` 启动 Hermes 表示同意。
+Ballast 不依赖 YAML 库,按行外科式编辑,**只认块状 YAML**;`hooks:` 段用 flow 风格或锚点时拒绝写入。段外字节原样保留,往返逐字节一致,包括 0 字节文件(不会被当作新建文件删除)和没有末尾换行的文件(`yaml:blank`、`yaml:noeol` 标记)。**拒绝裸 CR 换行**:文件里出现不属于 CRLF 的单独 `\r`(旧式 Mac 换行)时拒绝写入。需要用户以 `--accept-hooks` 启动 Hermes 表示同意。
 
 **payload / 协议假设**(来自 pinrule,未核验):
 

@@ -11,7 +11,8 @@ import (
 // features.hooks flag (contract v1.8): Value = the switch as install found
 // it, so uninstall can tell "never written" from "written false".
 //
-//	"absent"  no features.hooks key        SetByBallast=true, stays on (documented exception)
+//	"absent"  no features.hooks key        SetByBallast=true, stays on (documented exception);
+//	                                       becomes "false" if the user later sets false and reinstalls
 //	"false"   an explicit false            SetByBallast=true, restored to false on uninstall
 //	"true"    already on                   SetByBallast=false, untouched
 //
@@ -365,9 +366,12 @@ func (t *codexConfigTarget) planWith(cur []byte, spec EntrySpec, m *model.Instal
 	orig := featuresTrue
 	switch {
 	case prevFeature != nil && prevFeature.SetByBallast:
-		// An earlier install changed the switch: its record is the original.
+		// An earlier install changed the switch: its record is the original,
+		// unless the user has since turned it off again by hand. That latest
+		// explicit false wins, so the warning's "Uninstall restores false"
+		// stays true even when the first install found the key absent.
 		orig = featuresAbsent
-		if prevFeature.Value == featuresFalse {
+		if prevFeature.Value == featuresFalse || curVal == "false" {
 			orig = featuresFalse
 		}
 	case curVal == "false":

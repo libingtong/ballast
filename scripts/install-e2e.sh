@@ -436,6 +436,24 @@ expect_rc "codex/hooks=false: uninstall after --codex-trust" 0
 snap "$after"
 same_tree "codex/hooks=false: the trust round trip restores it as well" "$before" "$after"
 
+section "codex: absent, installed, then the user sets false: the latest explicit false is restored"
+new_client_sandbox codex
+seed_client codex
+write_file "$SB_HOME/.codex/config.toml" 'model = "gpt"
+'
+install_c codex
+expect_rc "codex/absent-then-false: first install" 0
+check_contains "codex/absent-then-false: the switch is on while installed" "$(cat "$SB_HOME/.codex/config.toml")" "hooks = true"
+sed 's/^hooks = true$/hooks = false/' "$SB_HOME/.codex/config.toml" > "$SB_HOME/.codex/config.toml.new" && mv "$SB_HOME/.codex/config.toml.new" "$SB_HOME/.codex/config.toml"
+check_contains "codex/absent-then-false: the user switched it off" "$(cat "$SB_HOME/.codex/config.toml")" "hooks = false"
+install_c codex
+expect_rc "codex/absent-then-false: reinstall" 0
+expect_err_has "codex/absent-then-false: stderr promises the false comes back" "Uninstall restores false"
+bl uninstall --client codex
+expect_rc "codex/absent-then-false: uninstall" 0
+check_contains "codex/absent-then-false: config.toml says false" "$(cat "$SB_HOME/.codex/config.toml")" "hooks = false"
+check_lacks "codex/absent-then-false: and no longer true" "$(cat "$SB_HOME/.codex/config.toml")" "hooks = true"
+
 section "codex: features.hooks = true already on is left alone and not warned about"
 new_client_sandbox codex
 seed_client codex
