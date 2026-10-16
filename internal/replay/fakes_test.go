@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -202,7 +203,7 @@ func fakeShellReadPaths(cl *model.CommandList) []string {
 	if hasCD {
 		var abs []string
 		for _, p := range out {
-			if strings.HasPrefix(p, "/") || strings.HasPrefix(p, "~/") {
+			if model.IsAbsShellPath(p) { // "/x", "~/x", "C:/x", UNC
 				abs = append(abs, p)
 			}
 		}
@@ -485,7 +486,9 @@ func newEnv(t testing.TB, rs *model.CompiledRuleSet) *env {
 	e.labels = sb.Root + "/labels"
 	e.evDir = sb.Root + "/evidence"
 	e.home = sb.Home
-	e.workdir = sb.Root + "/work/proj"
+	// Slash form throughout: the directory is embedded in JSON transcripts and
+	// in shell command lines, where Windows backslashes would be escapes.
+	e.workdir = filepath.ToSlash(sb.Root) + "/work/proj"
 	e.deps = Deps{
 		FS: sys.OSFS{}, Clock: sys.NewFakeClock(time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)),
 		Adapters: fakeRegistry{}, Compiler: fakeCompiler{}, Engine: e.engine, Rules: e.loader,

@@ -43,7 +43,7 @@ func childSampleLoop(ballastHome string) int {
 	}
 	clk := sys.RealClock{}
 	for i := 0; i < 40; i++ {
-		if _, err := Sample(&sliceSource{recs: childAuditRecords()}, lay, sys.OSFS{}, sys.RandomID{}, clk, "rule-a", 1+i%10); err != nil {
+		if _, err := sampleRetrying(&sliceSource{recs: childAuditRecords()}, lay, sys.RandomID{}, clk, "rule-a", 1+i%10); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
@@ -84,7 +84,10 @@ func TestSampleAcrossProcesses(t *testing.T) {
 			}
 			finished++
 		default:
-			data, err := os.ReadFile(reviewFile)
+			// Windows: an open handle blocks the children's rename-over, so the
+			// reader must not spin (see TestSampleConcurrentWritersKeepFileValid).
+			time.Sleep(100 * time.Microsecond)
+			data, err := sys.OSFS{}.ReadFile(reviewFile)
 			if err != nil {
 				continue
 			}

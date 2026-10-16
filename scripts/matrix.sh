@@ -38,6 +38,7 @@ esac
 
 lib_init "matrix-$MODE"
 build_ballast
+ORIG_HOME="${HOME:-}" # before sandbox_new redirects it (toolchain homes, see below)
 sandbox_new matrix
 
 STACKS="go node python rust maven gradle dotnet swift ruby"
@@ -193,6 +194,14 @@ fi
 
 # ===========================================================================
 # real mode
+# sandbox_new moved HOME away; rustup keeps its toolchains under $HOME/.rustup,
+# so without this the installed (rustup-managed) cargo reports "no default
+# toolchain configured". Only read access to the real toolchain directory is
+# needed; CARGO_HOME (registry cache, build locks) stays in the sandbox.
+if [ -z "${RUSTUP_HOME:-}" ] && [ -n "${ORIG_HOME:-}" ] && [ -d "$ORIG_HOME/.rustup" ]; then
+  export RUSTUP_HOME="$ORIG_HOME/.rustup"
+fi
+
 PLATFORM="$(uname -s)"
 case $PLATFORM in
   Darwin) OSKEY=darwin ;;
@@ -289,16 +298,38 @@ fn t() {
 "; fi
       ;;
     dotnet)
-      # Target the installed SDK's own framework (its targeting pack ships with it).
+      # A real xunit test project. A plain library would not do: `dotnet test`
+      # on a project without the test SDK only restores and exits 0 even when
+      # the code does not compile, so the failing fixture would "pass". The
+      # packages come from nuget.org, which is why this stack only runs under
+      # CI (or with BALLAST_MATRIX_ALLOW_NET=1, see needs_net).
+      # The SDK is pinned to the 8.0 band that CI installs (setup-dotnet 8.0.x);
+      # the runner images also carry newer SDKs.
+      write_file "$dir/global.json" '{"sdk":{"version":"8.0.100","rollForward":"latestFeature"}}
+'
+      # Target the framework of the SDK that global.json selects (its
+      # targeting pack ships with it).
       local tfm
-      tfm="net$(dotnet --version 2>/dev/null | cut -d. -f1).0"
+      tfm="net$(cd "$dir" && dotnet --version 2>/dev/null | cut -d. -f1).0"
       write_file "$dir/m.csproj" "<Project Sdk=\"Microsoft.NET.Sdk\">
-  <PropertyGroup><TargetFramework>$tfm</TargetFramework></PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>$tfm</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.11.1\" />
+    <PackageReference Include=\"xunit\" Version=\"2.9.2\" />
+    <PackageReference Include=\"xunit.runner.visualstudio\" Version=\"2.8.2\" />
+  </ItemGroup>
 </Project>
 "
-      if [ "$leg" = pass ]; then write_file "$dir/A.cs" "class A {}
-"; else write_file "$dir/A.cs" "class A { this does not compile }
-"; fi
+      if [ "$leg" = pass ]; then ass='Xunit.Assert.True(true);'; else ass='Xunit.Assert.True(false);'; fi
+      write_file "$dir/MTests.cs" "public class MTests
+{
+    [Xunit.Fact]
+    public void M() { $ass }
+}
+"
       ;;
     swift)
       write_file "$dir/Package.swift" '// swift-tools-version:5.5
@@ -347,8 +378,13 @@ oracle_run() {
     words+=("$("$ACCUTIL" json get "$dir/.ballast/project.json" "verify.0.argv.$i")")
     i=$((i + 1))
   done
-  (cd "$dir" && "${words[@]}" >/dev/null 2>&1)
+  # The raw tool's output is kept (tail shown when the oracle disagrees) so a
+  # failing CI run says why the toolchain cannot judge the fixture.
+  (cd "$dir" && "${words[@]}" >"$ORACLE_LOG" 2>&1)
 }
+
+ORACLE_LOG="$TMP_ROOT/oracle.log"
+oracle_tail() { tail -n 12 "$ORACLE_LOG" 2>/dev/null | cut -c1-200 || true; }
 
 for stack in $STACKS; do
   section "real: $stack"
@@ -399,11 +435,13 @@ for stack in $STACKS; do
   # The oracle: the raw tool must agree with the fixture's intent here,
   # otherwise this machine cannot judge ballast against it.
   if ! oracle_run "$PASS_DIR"; then
-    skip_or_fail "$name" "the toolchain is present but cannot run the passing fixture here (missing test framework or offline?)"
+    skip_or_fail "$name" "the toolchain is present but cannot run the passing fixture here (missing test framework or offline?)
+$(oracle_tail)"
     continue
   fi
   if oracle_run "$FAIL_DIR"; then
-    skip_or_fail "$name" "the failing fixture unexpectedly passes with the raw tool"
+    skip_or_fail "$name" "the failing fixture unexpectedly passes with the raw tool
+$(oracle_tail)"
     continue
   fi
   ok "$name: the raw tool passes the success fixture and fails the failure fixture"

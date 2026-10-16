@@ -123,11 +123,21 @@ func TestSupersedeStopsRunningJob(t *testing.T) {
 	// ... its command dies, and the runner exits without writing a result.
 	if runtime.GOOS != "windows" {
 		waitFor(t, "A's command to be killed", 15*time.Second, func() bool { return processGone(aCmd) })
+		waitFor(t, "A's runner to finish", 15*time.Second, func() bool {
+			log, _ := os.ReadFile(f.store.LogPath(f.inst(), "test", a[0].JobID))
+			return strings.Contains(string(log), "# ballast outcome=")
+		})
+	} else {
+		// Windows has no gentle stop: the superseder terminates the runner
+		// outright (terminateProcess), so no log footer is ever written; the
+		// runner just has to be gone, which also releases its job lock.
+		runnerPID := jsA.PID
+		waitFor(t, "A's runner to be terminated", 15*time.Second, func() bool { return processGone(runnerPID) })
+		// The command must not outlive the runner: terminateProcess does not
+		// reach children by itself, so this relies on the runner's Job Object
+		// (kill-on-close, exec_windows.go) dying with it.
+		waitFor(t, "A's command to die with its runner", 15*time.Second, func() bool { return processGone(aCmd) })
 	}
-	waitFor(t, "A's runner to finish", 15*time.Second, func() bool {
-		log, _ := os.ReadFile(f.store.LogPath(f.inst(), "test", a[0].JobID))
-		return strings.Contains(string(log), "# ballast outcome=")
-	})
 
 	// B passes once released; A's record stays superseded.
 	waitFor(t, "B's command to start", 20*time.Second, func() bool {

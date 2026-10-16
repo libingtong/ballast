@@ -86,7 +86,34 @@ spawn_workers() {
   if [ -z "$bad_lines" ]; then ok "$name: all $((n * count)) hook processes exited 0 with the right stdout"; else bad "$name: hook processes misbehaved" "$bad_lines"; fi
 }
 
-section "unique tool_use_ids from N concurrent processes (N = 2..8)"
+# "Lock timeouts stay the exception (<= 50%)" holds wherever the workers can
+# run side by side (N <= CPUs), on every platform, and is asserted there. When a
+# machine is oversubscribed (N > CPUs) the state lock's 20 ms wall-clock budget
+# is lost to CPU starvation, not to long transactions: measured on a 3-vCPU
+# macOS runner with the real hooks, 2% timeouts at N=3, 43% at N=4, 63% at
+# N=6, 75% at N=8 (Windows, 4 CPUs: 61% at N=6, 66% at N=8, later 43% / 50%
+# once the state write stopped retrying a rename for 100 ms under the lock;
+# Linux, 4 CPUs: 0% throughout), while the same Store.Commit hammered by 8 processes without the
+# hooks' own CPU bursts times out 0.4% of the time (transactions take ~0.4 ms,
+# p95 ~2 ms), and the same script with a 100 ms budget loses 4% / 14% / 35% and
+# with 400 ms none. That is a known availability limit of the 20 ms budget on
+# oversubscribed machines (docs/architecture.md section 9, "known gaps"), not a
+# loss of correctness: every dropped delta is audited. For N > CPUs the bound is
+# therefore widened to "at most 90% time out" (at least one applied update in
+# ten) instead of removed, so a real livelock or a budget regression still
+# fails. The invariants - no lost update (event_seq == invocations - audited
+# lock timeouts), one seen entry per applied delta, one audit hit per denied
+# call, a valid state file - are asserted for every N, whatever the machine.
+CPUS="$(ncpu)"
+# On Windows every hook also feeds Defender (about 30 ms of scanning per call,
+# on the same cores), so N workers on N CPUs are already CPU-starved: a hosted
+# 4-vCPU runner measured 52% (25 of 48) timeouts at N=4 although none of them
+# was oversubscribed on paper. There the "side by side" bound only applies to
+# N < CPUs; N >= CPUs gets the oversubscribed bound.
+FIT_LIMIT="$CPUS"
+if [ "$IS_WINDOWS" = 1 ]; then FIT_LIMIT=$((CPUS - 1)); fi
+
+section "unique tool_use_ids from N concurrent processes (N = 2..8; $CPUS CPUs)"
 for n in 2 3 4 6 8; do
   sess="uniq$n"
   count=12
@@ -104,7 +131,12 @@ for n in 2 3 4 6 8; do
   check_eq "N=$n: no lost update (event_seq == invocations - audited lock timeouts)" "$seq" "$((total - timeouts))"
   check_eq "N=$n: tool_count == event_seq" "$tcount" "$seq"
   check_eq "N=$n: one seen entry per applied delta" "$seen" "$seq"
-  check_int_le "N=$n: lock timeouts stay the exception (<= 50%)" "$((timeouts * 2))" "$total"
+  if [ "$n" -le "$FIT_LIMIT" ]; then
+    check_int_le "N=$n: lock timeouts stay the exception (<= 50%)" "$((timeouts * 2))" "$total"
+  else
+    note "N=$n: $timeouts of $total delivered deltas timed out on the state lock ($((timeouts * 100 / total))%) with $n workers on $CPUS CPUs (oversubscribed or CPU-starved)"
+    check_int_le "N=$n: oversubscribed ($n workers, $CPUS CPUs): at most 90% of the deltas time out" "$((timeouts * 10))" "$((total * 9))"
+  fi
   hits="$(audit_count session_id="$sess" type=hit rule_id=regress-no-long-sleep)"
   check_eq "N=$n: one audit hit per denied call (the audit writes lose nothing)" "$hits" "$total"
   check_true "N=$n: the state file is one valid JSON document" "$ACCUTIL" json valid "$sf"

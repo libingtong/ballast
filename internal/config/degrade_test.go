@@ -40,12 +40,12 @@ func (f statFailFS) Stat(n string) (fs.FileInfo, error) {
 // A bad layer location (directory, no permission) must degrade that layer
 // only: org rules stay enforced and Load does not fail.
 func TestLoadUnusableLayerKeepsOrgRules(t *testing.T) {
-	asDir := func(e *env, l model.Layer) {
+	asDir := func(t *testing.T, e *env, l model.Layer) {
 		if err := os.MkdirAll(e.path(l), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	noPerm := func(e *env, l model.Layer) {
+	noPerm := func(t *testing.T, e *env, l model.Layer) {
 		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 			t.Skip("file permissions are not enforced here")
 		}
@@ -55,14 +55,14 @@ func TestLoadUnusableLayerKeepsOrgRules(t *testing.T) {
 		}
 		t.Cleanup(func() { _ = os.Chmod(e.path(l), 0o600) })
 	}
-	statDenied := func(e *env, l model.Layer) {
+	statDenied := func(t *testing.T, e *env, l model.Layer) {
 		e.write(l, rulesJSON("", on("hidden-rule")))
 		e.opt.FS = statFailFS{FS: sys.OSFS{}, sub: e.path(l), err: syscall.EACCES}
 	}
 	for _, tc := range []struct {
 		name   string
 		layer  model.Layer
-		break_ func(*env, model.Layer)
+		break_ func(*testing.T, *env, model.Layer)
 	}{
 		{"user dir", model.LayerUser, asDir},
 		{"repo dir", model.LayerRepo, asDir},
@@ -73,7 +73,7 @@ func TestLoadUnusableLayerKeepsOrgRules(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
 			e.write(model.LayerOrg, rulesJSON("", on("org-rule")))
-			tc.break_(e, tc.layer)
+			tc.break_(t, e, tc.layer)
 			// Unusable layers (directory, no permission, stat denied) are
 			// never cached (a fixed permission changes no stat key); both
 			// passes re-read and must agree.

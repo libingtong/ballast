@@ -146,7 +146,9 @@ func tryReplace(path, content string) error {
 	if err := os.WriteFile(tmp, []byte(content), 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	// The product's rename (retries the transient Windows collisions with a
+	// reader that has the file open), like any real writer of these files.
+	return sys.OSFS{}.Rename(tmp, path)
 }
 
 // Hot reload across a long-lived process: editing any layer changes the

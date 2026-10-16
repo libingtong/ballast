@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -96,7 +97,13 @@ func TestDoctorHealthyInstall(t *testing.T) {
 	if c := by["claude.entry.PreToolUse"]; c.Client != model.ClientClaude {
 		t.Errorf("client not set: %+v", c)
 	}
-	if c := by["tier.level"]; c.Status != CheckWarn || !strings.Contains(c.Message, "T0") {
+	// Native Windows is T0 by design and reports it as ok (TestDoctorWindowsTier);
+	// elsewhere an install without the managed template warns.
+	wantTier := CheckWarn
+	if runtime.GOOS == "windows" {
+		wantTier = CheckOK
+	}
+	if c := by["tier.level"]; c.Status != wantTier || !strings.Contains(c.Message, "T0") {
 		t.Errorf("tier.level = %+v", c)
 	}
 	if _, ok := by["tier.windows_t0"]; ok && runtimeIsUnix() {
@@ -277,6 +284,10 @@ func TestDoctorManagedDuplicate(t *testing.T) {
 
 func TestDoctorTierLevel(t *testing.T) {
 	e := newTenv(t)
+	// The managed-template tiers are the non-Windows logic (native Windows is
+	// always T0, see TestDoctorWindowsTier); pin the layout to linux so the
+	// test exercises it on every host.
+	e.lay.GOOS = "linux"
 	c := byID(e.doctor("", nil, nil))["tier.level"]
 	for _, missing := range []string{"managed hooks", "allowManagedHooksOnly", "sandbox", "permissions.deny", "MCP allowlist"} {
 		if !strings.Contains(c.Message, missing) {

@@ -3,6 +3,7 @@ package install
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -16,6 +17,12 @@ func writeManaged(e *tenv, rel, content string) string {
 func TestDetectManaged(t *testing.T) {
 	const hookArgs = `{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":%q,"args":["hook","--client","claude-code","--event","PreToolUse"]}]}]}}`
 	const hookCmd = `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":%q}]}]}}`
+	// The command string is split with the host platform's quoting rules
+	// (POSIX single quotes; CommandLineToArgvW double quotes on Windows).
+	quotedHookCommand := `"'/opt/my dir/ballast' hook --client claude-code"`
+	if runtime.GOOS == "windows" {
+		quotedHookCommand = `"\"C:\\opt\\my dir\\ballast.exe\" hook --client claude-code"`
+	}
 	cases := []struct {
 		name, rel, content string
 		want               bool
@@ -23,7 +30,7 @@ func TestDetectManaged(t *testing.T) {
 		{"args form", "managed-settings.json", strings.Replace(hookArgs, "%q", `"/usr/local/libexec/ballast/ballast"`, 1), true},
 		{"windows exe", "managed-settings.json", strings.Replace(hookArgs, "%q", `"C:\\Program Files\\Ballast\\ballast.exe"`, 1), true},
 		{"command string", "managed-settings.json", strings.Replace(hookCmd, "%q", `"/opt/b/ballast hook --client claude-code --event Stop"`, 1), true},
-		{"quoted command string", "managed-settings.json", strings.Replace(hookCmd, "%q", `"'/opt/my dir/ballast' hook --client claude-code"`, 1), true},
+		{"quoted command string", "managed-settings.json", strings.Replace(hookCmd, "%q", quotedHookCommand, 1), true},
 		{"drop-in directory", "managed-settings.d/50-ballast.json", strings.Replace(hookArgs, "%q", `"/usr/local/libexec/ballast/ballast"`, 1), true},
 		{"other binary", "managed-settings.json", strings.Replace(hookArgs, "%q", `"/usr/bin/audit"`, 1), false},
 		{"ballast without hook subcommand", "managed-settings.json", `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"/x/ballast","args":["verify"]}]}]}}`, false},

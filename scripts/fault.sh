@@ -101,7 +101,15 @@ for client in claude-code codex cursor hermes; do
   section "client $client: every point x {error, panic, hang}"
   for point in $POINTS; do
     for mode in error panic hang; do
-      BALLAST_FAULT="$point:$mode" run_hook "$client"
+      if [ "$mode" = hang ]; then
+        # The hang cases assert the product's own 150 ms watchdog, so a CI
+        # relaxation (BALLAST_TEST_WATCHDOG_MS) is blanked out for them; the
+        # error and panic cases keep it so a stalled runner cannot let the
+        # watchdog pre-empt the injected failure.
+        BALLAST_TEST_WATCHDOG_MS="" BALLAST_FAULT="$point:$mode" run_hook "$client"
+      else
+        BALLAST_FAULT="$point:$mode" run_hook "$client"
+      fi
       expect_aborted "$client $point:$mode" "$mode" "$point"
     done
   done

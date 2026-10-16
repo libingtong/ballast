@@ -303,11 +303,23 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 }
 
 // deadlineSpan is how long after the start expensive predicate work may run.
+// It is derived from min(watchdog, DefaultWatchdog), never from a watchdog
+// that the ballast_test override stretched: the override only lengthens the
+// guard's kill timer (so a stalled CI runner is not read as a hook defect),
+// while the decision semantics stay the product's (snapshot / verify_fresh
+// give up at DefaultWatchdog-DeadlineMargin = 120 ms and answer unknown).
 func (inv *invocation) deadlineSpan() time.Duration {
-	if inv.wd <= DeadlineMargin {
+	if inv.deps.Deadline > 0 {
+		return inv.deps.Deadline
+	}
+	wd := inv.wd
+	if wd > DefaultWatchdog {
+		wd = DefaultWatchdog
+	}
+	if wd <= DeadlineMargin {
 		return 0
 	}
-	return inv.wd - DeadlineMargin
+	return wd - DeadlineMargin
 }
 
 // pathContext derives the PathContext and the normalized cwd of an event.

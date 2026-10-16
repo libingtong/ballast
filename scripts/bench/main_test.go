@@ -140,3 +140,152 @@ func TestOkOutput(t *testing.T) {
 		t.Error("substring expectation")
 	}
 }
+
+// BALLAST_BENCH_P95_MS can only raise the bound; anything else is an error.
+func TestParseBudget(t *testing.T) {
+	ok := map[string]time.Duration{"": 30 * time.Millisecond, " ": 30 * time.Millisecond, "30": 30 * time.Millisecond, "60": 60 * time.Millisecond, " 200 ": 200 * time.Millisecond, "1000": time.Second}
+	for in, want := range ok {
+		got, err := parseBudget(in)
+		if err != nil || got != want {
+			t.Errorf("parseBudget(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"29", "0", "-1", "1001", "report", "30.5", "enforce"} {
+		if got, err := parseBudget(in); err == nil {
+			t.Errorf("parseBudget(%q) = %v, want an error", in, got)
+		}
+	}
+}
+
+// With a raised bound the gate follows it, and the correctness checks still
+// gate the scenario.
+func TestGateRaisedBudget(t *testing.T) {
+	oldB, oldH := budget, heavyBudget
+	defer func() { budget, heavyBudget = oldB, oldH }()
+	budget, heavyBudget = 60*time.Millisecond, 60*time.Millisecond
+	r := good()
+	r.P95 = 51
+	gate(&r)
+	if !r.Pass {
+		t.Errorf("p95 inside the raised bound failed: %v", r.Failures)
+	}
+	r = good()
+	r.P95 = 60.5
+	gate(&r)
+	if r.Pass {
+		t.Error("p95 over the raised bound must fail")
+	}
+	r = good()
+	r.P95, r.Bad = 20, 1
+	gate(&r)
+	if r.Pass {
+		t.Error("Bad runs must still fail")
+	}
+}
+
+// The whole-work-tree scenarios have their own (higher) bound; every other
+// scenario keeps the tight one.
+func TestGateHeavyBudget(t *testing.T) {
+	oldB, oldH := budget, heavyBudget
+	defer func() { budget, heavyBudget = oldB, oldH }()
+	budget, heavyBudget = 150*time.Millisecond, 400*time.Millisecond
+	r := good()
+	r.P95, r.Heavy = 306, true
+	gate(&r)
+	if !r.Pass {
+		t.Errorf("a heavy scenario inside the heavy bound failed: %v", r.Failures)
+	}
+	r = good()
+	r.P95 = 306
+	gate(&r)
+	if r.Pass {
+		t.Error("a light scenario at 306 ms must fail against the 150 ms bound")
+	}
+	r = good()
+	r.P95, r.Heavy = 401, true
+	gate(&r)
+	if r.Pass {
+		t.Error("a heavy scenario over the heavy bound must fail")
+	}
+	for _, id := range []string{"6c", "6d", "8b", "8c"} {
+		if !heavyScenarios[id] {
+			t.Errorf("%s should be a heavy scenario", id)
+		}
+	}
+	for _, id := range []string{"1", "5", "6a", "6b", "10"} {
+		if heavyScenarios[id] {
+			t.Errorf("%s must not be a heavy scenario", id)
+		}
+	}
+}
+
+func TestParseHeavyBound(t *testing.T) {
+	got, err := parseBound(BenchP95HeavyMsEnv, "", 80*time.Millisecond)
+	if err != nil || got != 80*time.Millisecond {
+		t.Errorf("default = %v, %v", got, err)
+	}
+	if _, err := parseBound(BenchP95HeavyMsEnv, "79", 80*time.Millisecond); err == nil {
+		t.Error("a heavy bound below the general one must be an error")
+	}
+	if got, err := parseBound(BenchP95HeavyMsEnv, "400", 80*time.Millisecond); err != nil || got != 400*time.Millisecond {
+		t.Errorf("400 = %v, %v", got, err)
+	}
+}
+
+func TestParseDegradedPct(t *testing.T) {
+	for in, want := range map[string]int{"": 0, " 0 ": 0, "5": 5, "50": 50} {
+		got, err := parseDegradedPct(in)
+		if err != nil || got != want {
+			t.Errorf("parseDegradedPct(%q) = %d, %v; want %d", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"-1", "51", "x", "2.5"} {
+		if _, err := parseDegradedPct(in); err == nil {
+			t.Errorf("parseDegradedPct(%q) accepted", in)
+		}
+	}
+}
+
+// A run that missed the verdict because the 120ms deadline expired is a
+// "degraded" run only in a heavy scenario, only when it exited 0 cleanly and
+// was at least as slow as the deadline; anything else stays a plain Bad.
+func TestDegradedRun(t *testing.T) {
+	slow := oneRun{d: 130 * time.Millisecond}
+	if !degradedRun(scenario{id: "6d"}, slow) {
+		t.Error("slow clean run of a heavy scenario must count as degraded")
+	}
+	if degradedRun(scenario{id: "4"}, slow) {
+		t.Error("a light scenario never degrades through the deadline")
+	}
+	if degradedRun(scenario{id: "6d"}, oneRun{d: 20 * time.Millisecond}) {
+		t.Error("a fast wrong verdict is a real failure")
+	}
+	if degradedRun(scenario{id: "6d"}, oneRun{d: 200 * time.Millisecond, code: 1}) || degradedRun(scenario{id: "6d"}, oneRun{d: 200 * time.Millisecond, err: "boom"}) {
+		t.Error("a crash or an error exit is a real failure")
+	}
+}
+
+func TestGateDegradedBound(t *testing.T) {
+	old := maxDegradedPct
+	defer func() { maxDegradedPct = old }()
+	r := good()
+	r.Degraded = 1
+	maxDegradedPct = 0
+	gate(&r)
+	if r.Pass {
+		t.Error("a degraded run must fail the gate when no share is allowed")
+	}
+	maxDegradedPct = 5 // 5% of 300 = 15 runs
+	r = good()
+	r.Degraded = 15
+	gate(&r)
+	if !r.Pass {
+		t.Errorf("15/300 degraded within 5%% failed: %v", r.Failures)
+	}
+	r = good()
+	r.Degraded = 16
+	gate(&r)
+	if r.Pass {
+		t.Error("16/300 degraded exceeds 5%")
+	}
+}

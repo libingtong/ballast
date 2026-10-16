@@ -53,7 +53,9 @@ func runMain(m *testing.M) int {
 	} else if rt := filepath.Join(runtime.GOROOT(), "bin", "go"); fileExists(rt) || fileExists(rt+".exe") {
 		goTool = rt
 	}
-	build := exec.Command(goTool, "build", "-o", ballastBin, "./cmd/ballast")
+	buildArgs := append([]string{"build"}, childBuildTags()...)
+	buildArgs = append(buildArgs, "-o", ballastBin, "./cmd/ballast")
+	build := exec.Command(goTool, buildArgs...)
 	build.Dir = repoRoot
 	// Never reach the network (the module has no dependencies to fetch).
 	build.Env = append(filterEnv(os.Environ(), "GOPROXY"), "GOPROXY=off")
@@ -104,7 +106,10 @@ func newSandbox(t *testing.T) *sandbox {
 	// Only what child processes need to run: PATH (git, the shell) and, on
 	// Windows, the system root. Everything else of the caller's environment
 	// is dropped so no real configuration can leak in.
-	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP"} {
+	// BALLAST_TEST_WATCHDOG_MS lets CI relax the hook's 150 ms watchdog, but
+	// only in a binary built with -tags ballast_test (see childBuildTags);
+	// the production build ignores it.
+	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP", "BALLAST_TEST_WATCHDOG_MS"} {
 		if v, ok := os.LookupEnv(k); ok {
 			s.env = append(s.env, k+"="+v)
 		}

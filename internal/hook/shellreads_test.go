@@ -77,9 +77,11 @@ func TestShellReadRegistration(t *testing.T) {
 	}
 }
 
+// replaceHome expands the "HOME" placeholder to the sandbox home in the
+// slash form the path normalizer produces.
 func replaceHome(p, home string) string {
 	if len(p) >= 4 && p[:4] == "HOME" {
-		return home + p[4:]
+		return filepath.ToSlash(home) + p[4:]
 	}
 	return p
 }

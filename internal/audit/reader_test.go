@@ -468,3 +468,24 @@ func FuzzScanLine(f *testing.F) {
 		}
 	})
 }
+
+// A regular file where the audit directory should be is an error on every
+// platform (Windows reports it as "path not found", which must not be taken
+// for a missing, i.e. empty, directory), while a really missing directory is
+// just empty.
+func TestFileInPlaceOfAuditDirIsAnError(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "audit")
+	if err := os.WriteFile(file, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&Reader{Dir: file}).Scan(ScanOptions{}, func(*model.AuditRecord, Location) error { return nil }); err == nil {
+		t.Error("Scan over a file: want an error")
+	}
+	if _, err := GC(nil, file, time.Now(), 0); err == nil {
+		t.Error("GC over a file: want an error")
+	}
+	if _, err := (&Reader{Dir: filepath.Join(root, "missing")}).Scan(ScanOptions{}, func(*model.AuditRecord, Location) error { return nil }); err != nil {
+		t.Errorf("Scan over a missing directory: %v", err)
+	}
+}
