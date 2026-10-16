@@ -250,6 +250,8 @@ loop:
 	case st.cmdIdx >= 0:
 		p.finishCommand(c, &st, toks, redirs)
 		return st.cmdIdx, term, ntok, nil
+	case st.cmdIdx < 0 && p.hasStaticCall(toks):
+		return p.staticCalls(c, toks, redirs), term, ntok, nil
 	case closer != ')' && !c.noOutput && valueOnly(toks):
 		return p.implicitOutput(c, toks, redirs), term, ntok, nil
 	case len(p.cl.Nodes) > nodes0:

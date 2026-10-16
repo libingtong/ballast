@@ -24,6 +24,28 @@
 //     Set-Content/Add-Content [-Path] X; Remove-Item/Copy-Item -Destination/
 //     Move-Item -Destination/New-Item [-Path] X; git and other externals as
 //     in bashparse (cp/mv are aliases here, not externals).
+//     P2 E1 additions: -LiteralPath (-PSPath) on Out-File/Set-Content/
+//     Add-Content/Clear-Content/Remove-Item/Tee-Object, Tee-Object
+//     [-FilePath] X, Clear-Content, Rename-Item (aliases ren/rni: both
+//     -Path/-LiteralPath and -NewName are targets; a leaf -NewName is
+//     resolved against the directory of a literal source path), the second
+//     positional word of Copy-Item/Move-Item as the destination (a bound
+//     -LiteralPath leaves no positional slot for -Path), and the static
+//     calls [IO.File]::WriteAllText/AppendAllText/WriteAllBytes/
+//     WriteAllLines (also System.IO.File, AppendAllLines and the *Async
+//     forms) whose FIRST argument is the target: a plain quoted literal
+//     gives Path, anything else Dynamic. Such a call yields a node named
+//     like the member ("[io.file]::writealltext", Via the same) with
+//     Argv = member word + the call arguments; a call that is only an
+//     argument of a command word is a string and yields no node.
+//     A first argument containing any typographic quote (U+2018..U+201E,
+//     which PowerShell treats as quotes) is never a literal: Dynamic.
+//     Known limits (not recognized, no node): `.Invoke(...)` forms such as
+//     [IO.File]::WriteAllText.Invoke('a','x'); the bare [File]:: after
+//     `using namespace System.IO`; other file-writing members (OpenWrite,
+//     Create, CreateText, AppendText, Copy, Move, Replace) and
+//     [IO.StreamWriter]::new. Rename-Item with a source ending in a
+//     separator resolves -NewName against the parent of that directory.
 //   - Reads (same purpose and Word rules as bashparse): get-content
 //     (aliases cat/gc/type) -Path/-LiteralPath/-PSPath values or the first
 //     positional word ⇒ Reads{Via:"get-content"}; select-string

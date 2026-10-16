@@ -75,6 +75,13 @@ var (
 			{"-tosession", true, nil}, {"-usetransaction", false, []string{"-usetx"}}},
 		pos: []string{"-path", "-destination"},
 	}
+	specRenameItem = cmdSpec{
+		params: []paramDef{
+			{"-path", true, nil}, {"-literalpath", true, []string{"-pspath", "-lp"}},
+			{"-newname", true, nil}, {"-force", false, nil}, {"-passthru", false, nil},
+			{"-credential", true, nil}, {"-usetransaction", false, []string{"-usetx"}}},
+		pos: []string{"-path", "-newname"},
+	}
 	specNewItem = cmdSpec{
 		params: []paramDef{
 			{"-path", true, nil}, {"-name", true, nil}, {"-itemtype", true, []string{"-type"}},
@@ -132,6 +139,8 @@ func specFor(canon string) *cmdSpec {
 		return &specClearContent
 	case "copy-item", "move-item":
 		return &specCopyMove
+	case "rename-item":
+		return &specRenameItem
 	case "new-item":
 		return &specNewItem
 	case "remove-item":
@@ -279,7 +288,7 @@ func bind(spec *cmdSpec, items []item) (params, bound map[string][]model.Word, e
 	slot := 0
 	for _, vals := range positional {
 		for slot < len(spec.pos) {
-			if _, taken := bound[spec.pos[slot]]; !taken {
+			if !slotTaken(bound, spec.pos[slot]) {
 				break
 			}
 			slot++
@@ -292,4 +301,21 @@ func bind(spec *cmdSpec, items []item) (params, bound map[string][]model.Word, e
 		extra = append(extra, vals...)
 	}
 	return params, bound, extra
+}
+
+// slotTaken reports whether the positional slot name is already bound. The
+// -Path / -FilePath parameter and -LiteralPath belong to different parameter
+// sets, so a bound -LiteralPath leaves no positional slot for the path: the
+// next positional word binds to the following slot (Set-Content
+// -LiteralPath a x: x is the -Value; Copy-Item -LiteralPath a b: b is the
+// -Destination).
+func slotTaken(bound map[string][]model.Word, name string) bool {
+	if _, ok := bound[name]; ok {
+		return true
+	}
+	if name == "-path" || name == "-filepath" {
+		_, ok := bound["-literalpath"]
+		return ok
+	}
+	return false
 }

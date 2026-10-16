@@ -81,6 +81,8 @@ func targetsOf(canon string, argv []model.Word, bound map[string][]model.Word, e
 		writes = psTargets(ws, canon)
 	case "copy-item", "move-item":
 		writes = psTargets(words(bound, "-destination"), canon)
+	case "rename-item":
+		writes = renameTargets(bound)
 	case "tee-object":
 		writes = psTargets(words(bound, "-filepath", "-literalpath"), canon)
 	case "new-item":
@@ -96,6 +98,30 @@ func targetsOf(canon string, argv []model.Word, bound map[string][]model.Word, e
 		}
 	}
 	return writes, reads
+}
+
+// renameTargets lists both the source and the new name of Rename-Item. The
+// new name is resolved against the directory of a single literal source
+// path (-NewName is a leaf name, so the result is the renamed file's path).
+func renameTargets(bound map[string][]model.Word) []model.WriteTarget {
+	src := words(bound, "-path", "-literalpath")
+	out := psTargets(src, "rename-item")
+	var dir string
+	if len(src) == 1 && !src[0].Dynamic {
+		// a source ending in a separator names a directory: drop the
+		// trailing separators first so the new name replaces that leaf.
+		base := strings.TrimRight(src[0].Lit, `\/`)
+		if i := strings.LastIndexAny(base, `\/`); i >= 0 {
+			dir = base[:i+1]
+		}
+	}
+	for _, nm := range bound["-newname"] {
+		if dir != "" && !nm.Dynamic && !strings.ContainsAny(nm.Lit, `\/`) {
+			nm.Lit = dir + nm.Lit
+		}
+		out = append(out, psTargets([]model.Word{nm}, "rename-item")...)
+	}
+	return out
 }
 
 // newItemTargets resolves New-Item's -Path and -Name into created paths.
