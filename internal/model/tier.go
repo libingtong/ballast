@@ -51,9 +51,20 @@ const (
 	TierMissingPermDeny     = "permissions_deny"         // permissions.deny / allowManagedPermissionRulesOnly incomplete
 	TierMissingManagedPerms = "managed_permissions_only" // allowManagedPermissionRulesOnly != true
 	TierMissingUnreadable   = "unreadable"               // an input could not be read/parsed (detection fails closed to T0)
+	// TierMissingLowerSandbox: a lower Claude settings layer (user
+	// <claude dir>/settings*.json in detection; additionally the job repo's
+	// <repo>/.claude/settings*.json in the runner's own judgement) carries a
+	// sandbox key that could weaken the managed sandbox (tier.WeakenedSandboxKeys:
+	// excludedCommands, network.allowUnixSockets, filesystem.allowWrite,
+	// enableWeakerNestedSandbox, network.allowedDomains, …). Conservative
+	// until M0b case lower-sandbox-merge shows how Claude merges them
+	// (docs/p2-design.md §3.2 condition 6).
+	TierMissingLowerSandbox = "lower_sandbox_weakened"
 	// TierMissingRunnerSandbox is recorded in VerifyRecord.TierMissing (not
 	// produced by detection): the host is T1 but this job ran without the
 	// OS sandbox (origin=cli under prefer/off), so the record is T0.
+	// (VerifyRecord.TierMissing may also carry TierMissingLowerSandbox when
+	// the runner's per-repo check fails.)
 	TierMissingRunnerSandbox = "runner_sandbox"
 )
 

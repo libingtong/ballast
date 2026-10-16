@@ -39,7 +39,29 @@
 //     command is that hook entry's command string exactly as written,
 //     every string of dw appears verbatim in sandbox.filesystem.denyWrite
 //     and every string of pd appears verbatim in permissions.deny
-//     ("covers" == exact string-set inclusion; no glob reasoning).
+//     ("covers" == exact string-set inclusion; no glob reasoning). The
+//     managed sandbox itself must have sandbox.excludedCommands and
+//     sandbox.network.allowUnixSockets absent or [], and
+//     sandbox.enableWeakerNestedSandbox and
+//     sandbox.network.allowAllUnixSockets absent or false (else Missing
+//     "sandbox"); other managed sandbox keys (allowedDomains, allowWrite)
+//     are the administrator's choice.
+//  6. No lower Claude settings layer weakens the managed sandbox
+//     (model.TierMissingLowerSandbox, "lower_sandbox_weakened"). Claude
+//     merges array settings across layers, so a managed
+//     "excludedCommands": [] does not stop a lower layer from appending
+//     "npm" or "docker", which would let the agent run those outside the
+//     sandbox and write ~/.ballast directly. Until M0b case
+//     lower-sandbox-merge shows otherwise, Detect applies
+//     WeakenedSandboxKeys to every user-layer file
+//     <claude dir>/settings*.json, where <claude dir> is $CLAUDE_CONFIG_DIR
+//     when set AND <home>/.claude in every case (both are checked).
+//     Detect cannot see the repo; the runner applies RepoSandboxWeakened to
+//     the job's repo (project layer <repo>/.claude/settings.json, which is
+//     committed with the repo and therefore not covered by in-session
+//     denyWrite, and the local layer settings.local.json) before deciding
+//     the record tier (docs/p2-design.md §3.4). An absent file is fine; an
+//     unreadable or unparsable one counts as weakening (fail closed).
 //
 // Ownership checks go through Options.Owner so unit tests can fake uid 0
 // without root; production uses syscall.Stat_t (unix) and reports "not
@@ -47,7 +69,10 @@
 // with root is outside every Ballast boundary; docs/trust-model.md).
 //
 // Acceptance (P2-TIER): testdata/detect.json table (each condition flipped
-// on its own ⇒ T0 with exactly that Missing id; all satisfied ⇒ T1; a row
+// on its own ⇒ T0 with exactly that Missing id — condition 6 once per
+// weakening key of WeakenedSandboxKeys, in user settings.json and in
+// settings.local.json, and once with CLAUDE_CONFIG_DIR pointing elsewhere
+// while <home>/.claude/settings.json weakens; all satisfied ⇒ T1; a row
 // where the managed hook command is a symlink to Self ⇒ T1; a row with a
 // relative command ⇒ managed_hooks); testdata/managed_forms.json golden
 // (shared with internal/install); Locked table (absent / non-root /
@@ -240,6 +265,57 @@ type HomeOptions struct {
 // covered by bench scenario 13 (§3.6).
 func LockedHome(opt HomeOptions) (home, source string, err error) {
 	panic("unimplemented: tier.LockedHome (unit P2-TIER)")
+}
+
+// WeakenedSandboxKeys inspects ONE Claude settings document of a lower layer
+// (user, project or local) and returns, sorted and deduplicated, the dotted
+// keys whose value could weaken the managed sandbox (condition 6). Frozen,
+// conservative rule (docs/p2-design.md §3.2 condition 6) — an allowlist, so
+// sandbox keys Claude adds in the future count as weakening until they are
+// classified here:
+//
+//   - top level: "permissions.additionalDirectories" with a non-empty array
+//     is reported (whether allowManagedPermissionRulesOnly also governs it
+//     is unverified; M0b lower-sandbox-merge). No other non-sandbox key is
+//     inspected (permissions rules are governed by
+//     allowManagedPermissionRulesOnly, hooks by allowManagedHooksOnly).
+//   - "sandbox" absent, null or {} ⇒ nothing; "sandbox" not an object ⇒
+//     ["sandbox"].
+//   - harmless inside "sandbox" (can only make it stricter or equal):
+//     enabled: true; allowUnsandboxedCommands: false; failIfUnavailable:
+//     true; autoAllowBashIfSandboxed (any boolean; a permission-prompt
+//     setting, not a barrier); filesystem.denyWrite and filesystem.denyRead
+//     (any array of strings: additions only restrict); and, for every other
+//     key, the values null, [], {} and false.
+//   - everything else is reported, notably sandbox.excludedCommands,
+//     sandbox.network.allowUnixSockets, sandbox.network.allowAllUnixSockets,
+//     sandbox.network.allowLocalBinding, sandbox.network.allowedDomains,
+//     sandbox.network.httpProxyPort, sandbox.network.socksProxyPort,
+//     sandbox.filesystem.allowWrite, sandbox.enableWeakerNestedSandbox,
+//     sandbox.enabled:false, sandbox.allowUnsandboxedCommands:true,
+//     sandbox.failIfUnavailable:false, and any unknown key with a value
+//     other than null/[]/{}/false (reported by its dotted path; objects are
+//     descended, arrays are not).
+//
+// doc that is not a JSON object ⇒ error (callers treat it as weakening).
+// Pure; table-tested in testdata/weakened.json.
+func WeakenedSandboxKeys(doc []byte) ([]string, error) {
+	panic("unimplemented: tier.WeakenedSandboxKeys (unit P2-TIER)")
+}
+
+// RepoSandboxWeakened applies WeakenedSandboxKeys to every regular file
+// matching <repo>/.claude/settings*.json (the project layer settings.json
+// and the local layer settings.local.json) and returns "<basename>:<key>"
+// entries, sorted; a matching file that cannot be read or parsed yields
+// "<basename>:unreadable"; a symlinked .claude directory or settings file
+// yields "<basename>:symlink" (the runner does not follow agent-made links
+// to decide trust). Empty result ⇒ the repo layer does not weaken the
+// sandbox. Callers: the runner, once per job before deciding the record
+// tier (non-empty ⇒ record tier T0 with tier_missing
+// ["lower_sandbox_weakened"] and audit diag "tier_mismatch"); doctor for the
+// repo of the current directory. Not hot path (the hook never calls it).
+func RepoSandboxWeakened(fsys sys.FS, repo string) []string {
+	panic("unimplemented: tier.RepoSandboxWeakened (unit P2-TIER)")
 }
 
 // ManagedForms returns the exact denyWrite and permissions.deny strings

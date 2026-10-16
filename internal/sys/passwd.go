@@ -34,7 +34,14 @@ func Euid() int { return euid() }
 //     whose lookup is not cached locally are 【未核验】.
 //   - linux: os/user.LookupId as well. A CGO_ENABLED=0 build (the release
 //     default) parses /etc/passwd only; a cgo build goes through NSS
-//     (sssd/LDAP). "unknown user id" maps to ErrNoPasswdEntry.
+//     (sssd/LDAP). "unknown user id" maps to ErrNoPasswdEntry. A cgo/NSS
+//     build is acceptable ONLY where NSS answers from a local cache (sssd
+//     with its local cache, or nscd): with nss_ldap or an uncached sssd the
+//     lookup may hit the network or block, which violates "no network on
+//     the hot path" (LookupHome runs on every hook call of a locked host).
+//     The recommended order stays org.json home_root first; doctor check
+//     tier.locked_home prints this caveat on cgo builds
+//     (docs/p2-design.md §3.2, deployment option ②).
 //   - other: ErrPasswdUnsupported.
 //
 // os/user.Current is FORBIDDEN here: in pure-Go mode it falls back to

@@ -685,3 +685,13 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - **`hook.Deps.RedirectsIgnored`** 冻结:CLI 填值,hook 在会话首个事件审计一次。
 - **`runner_allow_write` 是残余风险**,默认空;runner 把常见缓存变量指向每个 job 的临时目录(`sandbox.CacheEnv`)。
 - 单元划分不变(仍是 13 个);P2-TIER 增加 `internal/sys/passwd*.go`。
+
+### 7. v0.5.3 修订(2026-10-16,P2 设计第 3 轮独立审核)
+
+设计文档升至 v1.3、架构升至 v2.0.3,逐条处置见 `docs/p2-design.md` §13。计划层面的变化:
+
+- **层级判定增加第 6 条**(major):用户层、项目层、本地层的 `sandbox.excludedCommands`、`network.allowUnixSockets`、`filesystem.allowWrite`、`enableWeakerNestedSandbox`、`network.allowedDomains` 等可能跨层并入托管沙箱,让 agent 在沙箱外直接写证据。M0b 结论出来之前采取保守做法:用户层出现削弱值 ⇒ 判 T0(`lower_sandbox_weakened`);runner 对每个 job 的仓库再查项目层与本地层,出现削弱值 ⇒ 证据记 T0 并审计。M0b 新增用例 `lower-sandbox-merge`(无凭据 15 个、需凭据 5 个),`boundary-t1.sh` 新增 `t1-lower-sandbox`。
+- **沙箱内的测试不得接触人的终端**(major):被包装的子进程新建会话、stdin 为 `/dev/null`、输出只经文件或管道,可写设备集去掉 `/dev/tty*`;本机 macOS 实测确认了 TIOCSTI 注入原语与修复效果。`boundary-t1.sh` 新增 `t1-tty`。
+- **git 元数据按任意深度拒写**(major):嵌套 `.git`、submodule 的 `modules/**`、其他 worktree 的 `worktrees/*` 都纳入;Linux 上运行后递归扫描,新出现的受保护路径移入 `~/.ballast/quarantine/<job>/` 并记 infra,不在仓库里留下继续生效的文件。
+- git dir 来源校验、cgo/NSS 构建的热路径约束、P2-HERMES 与 P2-CLI 的文档交接(minor)。
+- 单元划分不变(仍是 13 个);`layout.QuarantineDir` 由设计提交落地,`ballast gc` 同时清理隔离目录。

@@ -1,6 +1,6 @@
 # Ballast 架构与接口契约(冻结版 v2.0)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1 为 P2 设计第 1 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3 为 P2 设计第 1、2、3 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -138,6 +138,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | `labels/<rule_id>.jsonl` | 用户/U9 | `{"sample_id","label":"tp"\|"fp","note"}` | 用户追加 |
 | `install-manifest.json` | U10 | `model.InstallManifest` | 原子 + fsync |
 | `requests/<repo_inst>/<request_id>.json`(v2.0) | P2-RUNNER | `model.VerifyRequestFile`(hook 代起 verify 的请求 → job 映射);同目录 `<request_id>.spawn.log` 为子进程输出 | 原子;`ballast gc` 删除 30 天前的文件 |
+| `quarantine/<job_id>/…`(v2.0.3) | P2-RUNNER(经 `sandbox.Quarantine`) | 沙箱内测试新建的受保护路径(任意深度的 `.git`、`.claude/`、`.vscode/`、`.mcp.json` 等)被移出仓库后的副本,保留相对路径(`layout.QuarantineDir`) | 只由 runner 写;`ballast gc` 删除 30 天前的条目 |
 | `gc.stamp` | U7 | 空文件,mtime 即上次 GC 时间 | 只由 hook 在派生 `ballast gc` 之前 touch;派生失败时删除以便下次重试;`ballast gc` 本身不写(v1.3;v1.5 删除了 `runGC` 里残留的 touch,hook 与 gc 不再双写) |
 | `replay-set.txt` | 用户 | 每行一个 transcript 路径(不入库) | — |
 
@@ -535,6 +536,21 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 ---
 
 ## 14. 修订记录
+
+### v2.0.3(2026-10-16,P2 设计第 3 轮独立审核修订)
+
+配套 `docs/p2-design.md` v1.3(其 §13 有逐条处置)。仍然全部是**追加**或对 v2.0 新增骨架的修改,未改动 v1.x 已实现的导出签名。
+
+| 项 | 处理 | 涉及文件 |
+|---|---|---|
+| 低层削弱托管沙箱(major) | T1 判定增加**条件 6**:用户层 `<claude dir>/settings*.json`(`$CLAUDE_CONFIG_DIR` 与 `<home>/.claude` 都查)不得含削弱沙箱的键;新增 `model.TierMissingLowerSandbox = "lower_sandbox_weakened"`、`tier.WeakenedSandboxKeys`(白名单规则,未分类的键一律算削弱)、`tier.RepoSandboxWeakened`(runner 对每个 job 的项目层与本地层再查,不为空 ⇒ 证据 T0 并审计 `tier_mismatch`);条件 5 追加托管沙箱自身的 `excludedCommands`/`allowUnixSockets` 为空;M0b 新增 `lower-sandbox-merge` | `internal/model/tier.go`、`internal/tier/tier.go` |
+| 沙箱内测试经 TTY 注入逃逸(major) | 被包装的子进程必须新建会话(`Setsid` 取代 `Setpgid`;bwrap `--new-session`),stdin `/dev/null`,输出只经文件或管道;可写设备集去掉 `/dev/tty*`;`sandbox.Wrapped.NewSession`;macOS 设计期实测确认原逃逸成立、修复有效 | `internal/sandbox/sandbox.go`、`internal/runner/exec_unix.go`(注释) |
+| 嵌套 git 元数据与持久化(major) | `sandbox.RepoMandatoryDeny` 改为任意深度并增加 `.git`(条目本身)、`.git/config.worktree`;`GitDirMandatoryDeny` 增加 `commondir`、`modules/**/{hooks/,config,config.worktree,commondir}`、`worktrees/*/{config.worktree,commondir,gitdir}`;新增 `MatchMandatory`、`ScanMandatory`、`MaxMandatoryMatches`、`Quarantine`/`QuarantineEntry`、`Wrapped.Baseline`;`PostCheck(fsys, spec, w) (found, err)` 递归扫描新匹配项,runner 把它们隔离到 `~/.ballast/quarantine/<job>/`(`layout.QuarantineDir`) | `internal/sandbox/sandbox.go`、`internal/layout/layout.go`、§3.1 |
+| git dir 来源校验(minor) | `sandbox.ResolveGitDirs`:只接受"工作树之内"与"标准 worktree 且 `gitdir` 回指当前工作树";`ValidateSpec(fsys, spec)` 改签名并重查 | `internal/sandbox/sandbox.go` |
+| cgo/NSS 构建与热路径不联网(minor) | 部署选项 ② 限定为 NSS 由本地缓存提供;doctor `tier.locked_home` 在 cgo 构建下提示 | `internal/sys/passwd.go`(注释) |
+| Hermes 文档交接(minor) | P2-HERMES 把待同步文本写进 `docs/facts/HERMES-CONCLUSIONS.md`,由 P2-CLI 同步到 `docs/clients.md` 与 `docs/trust-model.md` | `docs/p2-design.md` §9 |
+
+骨架状态下 `go build ./...`、`go vet ./...`、`GOOS=windows go vet ./...`、`go test ./...` 均通过。
 
 ### v2.0.2(2026-10-16,P2 设计第 2 轮独立审核修订)
 
