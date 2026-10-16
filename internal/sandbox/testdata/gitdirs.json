@@ -1,0 +1,1523 @@
+{
+ "resolve": [
+  {
+   "name": "plain repository",
+   "files": [
+    {
+     "p": "plain/.git/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:plain",
+   "wantGitDir": "R:plain/.git",
+   "wantCommonDir": "R:plain/.git",
+   "wantErr": false
+  },
+  {
+   "name": "plain repository, commondir names itself",
+   "files": [
+    {
+     "p": "plain/.git/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "plain/.git/commondir",
+     "c": ".\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:plain",
+   "wantGitDir": "R:plain/.git",
+   "wantCommonDir": "R:plain/.git",
+   "wantErr": false
+  },
+  {
+   "name": "plain repository, commondir elsewhere",
+   "files": [
+    {
+     "p": "plain/.git/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "other/.git/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "plain/.git/commondir",
+     "c": "../../other/.git\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:plain",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "standard linked worktree",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "ref: refs/heads/main\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/commondir",
+     "c": "../..\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/gitdir",
+     "c": "R:wt1/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:main/.git/worktrees/w1\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": "R:main/.git/worktrees/w1",
+   "wantCommonDir": "R:main/.git",
+   "wantErr": false
+  },
+  {
+   "name": "linked worktree, relative gitfile",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "ref: refs/heads/main\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/commondir",
+     "c": "../..\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/gitdir",
+     "c": "R:wt1/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: ../main/.git/worktrees/w1\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": "R:main/.git/worktrees/w1",
+   "wantCommonDir": "R:main/.git",
+   "wantErr": false
+  },
+  {
+   "name": "linked worktree, absolute commondir",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "ref: refs/heads/main\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/commondir",
+     "c": "R:main/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/gitdir",
+     "c": "R:wt1/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:main/.git/worktrees/w1\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": "R:main/.git/worktrees/w1",
+   "wantCommonDir": "R:main/.git",
+   "wantErr": false
+  },
+  {
+   "name": "gitfile points at an arbitrary directory",
+   "files": [
+    {
+     "p": "evil/x",
+     "c": "1",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:evil\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "gitfile points at another repository's .git",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:main/.git\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "gitfile points at a foreign worktree entry (back link elsewhere)",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "ref: refs/heads/main\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/commondir",
+     "c": "../..\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/gitdir",
+     "c": "R:someone/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:main/.git/worktrees/w1\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "back link missing",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "ref: refs/heads/main\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/commondir",
+     "c": "../..\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:main/.git/worktrees/w1\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "commondir altered",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "ref: refs/heads/main\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/commondir",
+     "c": "../../../evil/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/gitdir",
+     "c": "R:wt1/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:main/.git/worktrees/w1\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "evil/.git/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "commondir not X/.git (worktrees dir)",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "ref: refs/heads/main\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/commondir",
+     "c": "..\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/gitdir",
+     "c": "R:wt1/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:main/.git/worktrees/w1\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": ".git is a symlink to a directory",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "",
+     "l": "R:main/.git",
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": ".git is a symlink to a gitfile",
+   "files": [
+    {
+     "p": "main/.git/HEAD",
+     "c": "ref: refs/heads/main\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/commondir",
+     "c": "../..\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/w1/gitdir",
+     "c": "R:wt1/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:main/.git/worktrees/w1\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt2/.git",
+     "c": "",
+     "l": "R:wt1/.git",
+     "d": false
+    }
+   ],
+   "workTree": "R:wt2",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "submodule work tree",
+   "files": [
+    {
+     "p": "super/.git/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "super/.git/modules/sub/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "super/sub/.git",
+     "c": "gitdir: ../.git/modules/sub\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:super/sub",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "worktree entry nested too deep",
+   "files": [
+    {
+     "p": "main/.git/worktrees/a/b/commondir",
+     "c": "../../../",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "main/.git/worktrees/a/b/gitdir",
+     "c": "R:wt1/.git\n",
+     "l": null,
+     "d": false
+    },
+    {
+     "p": "wt1/.git",
+     "c": "gitdir: R:main/.git/worktrees/a/b\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "no .git",
+   "files": [
+    {
+     "p": "empty/x",
+     "c": "1",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:empty",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "relative work tree",
+   "files": [
+    {
+     "p": "plain/.git/HEAD",
+     "c": "x",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "plain",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  },
+  {
+   "name": "gitfile without gitdir line",
+   "files": [
+    {
+     "p": "wt1/.git",
+     "c": "nonsense\n",
+     "l": null,
+     "d": false
+    }
+   ],
+   "workTree": "R:wt1",
+   "wantGitDir": null,
+   "wantCommonDir": null,
+   "wantErr": true
+  }
+ ],
+ "validate": {
+  "files": [
+   {
+    "p": "repo/.git/HEAD",
+    "c": "x",
+    "l": null,
+    "d": false
+   },
+   {
+    "p": "other/.git/HEAD",
+    "c": "x",
+    "l": null,
+    "d": false
+   },
+   {
+    "p": "home/.ballast/work/j1/tree/src/x.go",
+    "c": "x",
+    "l": null,
+    "d": false
+   },
+   {
+    "p": "home/.ballast/work/j2/tree/x",
+    "c": "x",
+    "l": null,
+    "d": false
+   },
+   {
+    "p": "home/.ballast/work/a/b/tree/x",
+    "c": "x",
+    "l": null,
+    "d": false
+   },
+   {
+    "p": "home/.ballast/work/j1/copy/x",
+    "c": "x",
+    "l": null,
+    "d": false
+   },
+   {
+    "p": "home/.ballast/work/jl",
+    "c": "",
+    "l": "R:home/.ballast/work/j1",
+    "d": false
+   },
+   {
+    "p": "tmp/x",
+    "c": "",
+    "l": null,
+    "d": false
+   },
+   {
+    "p": "cache/x",
+    "c": "",
+    "l": null,
+    "d": false
+   },
+   {
+    "p": "home/.claude/settings.json",
+    "c": "{}",
+    "l": null,
+    "d": false
+   }
+  ],
+  "cases": [
+   {
+    "name": "plain repository",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": false
+   },
+   {
+    "name": "extra runner_allow_write root",
+    "spec": {
+     "allowWrite": [
+      "R:repo",
+      "R:cache"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": false
+   },
+   {
+    "name": "root /",
+    "spec": {
+     "allowWrite": [
+      "R:repo",
+      "/"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "home itself",
+    "spec": {
+     "allowWrite": [
+      "R:repo",
+      "R:home"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "ancestor of home",
+    "spec": {
+     "allowWrite": [
+      "R:repo",
+      "R:"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "inside a protected directory",
+    "spec": {
+     "allowWrite": [
+      "R:repo",
+      "R:home/.ballast/work"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "a protected directory itself",
+    "spec": {
+     "allowWrite": [
+      "R:repo",
+      "R:home/.ballast"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "matches a protected glob",
+    "spec": {
+     "allowWrite": [
+      "R:repo",
+      "R:home/.claude/settings.json"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tmp dir is home",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:home",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "cwd outside AllowWrite",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:tmp",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "cwd inside the repo",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo/sub",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": false
+   },
+   {
+    "name": "relative AllowWrite",
+    "spec": {
+     "allowWrite": [
+      "R:repo",
+      "rel/x"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "relative home",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "relative cwd",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "control character in a path",
+    "spec": {
+     "allowWrite": [
+      "R:repo",
+      "R:cache\nx"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "repo root not in AllowWrite",
+    "spec": {
+     "allowWrite": [
+      "R:cache"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:cache",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "GitDirs of another repository",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:other/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "GitDirs empty although the repo has .git",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "GitDirs with an extra directory",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git",
+      "R:other/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "repo without .git",
+    "spec": {
+     "allowWrite": [
+      "R:cache"
+     ],
+     "repoRoots": [
+      "R:cache"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:cache",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "loader env that is not LD_",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": [
+      "PATH=/x"
+     ]
+    },
+    "wantErr": true
+   },
+   {
+    "name": "loader env LD_LIBRARY_PATH",
+    "spec": {
+     "allowWrite": [
+      "R:repo"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:repo",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": [
+      "LD_LIBRARY_PATH=/x"
+     ]
+    },
+    "wantErr": false
+   },
+   {
+    "name": "tree mode",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1/tree",
+     "tree": "R:home/.ballast/work/j1/tree",
+     "workRoot": "R:home/.ballast/work",
+     "loaderEnv": []
+    },
+    "wantErr": false
+   },
+   {
+    "name": "tree mode with extra root",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/tree",
+      "R:cache"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1/tree",
+     "tree": "R:home/.ballast/work/j1/tree",
+     "workRoot": "R:home/.ballast/work",
+     "loaderEnv": []
+    },
+    "wantErr": false
+   },
+   {
+    "name": "tree mode, work root elsewhere",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1/tree",
+     "tree": "R:home/.ballast/work/j1/tree",
+     "workRoot": "R:home/.ballast/other",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tree mode, two levels",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/a/b/tree"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/a/b/tree"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/a/b/tree",
+     "tree": "R:home/.ballast/work/a/b/tree",
+     "workRoot": "R:home/.ballast/work",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tree mode, tree not named tree",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/copy"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/j1/copy"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1/copy",
+     "tree": "R:home/.ballast/work/j1/copy",
+     "workRoot": "R:home/.ballast/work",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tree mode, symlink on the path",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/jl/tree"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/jl/tree"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/jl/tree",
+     "tree": "R:home/.ballast/work/jl/tree",
+     "workRoot": "R:home/.ballast/work",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tree mode, GitDirs not empty",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "gitDirs": [
+      "R:repo/.git"
+     ],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1/tree",
+     "tree": "R:home/.ballast/work/j1/tree",
+     "workRoot": "R:home/.ballast/work",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tree mode, RepoRoots differ",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "repoRoots": [
+      "R:repo"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1/tree",
+     "tree": "R:home/.ballast/work/j1/tree",
+     "workRoot": "R:home/.ballast/work",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tree mode, other root inside the job area",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/tree",
+      "R:home/.ballast/work/j2/tree"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1/tree",
+     "tree": "R:home/.ballast/work/j1/tree",
+     "workRoot": "R:home/.ballast/work",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tree mode, no work root",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1/tree",
+     "tree": "R:home/.ballast/work/j1/tree",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tree mode, cwd outside the tree",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1",
+     "tree": "R:home/.ballast/work/j1/tree",
+     "workRoot": "R:home/.ballast/work",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   },
+   {
+    "name": "tree is not allowed without Tree",
+    "spec": {
+     "allowWrite": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "repoRoots": [
+      "R:home/.ballast/work/j1/tree"
+     ],
+     "gitDirs": [],
+     "denyWrite": [
+      "R:home/.ballast"
+     ],
+     "denyGlobs": [
+      "R:home/.claude/settings*.json"
+     ],
+     "tmpDir": "R:tmp",
+     "home": "R:home",
+     "cwd": "R:home/.ballast/work/j1/tree",
+     "tree": "",
+     "workRoot": "",
+     "loaderEnv": []
+    },
+    "wantErr": true
+   }
+  ]
+ }
+}

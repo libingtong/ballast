@@ -240,8 +240,9 @@ var ErrProtectedCreated = errors.New("protected_path_created")
 // sandbox: git hooks, git config such as core.fsmonitor / core.hooksPath
 // that Ballast's own snapshot or the human's next `git status` would
 // trigger, a gitfile redirecting git to an attacker-written git dir, editor
-// and MCP configs) [static basis, unverified: P2-SANDBOX checks the list
-// against the sandbox-runtime source and may only ADD entries].
+// and MCP configs) [checked by P2-SANDBOX against the sandbox-runtime source
+// (src/sandbox/sandbox-utils.ts DANGEROUS_FILES, DANGEROUS_DIRECTORIES); the
+// entries after ".idea/" were added by that check; the list may only grow].
 // MatchMandatory is the single matcher (darwin regex rendering, linux
 // ScanMandatory and PostCheck all derive from it).
 var RepoMandatoryDeny = []string{
@@ -255,6 +256,19 @@ var RepoMandatoryDeny = []string{
 	".mcp.json",
 	".vscode/",
 	".idea/",
+	// Added by P2-SANDBOX after checking the list against the sandbox-runtime
+	// source (DANGEROUS_FILES / DANGEROUS_DIRECTORIES): its "dangerous files"
+	// that the list above did not yet contain. Shell start-up files and
+	// .gitconfig are read by the human's next shell or git run outside any
+	// sandbox; .ripgreprc by the next ripgrep (it can name a preprocessor).
+	// .claude/commands and .claude/agents are covered by ".claude/".
+	".gitconfig",
+	".bashrc",
+	".bash_profile",
+	".zshrc",
+	".zprofile",
+	".profile",
+	".ripgreprc",
 }
 
 // GitDirMandatoryDeny are patterns, relative to every git dir / common dir
@@ -282,17 +296,6 @@ var GitDirMandatoryDeny = []string{
 	"worktrees/*/config.worktree",
 	"worktrees/*/commondir",
 	"worktrees/*/gitdir",
-}
-
-// MatchMandatory reports whether rel (slash-separated, relative to root,
-// Clean, no leading "/") matches one of patterns. isRepo selects the
-// RepoMandatoryDeny semantics (each pattern also matches under any number
-// of leading path elements); otherwise GitDirMandatoryDeny semantics
-// (anchored at root, "*" / "**" as documented there). A subtree pattern
-// "x/" matches "x" and every path below it. Pure; table-tested
-// (testdata/mandatory.json).
-func MatchMandatory(patterns []string, isRepo bool, rel string) bool {
-	panic("unimplemented: sandbox.MatchMandatory (unit P2-SANDBOX)")
 }
 
 // Spec describes one wrap. All paths are absolute OS paths.
@@ -378,6 +381,16 @@ type Wrapped struct {
 	// a file or pipe (package doc "Terminal"). KindNone leaves it false
 	// (unwrapped origin=cli runs keep the current behaviour).
 	NewSession bool
+
+	// ids fingerprints (device, inode) every Baseline path at wrap time.
+	// PostCheck uses it to notice a protected entry that was REPLACED at the
+	// same path (the child renames a non-pinned ancestor away and recreates
+	// the directory: the recreated entry has a Baseline path but another
+	// inode). Unexported: callers pass the Wrapped value they got from Wrap
+	// to PostCheck unchanged, in the same process; a hand-built or
+	// deserialized Wrapped has no fingerprints and PostCheck then compares
+	// paths only (that replacement attack is no longer detected).
+	ids map[string]fileKey
 }
 
 // CacheVars are the build-cache variables CacheEnv redirects, in order.
@@ -388,48 +401,6 @@ var CacheVars = []string{
 	"npm_config_cache",  // <TmpDir>/cache/npm
 	"YARN_CACHE_FOLDER", // <TmpDir>/cache/yarn
 	"PIP_CACHE_DIR",     // <TmpDir>/cache/pip
-}
-
-// CacheEnv returns the "K=V" settings that point every CacheVars entry at
-// a subdirectory of tmpDir (the per-job temp dir; on linux the child's
-// private /tmp), so a sandboxed test never needs a writable shared cache
-// in the home directory. A variable is left alone only when its current
-// value (cur(K), the runner's own environment) is an absolute path inside
-// one of allowWrite — i.e. the administrator deliberately listed that
-// cache in runner_allow_write and accepted the residual risk
-// (docs/trust-model.md §2.3). Wrap appends the result to Wrapped.Env.
-// GOMODCACHE is not redirected: with the default network deny the module
-// cache is only read (ro-bind) 【未核验:go 在只读 GOMODCACHE 下的行为,
-// P2-SANDBOX 集成测试确认】.
-func CacheEnv(tmpDir string, allowWrite []string, cur func(key string) string) []string {
-	panic("unimplemented: sandbox.CacheEnv (unit P2-SANDBOX)")
-}
-
-// HostEnv returns environ minus every variable that would let the content of
-// lower settings layers (a project-layer "env", which reaches the hook and
-// the runner through Claude Code's environment) run code in a process the
-// runner starts OUTSIDE the sandbox (v1.4, docs/p2-design.md §3.4
-// "沙箱外进程的环境"). Frozen removal set: every GIT_* variable
-// (GIT_CONFIG_PARAMETERS / GIT_CONFIG_COUNT / GIT_CONFIG_KEY_n injection of
-// core.fsmonitor and friends, GIT_CONFIG_GLOBAL / GIT_CONFIG_SYSTEM pointing
-// at agent-written files, GIT_EXEC_PATH, GIT_SSH*, GIT_EXTERNAL_DIFF,
-// GIT_TRACE* which appends to arbitrary files, …); every LD_* and DYLD_*
-// variable (loader injection); BASH_ENV, ENV, SHELLOPTS, BASHOPTS, CDPATH
-// (git may run sh). Order is preserved. Pure; table-tested.
-//
-// The runner uses it for: every git child of its snapshots (it passes
-// snapshot/evidence a sys.Env whose Environ and Getenv are filtered by
-// HostEnv; snapshot then sets its own GIT_INDEX_FILE etc. as today). Processes
-// that are Ballast itself (the detached `ballast verify --run-job` child) and
-// the backend executable get the narrower loader-only removal (every LD_* and
-// DYLD_*; see Wrapped.Env), so the sandboxed child keeps its GIT_* variables.
-// It does NOT protect the hook or runner processes
-// themselves: they already run with Claude Code's environment, which is why
-// a project-layer "env" counts as weakening (tier.WeakenedSandboxKeys,
-// LayerRepo) and why darwin release binaries must be signed with the
-// hardened runtime (doctor tier.binary_hardening, docs/p2-design.md §3.5).
-func HostEnv(environ []string) []string {
-	panic("unimplemented: sandbox.HostEnv (unit P2-SANDBOX)")
 }
 
 // Options configures probing.
@@ -444,126 +415,14 @@ type Options struct {
 	Bwrap       string
 }
 
-// Probe returns the available backend for this host, or KindNone with the
-// reason. Cached per process.
-func Probe(opt Options) (Kind, error) {
-	panic("unimplemented: sandbox.Probe (unit P2-SANDBOX)")
-}
-
-// Decide applies the runner policy (docs/p2-design.md §3.4 table):
-//   - origin == model.OriginHook: the sandbox is mandatory whatever policy
-//     says; no backend ⇒ ErrUnavailable;
-//   - origin == model.OriginCLI: SandboxRequire and no backend ⇒
-//     ErrUnavailable; SandboxPrefer ⇒ avail (possibly KindNone);
-//     SandboxOff ⇒ KindNone.
-func Decide(policy model.SandboxPolicy, origin model.VerifyOrigin, avail Kind, availErr error) (Kind, error) {
-	panic("unimplemented: sandbox.Decide (unit P2-SANDBOX)")
-}
-
-// ResolveGitDirs derives the git dir and common dir of workTree and checks
-// their provenance; both inputs are agent-writable files (the work tree's
-// ".git" gitfile and the git dir's "commondir"), so they are trusted only in
-// two shapes (frozen, docs/p2-design.md §3.4):
-//
-//  1. inside the work tree: <workTree>/.git is a directory (not a symlink);
-//     gitDir == commonDir == <workTree>/.git, and if a "commondir" file is
-//     present it must resolve to that same directory;
-//  2. a standard linked worktree: <workTree>/.git is a regular file
-//     "gitdir: X/.git/worktrees/<n>" (absolute, or relative to workTree),
-//     where after EvalSymlinks gitDir == X/.git/worktrees/<n> with <n> a
-//     single path element, gitDir/commondir resolves (relative to gitDir)
-//     to X/.git == commonDir, X/.git is a directory, and
-//     gitDir/gitdir (the back link) contains, after Clean and
-//     EvalSymlinks, exactly <workTree>/.git.
-//
-// Anything else (gitfile pointing anywhere else, a submodule work tree
-// whose git dir lives in a superproject's modules/, a commondir not equal to
-// X/.git, a missing or mismatched back link, symlinked .git) ⇒ error
-// wrapping ErrInvalidSpec; the runner records outcome infra, error
-// "sandbox_spec_invalid", and does not run the test command. (Submodule
-// work trees as verify targets are a possible later contract addition.)
-func ResolveGitDirs(fsys sys.FS, workTree string) (gitDir, commonDir string, err error) {
-	panic("unimplemented: sandbox.ResolveGitDirs (unit P2-SANDBOX)")
-}
-
-// ValidateSpec rejects specs that would make the sandbox meaningless:
-// an AllowWrite entry equal to "/", to Home or to an ancestor of Home, or
-// equal to / inside a DenyWrite directory (sole exception, v1.5: Spec.Tree
-// under the rules documented on Spec.Tree); a Cwd outside AllowWrite; a
-// relative path anywhere; and a GitDirs set that differs from what
-// ResolveGitDirs(fsys, r) returns for the RepoRoots entries r (re-checked
-// through fsys at wrap time, so W can never be widened to an arbitrary
-// directory such as another repository's .git through an agent-written
-// gitfile or commondir). Errors wrap ErrInvalidSpec.
-func ValidateSpec(fsys sys.FS, spec Spec) error {
-	panic("unimplemented: sandbox.ValidateSpec (unit P2-SANDBOX)")
-}
-
-// Wrap returns the argv that runs argv inside backend kind (KindNone ⇒
-// argv unchanged). It calls ValidateSpec(opt.FS, spec) first and fills
-// Wrapped.Baseline with ScanMandatory.
-func Wrap(opt Options, kind Kind, spec Spec, argv []string) (Wrapped, error) {
-	panic("unimplemented: sandbox.Wrap (unit P2-SANDBOX)")
-}
-
-// ScanMandatory walks every Spec.RepoRoots and Spec.GitDirs tree completely
-// (Lstat, never following symlinks, including ignored directories such as
-// node_modules: a nested .git there can be turned into a gitlink) and
-// returns, absolute and sorted, every path that MatchMandatory matches (a
-// matched subtree is reported once, at its top). Not hot path; its cost is
-// one tree walk per scan. More than MaxMandatoryMatches matches ⇒ error
-// wrapping ErrInvalidSpec (fail closed and visible: the job is infra
-// "sandbox_spec_invalid" rather than running with unbound matches).
-func ScanMandatory(fsys sys.FS, spec Spec) ([]string, error) {
-	panic("unimplemented: sandbox.ScanMandatory (unit P2-SANDBOX)")
-}
-
 // MaxMandatoryMatches bounds ScanMandatory (each match is one bwrap mount).
 const MaxMandatoryMatches = 4096
-
-// PostCheck runs after the child exited (both platforms; on darwin it is
-// defence in depth). It returns, absolute and sorted, every path that is
-// (a) one of w.MissingProtected and now exists, or (b) a ScanMandatory match
-// of spec that is not in w.Baseline — i.e. a protected path the child
-// created, at any depth, including under a renamed ancestor. found non-empty
-// ⇒ err wraps ErrProtectedCreated; the runner then calls Quarantine on
-// found. A scan failure is returned as an error with found nil (the runner
-// records infra).
-func PostCheck(fsys sys.FS, spec Spec, w Wrapped) (found []string, err error) {
-	panic("unimplemented: sandbox.PostCheck (unit P2-SANDBOX)")
-}
 
 // QuarantineEntry is one path moved (or removed) by Quarantine.
 type QuarantineEntry struct {
 	Path    string // original absolute path
 	MovedTo string // path under the quarantine dir; "" when removed instead
 	Err     string // non-empty when the path could be neither moved nor removed
-}
-
-// Quarantine moves each of paths (files, symlinks — not followed — or
-// whole directories) out of the repo into dir (the runner passes
-// <layout.QuarantineDir>/<job_id>), keeping the path relative to its root
-// in roots (RepoRoots and GitDirs) so the layout stays readable. rename(2)
-// first; on EXDEV a copy that never follows symlinks followed by RemoveAll;
-// if that fails too, RemoveAll in place. A path that survives every step is
-// reported with Err set and makes the runner additionally record error
-// "protected_path_residue". The quarantine dir lives under ~/.ballast
-// (protected, outside W) and is cleaned by `ballast gc` after 30 days.
-func Quarantine(fsys sys.FS, paths, roots []string, dir string) []QuarantineEntry {
-	panic("unimplemented: sandbox.Quarantine (unit P2-SANDBOX)")
-}
-
-// AncestorPins returns, sorted and deduplicated, every directory A such
-// that A is inside some allow root (A == root or below it) and A is a
-// proper ancestor of some explicit protected path of spec (DenyWrite, glob
-// directories) or of a top-level mandatory path (RepoMandatoryDeny entries
-// directly under a RepoRoots entry, the literal GitDirMandatoryDeny entries
-// directly under a GitDirs entry) — i.e. the directories whose rename would
-// let the child swap a protected path (pure; golden-tested). Deeper
-// mandatory matches are covered by darwin's any-depth regex and by linux
-// PostCheck instead of pins.
-func AncestorPins(spec Spec) []string {
-	panic("unimplemented: sandbox.AncestorPins (unit P2-SANDBOX)")
 }
 
 // DarwinMachAllow (v1.5) is the mach-lookup allowlist of the darwin profile,
@@ -609,56 +468,4 @@ var DarwinMachForbidden = []string{
 	"com.apple.SecurityServer",               // securityd / keychain: a credential proxy, NEVER allowed (v1.5.2); TLS chain evaluation uses com.apple.trustd.agent, a runtime that needs securityd fails visibly
 	"com.apple.dock.",                        // Dock / Spaces
 	"com.apple.xpc.launchd.",                 // launchd domains
-}
-
-// DarwinEscapeDenials is the SBPL IPC fragment that DarwinProfile appends
-// last (v1.5: IPC DEFAULT-DENY; v1.4's "deny a few named services under
-// (allow default)" is replaced). Frozen content, in this order:
-//
-//	(deny mach-lookup)
-//	(allow mach-lookup (global-name "<each DarwinMachAllow entry>"))
-//	(deny mach-register)
-//	(deny job-creation)
-//	(deny user-preference-write)
-//	(deny lsopen)
-//	(deny appleevent-send)
-//	(deny signal) (allow signal (target same-sandbox))
-//	(deny process-exec (literal "/usr/bin/open") (literal "/usr/bin/osascript")
-//	                   (literal "/bin/launchctl"))
-//
-// (deny user-preference-write) is explicit because cfprefsd writes
-// preferences on the client's behalf outside the sandbox (a `defaults write`
-// into a terminal's start-up command would run outside every sandbox the next
-// time the human opens it); (deny job-creation) is explicit because launchd
-// job submission travels over the bootstrap port, not a named mach-lookup.
-// File reads, sysctl, IOKit and POSIX/SysV IPC stay under (allow default) —
-// registered residual surface, docs/p2-design.md §11. Whether every
-// operation name above is accepted by sandbox-exec on the supported macOS
-// releases, and whether cfprefsd honours user-preference-write for an
-// allowed lookup, is 【未核验】: the golden pins the text, the integration
-// cases (package doc) prove the effect; if cfprefsd does not honour it, the
-// two cfprefsd names leave DarwinMachAllow (preference reads then return
-// defaults) — an internal change of this fragment only.
-//
-// The process-exec rules only match the standard paths, so they alone
-// prove nothing (v1.4): the integration tests must ALSO run each channel
-// in a way the process-exec rules cannot match — copies of open,
-// osascript and launchctl placed in Spec.TmpDir, and a python3 ctypes
-// call into LaunchServices / AppleEvents (LSOpenCFURLRef, AESendMessage)
-// and launchd job submission — and must pass with a test-only profile
-// variant that has the process-exec denials removed, so that the IPC
-// denials are shown to work on their own.
-func DarwinEscapeDenials() string {
-	panic("unimplemented: sandbox.DarwinEscapeDenials (unit P2-SANDBOX)")
-}
-
-// DarwinProfile renders the SBPL profile for spec (pure; golden-tested).
-func DarwinProfile(spec Spec) string {
-	panic("unimplemented: sandbox.DarwinProfile (unit P2-SANDBOX)")
-}
-
-// BwrapArgs renders the bwrap arguments before "--" for spec, given the
-// subset of paths that exist (pure; golden-tested).
-func BwrapArgs(spec Spec, existing map[string]bool) []string {
-	panic("unimplemented: sandbox.BwrapArgs (unit P2-SANDBOX)")
 }
