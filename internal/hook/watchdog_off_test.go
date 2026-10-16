@@ -16,3 +16,11 @@ func TestProductionBuildIgnoresWatchdogEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestProductionBuildIgnoresDeadlineEnv(t *testing.T) {
+	for _, v := range []string{"120", "3000", "15000", "60000"} {
+		if got := DeadlineFromEnv(func(k string) (string, bool) { return v, true }); got != 0 {
+			t.Errorf("DeadlineFromEnv(%q) = %v in a production build, want 0 (= the 120 ms default)", v, got)
+		}
+	}
+}

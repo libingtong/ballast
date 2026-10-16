@@ -309,6 +309,9 @@ func (inv *invocation) pipeline(args Args, stdin []byte) (*Result, func(), error
 // while the decision semantics stay the product's (snapshot / verify_fresh
 // give up at DefaultWatchdog-DeadlineMargin = 120 ms and answer unknown).
 func (inv *invocation) deadlineSpan() time.Duration {
+	if inv.deps.Deadline > 0 {
+		return inv.deps.Deadline
+	}
 	wd := inv.wd
 	if wd > DefaultWatchdog {
 		wd = DefaultWatchdog

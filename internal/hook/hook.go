@@ -31,6 +31,13 @@ func WatchdogFromEnv(getenv func(string) (string, bool)) time.Duration {
 	return watchdogFromEnv(getenv)
 }
 
+// DeadlineFromEnv returns the predicate-deadline span requested through the
+// environment, or 0 (= DefaultWatchdog-DeadlineMargin). Like WatchdogFromEnv it
+// is honoured only by `-tags ballast_test` binaries.
+func DeadlineFromEnv(getenv func(string) (string, bool)) time.Duration {
+	return deadlineFromEnv(getenv)
+}
+
 // Args are the parsed command-line arguments of `ballast hook`.
 type Args struct {
 	Client model.ClientID // --client (required)
@@ -108,6 +115,10 @@ type Deps struct {
 	Self string
 	// Watchdog defaults to DefaultWatchdog when zero.
 	Watchdog time.Duration
+	// Deadline, when positive, replaces the product span
+	// (DefaultWatchdog-DeadlineMargin) after which expensive predicates give
+	// up. Only the ballast_test environment override sets it.
+	Deadline time.Duration
 	// Exit terminates the process (os.Exit in production; tests intercept).
 	Exit func(code int)
 	// Version is recorded in audit records.

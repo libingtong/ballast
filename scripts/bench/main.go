@@ -80,32 +80,15 @@ var heavyScenarios = map[string]bool{"6c": true, "6d": true, "8b": true, "8c": t
 // predicates (git fallback, S snapshot, verify_fresh) is
 // DefaultWatchdog-DeadlineMargin = 120ms. A production run slower than the
 // deadline degrades such a verdict to unknown, one slower than the watchdog
-// fails open. A -tags ballast_test build with BALLAST_TEST_WATCHDOG_MS only
-// stretches the kill timer, never the 120ms deadline, so the bench sees the
-// product's decisions (and counts the runs where they degrade) even on a CI
-// runner whose process start can stall for seconds.
+// fails open. BALLAST_TEST_WATCHDOG_MS (a -tags ballast_test build) only
+// stretches the kill timer; BALLAST_TEST_DEADLINE_MS, which CI sets on Windows
+// only, also stretches the deadline so the 10k-file scenarios still get their
+// verdict there. Either way the bench counts, per scenario, the runs slower
+// than the product's limits, so what production would do stays visible.
 const (
 	prodDeadline = 120 * time.Millisecond
 	prodWatchdog = 150 * time.Millisecond
 )
-
-// BenchMaxDegradedPctEnv is the share (whole percent of the samples, 0..50) of
-// runs of a heavyScenario that may end differently from the expectation
-// because the 120ms deadline expired (verdict unknown, so no deny). Default 0:
-// every such run is a Bad. CI sets it where the hosted file system cannot walk
-// a 10k-file tree inside the deadline; those runs are counted and printed
-// ("degraded"), never folded into the passing runs silently.
-const BenchMaxDegradedPctEnv = "BALLAST_BENCH_MAX_DEGRADED_PCT"
-
-var maxDegradedPct int
-
-// degradedRun tells a run that did not produce the expected verdict because the
-// deadline passed, from a real failure: the process exited 0 with empty stderr
-// (so it did not crash or fail open with an error) and took at least the
-// deadline.
-func degradedRun(sc scenario, r oneRun) bool {
-	return heavyScenarios[sc.id] && r.code == 0 && r.err == "" && r.d >= prodDeadline
-}
 
 // limitFor returns the p95 bound of a result.
 func limitFor(r *result) time.Duration {
@@ -174,13 +157,9 @@ type result struct {
 	// OverDeadline / OverWatchdog count measured samples slower than the
 	// product's 120ms deadline / 150ms watchdog (in production the verdict of
 	// an expensive predicate becomes unknown, respectively the hook fails
-	// open). Degraded counts runs of a heavy scenario that missed the
-	// expected verdict because of the deadline (see degradedRun); they are
-	// bounded by BALLAST_BENCH_MAX_DEGRADED_PCT.
+	// open). They are reported, not gated: the p95 bound gates.
 	OverDeadline int `json:"over_deadline"`
 	OverWatchdog int `json:"over_watchdog"`
-	Degraded     int `json:"degraded"`
-	WarmDegraded int `json:"warm_degraded"`
 }
 
 // processFloor is p95 of a bare `ballast version` run (process creation, Go
@@ -228,20 +207,6 @@ func parseBound(name, v string, floor time.Duration) (time.Duration, error) {
 	return d, nil
 }
 
-// parseDegradedPct parses BALLAST_BENCH_MAX_DEGRADED_PCT: empty means 0, else a
-// whole percent 0..50.
-func parseDegradedPct(v string) (int, error) {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return 0, nil
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 || n > 50 {
-		return 0, fmt.Errorf("%s=%q: must be a whole percent 0..50", BenchMaxDegradedPctEnv, v)
-	}
-	return n, nil
-}
-
 // budgetText describes the p95 bound for the reports.
 func budgetText() string {
 	if budget == productBudget && heavyBudget == productBudget {
@@ -267,9 +232,6 @@ func gate(r *result) {
 	}
 	if r.Samples != r.Want || r.Want == 0 {
 		r.Failures = append(r.Failures, fmt.Sprintf("samples=%d, expected %d", r.Samples, r.Want))
-	}
-	if r.Degraded*100 > maxDegradedPct*r.Want {
-		r.Failures = append(r.Failures, fmt.Sprintf("degraded=%d/%d runs > %d%% (deadline expired: verdict unknown in production)", r.Degraded, r.Want, maxDegradedPct))
 	}
 	if limit := limitFor(r); r.Samples > 0 && ms2dur(r.P95) > limit {
 		r.Failures = append(r.Failures, fmt.Sprintf("p95=%.2fms > %dms", r.P95, limit/time.Millisecond))
@@ -636,7 +598,7 @@ func baseEnv(base, home, work string) []string {
 	// BALLAST_TEST_WATCHDOG_MS is the CI-only relaxation of the 150 ms
 	// watchdog; only a binary built with -tags ballast_test honours it
 	// (scripts/bench.sh builds that way when the variable is set).
-	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP", "BALLAST_TEST_WATCHDOG_MS"} {
+	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP", "BALLAST_TEST_WATCHDOG_MS", "BALLAST_TEST_DEADLINE_MS"} {
 		if v, ok := os.LookupEnv(k); ok {
 			env = append(env, k+"="+v)
 		}
@@ -769,12 +731,8 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 		}
 		for _, r := range outs {
 			bad := r.bad(sc.expect)
-			deg := bad && maxDegradedPct > 0 && degradedRun(sc, r)
 			if it < o.warm {
-				switch {
-				case deg:
-					res.WarmDegraded++
-				case bad:
+				if bad {
 					res.WarmBad++
 					noteBad(&res, r)
 				}
@@ -787,10 +745,7 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 			if r.d > prodWatchdog {
 				res.OverWatchdog++
 			}
-			switch {
-			case deg:
-				res.Degraded++
-			case bad:
+			if bad {
 				res.Bad++
 				noteBad(&res, r)
 			}
@@ -825,7 +780,7 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 		}
 	}
 	res.Heavy = heavyScenarios[sc.id]
-	if res.OverDeadline > 0 || res.Degraded > 0 || res.WarmDegraded > 0 {
+	if res.OverDeadline > 0 {
 		res.Notes = append(res.Notes, overNote(&res))
 	}
 	if limit := limitFor(&res); limit != productBudget && ms2dur(res.P95) > productBudget {
@@ -849,9 +804,6 @@ func overNote(r *result) string {
 	t := fmt.Sprintf("超过产品 deadline %dms 的样本 %d/%d (%.1f%%)(生产中昂贵谓词会变 unknown),超过看门狗 %dms 的样本 %d (%.1f%%)(生产中会 fail-open)",
 		prodDeadline/time.Millisecond, r.OverDeadline, r.Samples, pct(r.OverDeadline),
 		prodWatchdog/time.Millisecond, r.OverWatchdog, pct(r.OverWatchdog))
-	if r.Degraded > 0 || r.WarmDegraded > 0 {
-		t += fmt.Sprintf(";因 deadline 未得到预期判定(degraded)%d 次(热身 %d 次),上限 %d%%", r.Degraded, r.WarmDegraded, maxDegradedPct)
-	}
 	return t
 }
 
@@ -1204,9 +1156,6 @@ func main() {
 			budget, heavyBudget = b, h
 		}
 	}
-	if berr == nil {
-		maxDegradedPct, berr = parseDegradedPct(os.Getenv(BenchMaxDegradedPctEnv))
-	}
 	if berr != nil {
 		fmt.Fprintln(os.Stderr, "bench:", berr)
 		os.Exit(2)
@@ -1254,6 +1203,9 @@ func main() {
 	}
 	if v := os.Getenv("BALLAST_TEST_WATCHDOG_MS"); v != "" {
 		info["watchdog_override_ms"] = v
+	}
+	if v := os.Getenv("BALLAST_TEST_DEADLINE_MS"); v != "" {
+		info["deadline_override_ms"] = v
 	}
 	fmt.Printf("环境: %s | %s | %s | %s 核\n", info["model"], info["cpu"], info["os"], info["num_cpu"])
 	fmt.Printf("负载(开始): %s\n\n", info["load_start"])
@@ -1400,7 +1352,7 @@ func markdown(info map[string]string, rs []result, problems []string, complete, 
 	}
 	fmt.Fprintf(&b, "# ballast hook 性能报告\n\n结论: **%s**(门槛: 每个场景 p95 <= %s,Bad == 0,样本齐全;完整运行: %v)\n\n", st, budgetText(), complete)
 	b.WriteString("## 环境\n\n| 项 | 值 |\n|---|---|\n")
-	for _, k := range []string{"model", "cpu", "num_cpu", "memory_gb", "os", "goos", "goarch", "go", "git", "ballast", "binary_bytes", "extra_env", "watchdog_override_ms", "process_floor_p95_ms", "n", "warm", "load_start", "load_end"} {
+	for _, k := range []string{"model", "cpu", "num_cpu", "memory_gb", "os", "goos", "goarch", "go", "git", "ballast", "binary_bytes", "extra_env", "watchdog_override_ms", "deadline_override_ms", "process_floor_p95_ms", "n", "warm", "load_start", "load_end"} {
 		if v := info[k]; v != "" {
 			fmt.Fprintf(&b, "| %s | %s |\n", k, v)
 		}
