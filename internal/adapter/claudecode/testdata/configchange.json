@@ -1,0 +1,144 @@
+{
+ "_comment": "P2-CC golden: ConfigChange payload mapping (docs/p2-design.md section 5.1). 'file' rows read the normalized M0b captures under docs/facts/payloads/m0b/configchange-payload/hang (path relative to the repo root); 'stdin' rows are synthetic. 'source' is Event.Source (common.FillCommon), 'config_file' is Event.ConfigFile (verbatim file_path, never normalized).",
+ "rows": [
+  {
+   "desc": "M0b capture: user settings",
+   "file": "docs/facts/payloads/m0b/configchange-payload/hang/03-managed-ConfigChange.json",
+   "want": {
+    "event": "ConfigChange",
+    "native": "ConfigChange",
+    "client": "claude-code",
+    "session_id": "829d2d6f-c8c2-46f6-81cf-f27959d3c18b",
+    "cwd": "<repo>",
+    "source": "user_settings",
+    "config_file": "<home>/.claude/settings.json"
+   }
+  },
+  {
+   "desc": "M0b capture: project settings",
+   "file": "docs/facts/payloads/m0b/configchange-payload/hang/04-managed-ConfigChange.json",
+   "want": {
+    "event": "ConfigChange",
+    "source": "project_settings",
+    "config_file": "<repo>/.claude/settings.json"
+   }
+  },
+  {
+   "desc": "M0b capture: local settings",
+   "file": "docs/facts/payloads/m0b/configchange-payload/hang/05-managed-ConfigChange.json",
+   "want": {
+    "event": "ConfigChange",
+    "source": "local_settings",
+    "config_file": "<repo>/.claude/settings.local.json"
+   }
+  },
+  {
+   "desc": "M0b capture: user skill (file is the SKILL.md itself)",
+   "file": "docs/facts/payloads/m0b/configchange-payload/hang/06-managed-ConfigChange.json",
+   "want": {
+    "event": "ConfigChange",
+    "source": "skills",
+    "config_file": "<home>/.claude/skills/user-skill/SKILL.md"
+   }
+  },
+  {
+   "desc": "M0b capture: project skill",
+   "file": "docs/facts/payloads/m0b/configchange-payload/hang/07-managed-ConfigChange.json",
+   "want": {
+    "event": "ConfigChange",
+    "source": "skills",
+    "config_file": "<repo>/.claude/skills/probe-skill/SKILL.md"
+   }
+  },
+  {
+   "desc": "M0b capture: managed settings",
+   "file": "docs/facts/payloads/m0b/configchange-payload/hang/08-managed-ConfigChange.json",
+   "want": {
+    "event": "ConfigChange",
+    "source": "policy_settings",
+    "config_file": "/etc/claude-code/managed-settings.json"
+   }
+  },
+  {
+   "desc": "path kept verbatim: spaces, non-ASCII, trailing slash, relative, dot segments",
+   "stdin": "{\"session_id\":\"s\",\"source\":\"user_settings\",\"file_path\":\"/srv/a b/中文/../.claude//settings.json/\"}",
+   "want": {
+    "event": "ConfigChange",
+    "source": "user_settings",
+    "config_file": "/srv/a b/中文/../.claude//settings.json/"
+   }
+  },
+  {
+   "desc": "path kept verbatim: Windows form",
+   "stdin": "{\"session_id\":\"s\",\"source\":\"policy_settings\",\"file_path\":\"C:\\\\Program Files\\\\ClaudeCode\\\\managed-settings.json\"}",
+   "want": {
+    "event": "ConfigChange",
+    "source": "policy_settings",
+    "config_file": "C:\\Program Files\\ClaudeCode\\managed-settings.json"
+   }
+  },
+  {
+   "desc": "file_path absent: ConfigFile empty, source still mapped",
+   "stdin": "{\"session_id\":\"s\",\"source\":\"user_settings\"}",
+   "want": {
+    "event": "ConfigChange",
+    "source": "user_settings",
+    "config_file": ""
+   }
+  },
+  {
+   "desc": "file_path mistyped (number): ConfigFile empty",
+   "stdin": "{\"session_id\":\"s\",\"source\":\"skills\",\"file_path\":7}",
+   "want": {
+    "event": "ConfigChange",
+    "source": "skills",
+    "config_file": ""
+   }
+  },
+  {
+   "desc": "file_path null",
+   "stdin": "{\"session_id\":\"s\",\"file_path\":null}",
+   "want": {
+    "event": "ConfigChange",
+    "config_file": ""
+   }
+  },
+  {
+   "desc": "file_path object",
+   "stdin": "{\"session_id\":\"s\",\"file_path\":{\"a\":1}}",
+   "want": {
+    "event": "ConfigChange",
+    "config_file": ""
+   }
+  },
+  {
+   "desc": "file_path empty string",
+   "stdin": "{\"session_id\":\"s\",\"source\":\"user_settings\",\"file_path\":\"\"}",
+   "want": {
+    "event": "ConfigChange",
+    "source": "user_settings",
+    "config_file": ""
+   }
+  },
+  {
+   "desc": "unknown source value is passed through, unknown keys ignored",
+   "stdin": "{\"session_id\":\"s\",\"source\":\"future_layer\",\"file_path\":\"/x\",\"zzz\":[1]}",
+   "want": {
+    "event": "ConfigChange",
+    "source": "future_layer",
+    "config_file": "/x"
+   }
+  },
+  {
+   "desc": "empty object: still parses (hook audit omits empty fields)",
+   "stdin": "{}",
+   "want": {
+    "event": "ConfigChange",
+    "native": "ConfigChange",
+    "client": "claude-code",
+    "source": "",
+    "config_file": ""
+   }
+  }
+ ]
+}

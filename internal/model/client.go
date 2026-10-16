@@ -127,10 +127,11 @@ var NativeEventTable = map[ClientID][]NativeEvent{
 		{Native: "PreCompact", Event: EventPreCompact, Roles: []Role{RoleAudit}, Install: false, Verified: true},
 		{Native: "PostCompact", Event: EventPostCompact, Roles: []Role{RoleAudit}, Install: false, Verified: true},
 		{Native: "SubagentStart", Event: EventSubagentStart, Roles: []Role{RoleAudit}, Install: false, Verified: true},
-		// P2 (architecture v2.0): audit-only, never installed until M0b
-		// captures the payload (case configchange-payload); unit P2-CC then
-		// flips Install/Verified on this row only. docs/p2-design.md §5.1.
-		{Native: "ConfigChange", Event: EventConfigChange, Roles: []Role{RoleAudit}, Install: false, Verified: false},
+		// P2 (architecture v2.0): audit-only. M0b case configchange-payload
+		// (Claude Code 2.1.300, docs/facts/M0b-CONCLUSIONS.md A16) captured
+		// the payload, so unit P2-CC flipped Install/Verified on this row
+		// only. No matcher; rules cannot name it. docs/p2-design.md §5.1.
+		{Native: "ConfigChange", Event: EventConfigChange, Roles: []Role{RoleAudit}, Install: true, Verified: true},
 	},
 	ClientCodex: {
 		{Native: "SessionStart", Event: EventSessionStart, Roles: []Role{RoleInject}, Install: true, Verified: false},

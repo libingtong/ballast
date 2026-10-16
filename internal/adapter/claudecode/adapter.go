@@ -46,19 +46,20 @@ func (a *Adapter) ParseEvent(native string, stdin []byte) (*model.Event, error) 
 }
 
 // configChangeFileKey is the ConfigChange payload key that carries the
-// changed settings file 【静态依据:Claude Code hooks 文档;未核验,M0b case
-// configchange-payload】. Mapping placeholder frozen by the P2 v1.5 design
-// commit (docs/p2-design.md §5.1, §9): ev.Source already holds the payload's
-// "source" (common.FillCommon); model.Event.ConfigFile is the only new field.
+// changed file. Verified by M0b case configchange-payload (Claude Code
+// 2.1.300, docs/facts/M0b-CONCLUSIONS.md A16): the top-level keys are
+// session_id, transcript_path, cwd, prompt_id, hook_event_name, source and
+// file_path; file_path is the absolute path of the changed file (the SKILL.md
+// itself when source is "skills"). ev.Source already holds the payload's
+// "source" (common.FillCommon): user_settings, project_settings,
+// local_settings, policy_settings or skills.
 const configChangeFileKey = "file_path"
 
-// fillConfigChange maps the ConfigChange-only payload fields. Owned by unit
-// P2-CC: once M0b has captured the payload it sets
-// ev.ConfigFile, _ = f.Str(configChangeFileKey) (correcting the key if the
-// capture shows another one) and adds golden rows. Until then it is a no-op,
-// so ConfigFile stays "" (ConfigChange is Install:false meanwhile).
+// fillConfigChange maps the ConfigChange-only payload fields: ConfigFile is
+// the changed file's path, verbatim (no normalization; the hook's audit
+// rewrites it). A missing or non-string file_path leaves ConfigFile "".
 func fillConfigChange(ev *model.Event, f common.Fields) {
-	_, _, _ = ev, f, configChangeFileKey
+	ev.ConfigFile, _ = f.Str(configChangeFileKey)
 }
 
 // NormalizeTool implements ports.Adapter.
