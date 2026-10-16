@@ -139,6 +139,11 @@ func TestRepoSandboxWeakened(t *testing.T) {
 		{"no-claude-dir", nil, nil, nil},
 		{"clean-project-layer", map[string]string{".claude/settings.json": `{"permissions":{"allow":["Bash(ls)"]},"model":"x"}`}, nil, nil},
 		{"project-excluded-commands", map[string]string{".claude/settings.json": `{"sandbox":{"excludedCommands":["npm"]}}`}, nil, []string{"settings.json:sandbox.excludedCommands"}},
+		{"mixed-case-settings-name", map[string]string{".claude/Settings.json": `{"sandbox":{"excludedCommands":["npm"]}}`}, nil, []string{"Settings.json:sandbox.excludedCommands"}},
+		{"upper-case-local-name", map[string]string{".claude/SETTINGS.LOCAL.JSON": `{"sandbox":{"network":{"allowUnixSockets":["/s"]}}}`}, nil, []string{"SETTINGS.LOCAL.JSON:sandbox.network.allowUnixSockets"}},
+		{"unicode-fold-settings-name", map[string]string{".claude/\u017fettings.json": `{"sandbox":{"excludedCommands":["npm"]}}`}, nil, []string{"\u017fettings.json:sandbox.excludedCommands"}},
+		{"mixed-case-unparsable", map[string]string{".claude/Settings.json": `{oops`}, nil, []string{"Settings.json:unreadable"}},
+		{"too-short-name-ignored", map[string]string{".claude/settings.json.bak": `{"sandbox":{"excludedCommands":["npm"]}}`, ".claude/settingsjson": `x`}, nil, nil},
 		{"local-allow-unix-sockets", map[string]string{".claude/settings.local.json": `{"sandbox":{"network":{"allowUnixSockets":["/var/run/docker.sock"]}}}`}, nil, []string{"settings.local.json:sandbox.network.allowUnixSockets"}},
 		{"both-layers-sorted", map[string]string{
 			".claude/settings.json":       `{"sandbox":{"excludedCommands":["npm"]}}`,
@@ -223,10 +228,16 @@ func TestEffectiveWeakenedProject(t *testing.T) {
 	}
 }
 
-// DefaultWeakenedProject is frozen to "deny" until M0b proves the any-depth
-// forms (P2-CLI flips it, with a pass row in docs/facts/m0b-cases.json).
-func TestDefaultWeakenedProjectIsFrozenToDeny(t *testing.T) {
-	if DefaultWeakenedProject != model.WeakenedProjectDeny {
-		t.Fatalf("DefaultWeakenedProject = %q; the constant is finalized only by P2-CLI", DefaultWeakenedProject)
+// The constant's value is finalized by P2-CLI (M0b conclusion, asserted by the
+// cli unit test); this package only requires that it is a valid policy and
+// that an org.json without weakened_project resolves to it.
+func TestDefaultWeakenedProjectIsValidAndUsedAsFallback(t *testing.T) {
+	switch DefaultWeakenedProject {
+	case model.WeakenedProjectAudit, model.WeakenedProjectDeny:
+	default:
+		t.Fatalf("DefaultWeakenedProject = %q, want audit or deny", DefaultWeakenedProject)
+	}
+	if got := EffectiveWeakenedProject(OrgConfig{}); got != DefaultWeakenedProject {
+		t.Errorf("EffectiveWeakenedProject(OrgConfig{}) = %q, want %q", got, DefaultWeakenedProject)
 	}
 }

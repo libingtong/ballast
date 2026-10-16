@@ -156,6 +156,33 @@ func TestDetectPolicyDefaults(t *testing.T) {
 	}
 }
 
+// A group-writable managed directory (condition 4 fails on the chain) must
+// not let its org.json steer the policy values, even though the file itself
+// looks trusted.
+func TestDetectPolicyNotAdoptedWhenChainUntrusted(t *testing.T) {
+	m, opt := baseline(t)
+	m.writeFile(tManaged+"/ballast/org.json", `{"v":1,"tier":"T1","runner_sandbox":"prefer","runner_network":"allow","weakened_project":"audit","protected_extra":["/x/p"],"runner_allow_write":["/x/w"]}`, 0, 0o644)
+	m.chmod(tManaged, 0o775)
+	got := Detect(opt)
+	if got.Tier != model.TierT0 || !contains(got.Missing, model.TierMissingOrgConfig) {
+		t.Fatalf("tier %s missing %v", got.Tier, got.Missing)
+	}
+	if got.Locked {
+		t.Errorf("locked on an untrusted chain")
+	}
+	if got.SandboxPolicy != model.SandboxOff {
+		t.Errorf("SandboxPolicy = %q leaked from the untrusted org.json", got.SandboxPolicy)
+	}
+	if got.Network != model.NetworkDeny || got.WeakenedProject != DefaultWeakenedProject ||
+		len(got.ProtectedExtra) != 0 || len(got.RunnerAllowWrite) != 0 {
+		t.Errorf("policy leaked: %+v", got)
+	}
+	// Declared stays visible for doctor.
+	if got.Declared != model.TierT1 {
+		t.Errorf("Declared = %q", got.Declared)
+	}
+}
+
 func TestDetectUnreadableInputFailsClosed(t *testing.T) {
 	m, opt := baseline(t)
 	m.hook = func(op, name string) {}

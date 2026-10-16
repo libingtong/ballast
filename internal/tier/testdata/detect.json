@@ -2780,6 +2780,36 @@
    "locked": true
   },
   {
+   "name": "user-settings-uppercase-name-weak",
+   "note": "macOS APFS is case-insensitive: Claude opens settings.json when the entry is spelled differently",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/SETTINGS.json",
+     "content": "{\"sandbox\":{\"excludedCommands\":[\"npm\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
+   "name": "user-settings-mixed-case-local-weak",
+   "note": "macOS APFS is case-insensitive: Claude opens settings.json when the entry is spelled differently",
+   "ops": [
+    {
+     "op": "write",
+     "path": "$HOME/.claude/Settings.Local.JSON",
+     "content": "{\"sandbox\":{\"excludedCommands\":[\"npm\"]}}"
+    }
+   ],
+   "tier": "T0",
+   "missing": [
+    "lower_sandbox_weakened"
+   ]
+  },
+  {
    "name": "declared-t1-but-detected-t0",
    "note": "org.json is fine (host locked) while the managed settings are gone",
    "ops": [

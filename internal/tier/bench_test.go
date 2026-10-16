@@ -2,9 +2,11 @@ package tier
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,53 +15,126 @@ import (
 	"github.com/libingtong/ballast/internal/sys"
 )
 
-// guard fails the benchmark when the measured per-op time exceeds limit.
-// The race detector slows everything down by an order of magnitude, so the
-// limits are only enforced in normal builds.
-func guard(b *testing.B, limit time.Duration) {
+// guard fails the benchmark when the per-op time of fn exceeds limit. The
+// race detector slows everything down by an order of magnitude, so the limits
+// are only enforced in normal builds.
+//
+// The figure compared with the limit is the best of several short rounds, not
+// the b.N average: the budgets are about what one call costs on a warm page
+// cache, and a single scheduler hiccup or a busy CI neighbour must not turn a
+// 25 µs operation into a failure. (The best of k rounds is a lower bound on
+// the real cost, but every round runs the full real-fs call sequence, so a
+// genuinely slow implementation still fails.) The b.N average is reported as
+// us/op for the record.
+func guard(b *testing.B, limit time.Duration, fn func()) {
 	b.Helper()
-	per := b.Elapsed() / time.Duration(b.N)
-	b.ReportMetric(float64(per.Nanoseconds())/1000, "us/op")
-	if !raceEnabled && b.N >= 100 && per > limit {
-		b.Fatalf("%v per op exceeds the %v budget", per, limit)
+	b.StopTimer()
+	avg := b.Elapsed() / time.Duration(b.N)
+	b.ReportMetric(float64(avg.Nanoseconds())/1000, "us/op")
+	if raceEnabled {
+		return
+	}
+	const rounds, iters = 15, 300
+	for i := 0; i < 20; i++ { // warm up
+		fn()
+	}
+	best := time.Duration(1 << 62)
+	for r := 0; r < rounds; r++ {
+		start := time.Now()
+		for i := 0; i < iters; i++ {
+			fn()
+		}
+		if per := time.Since(start) / iters; per < best {
+			best = per
+		}
+	}
+	b.ReportMetric(float64(best.Nanoseconds())/1000, "best-us/op")
+	if best > limit {
+		b.Fatalf("best-of-%d %v per op exceeds the %v budget (b.N average %v)", rounds, best, limit, avg)
 	}
 }
 
-// realFixture builds the baseline host on the real file system below a temp
-// dir, with ownership faked as root (an unprivileged test cannot create
-// root-owned files). Returns the Options for Detect and the managed dir.
-func realFixture(b *testing.B) (Options, string) {
+// rebaseFS serves the virtual absolute paths of a production host from a real
+// directory tree below root: Lstat("/etc/claude-code/ballast/org.json")
+// becomes a real lstat of <root>/etc/claude-code/ballast/org.json. The
+// detection code therefore issues exactly the system calls it would issue on a
+// real host (same path depth, same number of Lstat per component) while the
+// test never needs root to create the files. The kernel walks the longer
+// <root>/... path, which makes the measurement slightly pessimistic.
+type rebaseFS struct{ root string }
+
+func (r rebaseFS) real(name string) string { return filepath.Join(r.root, filepath.FromSlash(name)) }
+
+func (r rebaseFS) virtual(real string) string {
+	if rel, err := filepath.Rel(r.root, real); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
+		return "/" + filepath.ToSlash(rel)
+	}
+	return real
+}
+
+func (r rebaseFS) ReadFile(n string) ([]byte, error)       { return os.ReadFile(r.real(n)) }
+func (r rebaseFS) Stat(n string) (fs.FileInfo, error)      { return os.Stat(r.real(n)) }
+func (r rebaseFS) Lstat(n string) (fs.FileInfo, error)     { return os.Lstat(r.real(n)) }
+func (r rebaseFS) ReadDir(n string) ([]fs.DirEntry, error) { return os.ReadDir(r.real(n)) }
+func (r rebaseFS) Readlink(n string) (string, error)       { return os.Readlink(r.real(n)) }
+func (r rebaseFS) EvalSymlinks(n string) (string, error) {
+	p, err := filepath.EvalSymlinks(r.real(n))
+	return r.virtual(p), err
+}
+func (r rebaseFS) OpenFile(n string, flag int, perm fs.FileMode) (sys.File, error) {
+	f, err := os.OpenFile(r.real(n), flag, perm)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+func (r rebaseFS) MkdirAll(n string, perm fs.FileMode) error { return os.MkdirAll(r.real(n), perm) }
+func (r rebaseFS) Rename(o, n string) error                  { return os.Rename(r.real(o), r.real(n)) }
+func (r rebaseFS) Remove(n string) error                     { return os.Remove(r.real(n)) }
+func (r rebaseFS) RemoveAll(n string) error                  { return os.RemoveAll(r.real(n)) }
+
+// realFixture builds the baseline host on the real file system, rebased so
+// that its paths have the production depth (/etc/claude-code/ballast on
+// linux, /Library/Application Support/ClaudeCode/ballast on darwin; the
+// budgets of §3.1 and §3.6 are stated for those, not for a deep t.TempDir()
+// chain), with ownership faked as root (an unprivileged test cannot create
+// root-owned files). Returns the Options for Detect, the FS, the virtual
+// managed dir and the owner func.
+func realFixture(b *testing.B) (Options, sys.FS, string, ownerFunc) {
 	b.Helper()
-	// Resolve symlinks (macOS /var → /private/var) so the Self chain is the
-	// plain directory chain.
 	root, err := filepath.EvalSymlinks(b.TempDir())
 	if err != nil {
 		b.Fatal(err)
 	}
-	managed := filepath.Join(root, "etc", "claude-code")
-	self := filepath.Join(root, "usr", "libexec", "ballast", "ballast")
-	home := filepath.Join(root, "home")
+	fsys := rebaseFS{root: root}
+	managed := layout.ManagedDirFor(runtime.GOOS)
+	self := "/usr/local/libexec/ballast/ballast"
+	home := "/home/u"
+	if runtime.GOOS == "darwin" {
+		home = "/Users/u"
+	}
 	write := func(p, c string, perm os.FileMode) {
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fsys.real(p)), 0o755); err != nil {
 			b.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte(c), perm); err != nil {
+		if err := os.WriteFile(fsys.real(p), []byte(c), perm); err != nil {
 			b.Fatal(err)
 		}
 	}
 	write(self, "#!", 0o755)
-	write(filepath.Join(managed, "ballast", "org.json"), baseOrgJSON(), 0o644)
-	write(filepath.Join(managed, "managed-settings.d", "ballast.json"), mustJSON(b, settingsDocAt(filepath.ToSlash(managed), self, baseExtra)), 0o644)
-	write(filepath.Join(home, ".claude", "settings.json"), `{"model":"x"}`, 0o644)
+	write(managed+"/ballast/org.json", baseOrgJSON(), 0o644)
+	write(managed+"/managed-settings.d/ballast.json", mustJSON(b, settingsDocAt(managed, self, baseExtra)), 0o644)
+	write(home+"/.claude/settings.json", `{"model":"x"}`, 0o644)
+	owner := func(os.FileInfo) (uint32, bool) { return 0, true }
 	return Options{
-		FS:         sys.OSFS{},
+		FS:         fsys,
 		Env:        sys.MapEnv{OS: runtime.GOOS, Vars: map[string]string{"HOME": home}},
-		Layout:     layout.Layout{GOOS: runtime.GOOS, InstallRoot: home, ClaudeDir: filepath.Join(home, ".claude")},
+		Layout:     layout.Layout{GOOS: runtime.GOOS, InstallRoot: home, ClaudeDir: home + "/.claude"},
 		Self:       self,
-		Owner:      func(os.FileInfo) (uint32, bool) { return 0, true },
+		Owner:      owner,
 		ManagedDir: managed,
 		GOOS:       runtime.GOOS,
-	}, managed
+	}, fsys, managed, owner
 }
 
 // BenchmarkProbe: one full detection (budget 200 µs on a warm page cache).
@@ -74,23 +149,23 @@ func BenchmarkProbe(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			Detect(opt)
 		}
-		b.StopTimer()
-		guard(b, 200*time.Microsecond)
+		guard(b, 200*time.Microsecond, func() { Detect(opt) })
 	})
 	b.Run("realfs-faked-root", func(b *testing.B) {
 		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 			b.Skip("T1 detection is darwin/linux only")
 		}
-		opt, _ := realFixture(b)
+		opt, _, _, _ := realFixture(b)
 		got := Detect(opt)
-		b.Logf("fixture tier %s missing %v (on linux a sticky /tmp ancestor makes the chain fail early)", got.Tier, got.Missing)
+		if got.Tier != model.TierT1 {
+			b.Fatalf("fixture is %s: %v", got.Tier, got.Missing)
+		}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			Detect(opt)
 		}
-		b.StopTimer()
-		guard(b, 200*time.Microsecond)
+		guard(b, 200*time.Microsecond, func() { Detect(opt) })
 	})
 	b.Run("realfs-unmanaged-host", func(b *testing.B) {
 		// What an ordinary developer machine pays: nothing is managed.
@@ -106,8 +181,7 @@ func BenchmarkProbe(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			Detect(opt)
 		}
-		b.StopTimer()
-		guard(b, 200*time.Microsecond)
+		guard(b, 200*time.Microsecond, func() { Detect(opt) })
 	})
 }
 
@@ -125,7 +199,7 @@ func BenchmarkLocked(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			Locked(sys.OSFS{}, goos, nil)
 		}
-		guard(b, 30*time.Microsecond)
+		guard(b, 30*time.Microsecond, func() { Locked(sys.OSFS{}, goos, nil) })
 	})
 	b.Run("locked-memfs", func(b *testing.B) {
 		m, _ := baseline(b)
@@ -137,22 +211,22 @@ func BenchmarkLocked(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			Locked(m, "linux", memOwner)
 		}
-		guard(b, 30*time.Microsecond)
+		guard(b, 30*time.Microsecond, func() { Locked(m, "linux", memOwner) })
 	})
 	b.Run("locked-real-fs-faked-root", func(b *testing.B) {
 		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 			b.Skip("darwin/linux only")
 		}
-		_, managed := realFixture(b)
-		owner := func(os.FileInfo) (uint32, bool) { return 0, true }
-		st := readOrg(sys.OSFS{}, owner, filepath.ToSlash(managed))
-		b.Logf("fixture: file trusted %v, chain ok %v, tier %s", st.fileTrusted, st.chainOK, st.org.Tier)
+		_, fsys, managed, owner := realFixture(b)
+		if st := readOrg(fsys, owner, managed); !lockedFrom(st) {
+			b.Fatalf("fixture not locked: file trusted %v, chain ok %v, tier %s", st.fileTrusted, st.chainOK, st.org.Tier)
+		}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			lockedFrom(readOrg(sys.OSFS{}, owner, filepath.ToSlash(managed)))
+			lockedFrom(readOrg(fsys, owner, managed))
 		}
-		guard(b, 30*time.Microsecond)
+		guard(b, 30*time.Microsecond, func() { lockedFrom(readOrg(fsys, owner, managed)) })
 	})
 }
 

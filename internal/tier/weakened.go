@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
-	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/libingtong/ballast/internal/sys"
 )
@@ -235,7 +235,7 @@ func repoSandboxWeakened(fsys sys.FS, repo string) []string {
 	var out []string
 	for _, e := range ents {
 		name := e.Name()
-		if ok, _ := path.Match("settings*.json", name); !ok {
+		if !isSettingsName(name) {
 			continue
 		}
 		t := e.Type()
@@ -266,4 +266,20 @@ func repoSandboxWeakened(fsys sys.FS, repo string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// isSettingsName reports whether a directory entry is, or on a
+// case-insensitive file system (macOS APFS default) could be opened as, a
+// Claude settings file: settings*.json compared with Unicode simple case
+// folding. Matching is deliberately wider than what a case-sensitive
+// file system would serve (Settings.json is only a candidate on Linux), so
+// the failure direction is the conservative one; the original spelling is
+// kept in reports.
+func isSettingsName(name string) bool {
+	r := []rune(name)
+	if len(r) < len("settings")+len(".json") {
+		return false
+	}
+	return strings.EqualFold(string(r[:len("settings")]), "settings") &&
+		strings.EqualFold(string(r[len(r)-len(".json"):]), ".json")
 }

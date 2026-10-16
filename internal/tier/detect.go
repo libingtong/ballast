@@ -38,9 +38,29 @@ type detector struct {
 	managed string // compiled-in (or test-overridden) managed dir, unresolved
 	home    string
 	missing map[string]bool
+	evals   map[string]evalResult // EvalSymlinks memo: Self and the hook command are usually the same path
+}
+
+type evalResult struct {
+	path string
+	err  error
 }
 
 func (d *detector) miss(id string) { d.missing[id] = true }
+
+// eval is EvalSymlinks memoized for the lifetime of one detection (one
+// Lstat per path component each time it is not).
+func (d *detector) eval(p string) (string, error) {
+	if r, ok := d.evals[p]; ok {
+		return r.path, r.err
+	}
+	r, err := d.fsys.EvalSymlinks(p)
+	if d.evals == nil {
+		d.evals = make(map[string]evalResult, 2)
+	}
+	d.evals[p] = evalResult{r, err}
+	return r, err
+}
 
 func detect(opt Options) model.TierInfo {
 	d := &detector{opt: opt, fsys: opt.FS, env: opt.Env, owner: ownerOrDefault(opt.Owner), missing: map[string]bool{}}
@@ -89,7 +109,15 @@ func detect(opt Options) model.TierInfo {
 	}
 	if org.fileTrusted {
 		o := org.org
+		// Declared is what a root-owned org.json says; doctor and the hook
+		// compare it with the verdict (tier_mismatch).
 		info.Declared = o.Tier
+	}
+	// The policy values are adopted only when the whole parent chain is
+	// trusted as well (condition 4): a group-writable managed directory lets
+	// a group member replace org.json, so its contents are not believed.
+	if org.fileTrusted && org.chainOK {
+		o := org.org
 		info.SandboxPolicy = o.RunnerSandbox
 		if info.SandboxPolicy == "" {
 			if o.Tier == model.TierT1 {
@@ -148,7 +176,7 @@ func (d *detector) checkSelf() (resolved string, ok bool) {
 	if self == "" || !path.IsAbs(self) {
 		return "", false
 	}
-	r, err := d.fsys.EvalSymlinks(self)
+	r, err := d.eval(self)
 	if err != nil {
 		if !isNotExist(err) {
 			d.miss(model.TierMissingUnreadable)
@@ -348,7 +376,7 @@ func (d *detector) findHook(docs []managedDoc, self string) (string, bool) {
 					if len(args) < 2 || args[0] != "hook" || args[1] != "--client" {
 						continue
 					}
-					r, err := d.fsys.EvalSymlinks(cmd)
+					r, err := d.eval(cmd)
 					if err != nil || r != self {
 						continue
 					}
@@ -455,7 +483,7 @@ func (d *detector) checkLowerLayers() {
 			continue
 		}
 		for _, e := range ents {
-			if ok, _ := path.Match("settings*.json", e.Name()); !ok {
+			if !isSettingsName(e.Name()) {
 				continue
 			}
 			if e.IsDir() {
