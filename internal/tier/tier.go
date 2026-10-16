@@ -1,33 +1,45 @@
 // Package tier (P2 unit P2-TIER; architecture v2.0, docs/p2-design.md §3.2)
 // decides whether this host runs Ballast at trust tier T1 (managed,
-// agent-unwritable) or T0 (best effort), and owns the single list of
-// protected paths shared by `org render`, the runner sandbox and detection.
+// agent-unwritable) or T0 (best effort), owns the single list of protected
+// paths shared by `org render`, the runner sandbox and detection, and owns
+// the redirect lock (§3.2 "重定向锁").
 //
-// Layer L2 (imports model, sys, layout). Hot path: yes (the hook calls it
-// through ports.TierProbe, lazily); no os/exec, no net, no package-level
-// regexp, no init().
+// Layer L2 (imports model, sys, layout). Hot path: yes (the hook calls
+// Locked on every invocation and Probe lazily through ports.TierProbe); no
+// os/exec, no net, no package-level regexp, no init().
 //
 // Frozen rule: T1 iff ALL of the following hold, otherwise T0 with every
 // failed condition listed in TierInfo.Missing (model.TierMissing*):
 //
 //  1. GOOS is darwin or linux (WSL2 reports linux). Native Windows ⇒ T0.
-//  2. None of BALLAST_HOME, BALLAST_MANAGED_DIR, BALLAST_INSTALL_ROOT is set
-//     (test redirections; an agent-controlled environment must never be able
-//     to point detection at files it owns).
+//  2. The test redirections BALLAST_HOME / BALLAST_MANAGED_DIR /
+//     BALLAST_INSTALL_ROOT are not IN EFFECT. When the host is locked
+//     (Locked == true) production builds ignore them (layout.ResolveWith
+//     with IgnoreRedirects), so they can never be in effect on a locked
+//     host; on an unlocked host their presence ⇒ T0 (env_override). An
+//     agent therefore gains nothing by setting them: on a T1 host they are
+//     ignored, on any other host the result is T0 anyway.
 //  3. Self (absolute, symlinks resolved) is a regular file owned by uid 0
 //     and not group/other-writable, and so is every parent directory up
 //     to "/".
-//  4. <managed>/ballast/org.json is a root-owned, non-group/other-writable
-//     regular file whose "tier" is "T1".
-//  5. The merged Claude managed settings (managed-settings.json plus
-//     managed-settings.d/*.json in the merge order established by M0b; each
-//     file root-owned and not group/other-writable) contain:
-//     allowManagedHooksOnly == true; at least one hook entry with
-//     command == Self and args[0:2] == ["hook","--client"]; sandbox.enabled
-//     == true, allowUnsandboxedCommands == false, failIfUnavailable == true;
-//     sandbox.filesystem.denyWrite covering every ProtectedPaths entry;
-//     permissions.deny containing Edit/Write/NotebookEdit rules for every
-//     protected path; allowManagedPermissionRulesOnly == true.
+//  4. ManagedDirFor(GOOS)/ballast/org.json — the COMPILED-IN managed dir,
+//     never Layout.ManagedDir — is a root-owned, non-group/other-writable
+//     regular file that passes LoadOrgConfig validation and whose "tier"
+//     is "T1".
+//  5. The merged Claude managed settings under ManagedDirFor(GOOS)
+//     (managed-settings.json plus managed-settings.d/*.json in the merge
+//     order established by M0b; each file root-owned and not
+//     group/other-writable) contain: allowManagedHooksOnly == true; at
+//     least one hook entry whose command is an ABSOLUTE path with
+//     EvalSymlinks(command) == EvalSymlinks(Self) and args[0:2] ==
+//     ["hook","--client"]; sandbox.enabled == true,
+//     allowUnsandboxedCommands == false, failIfUnavailable == true;
+//     allowManagedPermissionRulesOnly == true; and, with
+//     (dw, pd) = ManagedForms(lay, command, org.ProtectedExtra) where
+//     command is that hook entry's command string exactly as written,
+//     every string of dw appears verbatim in sandbox.filesystem.denyWrite
+//     and every string of pd appears verbatim in permissions.deny
+//     ("covers" == exact string-set inclusion; no glob reasoning).
 //
 // Ownership checks go through Options.Owner so unit tests can fake uid 0
 // without root; production uses syscall.Stat_t (unix) and reports "not
@@ -35,9 +47,13 @@
 // with root is outside every Ballast boundary; docs/trust-model.md).
 //
 // Acceptance (P2-TIER): testdata/detect.json table (each condition flipped
-// on its own ⇒ T0 with exactly that Missing id; all satisfied ⇒ T1);
-// BenchmarkProbe ≤ 200 µs on a warm page cache; Probe memoizes (second call
-// does no I/O, asserted with a counting FS).
+// on its own ⇒ T0 with exactly that Missing id; all satisfied ⇒ T1; a row
+// where the managed hook command is a symlink to Self ⇒ T1; a row with a
+// relative command ⇒ managed_hooks); testdata/managed_forms.json golden
+// (shared with internal/install); Locked table (absent / non-root /
+// group-writable / tier T0 / invalid org.json ⇒ false); BenchmarkProbe
+// ≤ 200 µs and BenchmarkLocked ≤ 20 µs on a warm page cache; Probe
+// memoizes (second call does no I/O, asserted with a counting FS).
 package tier
 
 import (
@@ -50,8 +66,12 @@ import (
 
 // Options configures detection.
 type Options struct {
-	FS     sys.FS
-	Env    sys.Env
+	FS  sys.FS
+	Env sys.Env
+	// Layout is the layout the process actually uses (resolved with
+	// layout.ResolveWith; on a locked host redirects are already ignored).
+	// Detection reads org.json and managed settings from
+	// layout.ManagedDirFor(GOOS), never from Layout.ManagedDir.
 	Layout layout.Layout
 	// Self is the absolute path of the running ballast binary.
 	Self string
@@ -61,18 +81,47 @@ type Options struct {
 	// cannot tell (Windows, fake FS without ownership). nil ⇒ platform
 	// default.
 	Owner func(fi fs.FileInfo) (uid uint32, ok bool)
+	// ManagedDir overrides layout.ManagedDirFor(GOOS) for unit tests only;
+	// production wiring (internal/cli) never sets it.
+	ManagedDir string
 }
 
 // OrgConfig is <managed>/ballast/org.json (root-owned; written by the
 // administrator, rendered by `ballast org render`). Unknown keys are
-// ignored; a file that does not decode counts as absent (TierMissingOrgConfig).
+// ignored.
+//
+// Validation (LoadOrgConfig returns an error ⇒ treated as absent,
+// TierMissingOrgConfig, and the host is not locked):
+//   - V must be 1; Tier must be "", "T0" or "T1";
+//   - RunnerSandbox must be "", require, prefer or off; RunnerNetwork must
+//     be "", deny or allow;
+//   - every RunnerAllowWrite / ProtectedExtra entry is absolute or starts
+//     with "~/"; RunnerAllowWrite must not contain "~" or "~/" (a writable
+//     home would let a sandboxed test persist through shell rc files), any
+//     of "/", "/home", "/Users", "/root", "/var/root" or a path exactly one
+//     level below "/home" or "/Users" (someone's home directory), nor any
+//     path under the protected org dir. The runner re-checks every
+//     expanded entry against the real home directory at wrap time
+//     (sandbox.ValidateSpec).
 type OrgConfig struct {
 	V    int        `json:"v"` // 1
 	Tier model.Tier `json:"tier,omitempty"`
-	// RunnerSandbox defaults to "require" when Tier is T1.
+	// RunnerSandbox governs origin=cli verify runs only (a human or the
+	// agent running `ballast verify` itself). origin=hook runs ALWAYS
+	// require the sandbox regardless of this value (docs/p2-design.md
+	// §3.4). Default "require" when Tier is T1, "off" otherwise.
 	RunnerSandbox model.SandboxPolicy `json:"runner_sandbox,omitempty"`
+	// RunnerNetwork is the sandboxed test command's network policy;
+	// default "deny" (loopback and unix sockets inside the writable set
+	// only).
+	RunnerNetwork model.NetworkPolicy `json:"runner_network,omitempty"`
+	// RunnerAllowWrite are extra writable locations for the sandboxed
+	// test command (build caches such as "~/.cache/go-build"), on top of
+	// the repo, its git dirs and the per-job temp dir.
+	RunnerAllowWrite []string `json:"runner_allow_write,omitempty"`
 	// ProtectedExtra are extra protected paths ("~/" allowed), appended to
-	// ProtectedPaths for denyWrite / permissions.deny / runner sandbox.
+	// ProtectedPaths / ManagedForms for denyWrite, permissions.deny and the
+	// runner sandbox.
 	ProtectedExtra []string `json:"protected_extra,omitempty"`
 }
 
@@ -94,10 +143,51 @@ func Detect(opt Options) model.TierInfo {
 	panic("unimplemented: tier.Detect (unit P2-TIER)")
 }
 
-// LoadOrgConfig reads and decodes org.json. It does not check ownership
-// (Detect does).
+// LoadOrgConfig reads, decodes and validates org.json (rules on
+// OrgConfig). It does not check ownership (Detect and Locked do).
 func LoadOrgConfig(fsys sys.FS, path string) (OrgConfig, error) {
 	panic("unimplemented: tier.LoadOrgConfig (unit P2-TIER)")
+}
+
+// Locked reports whether the host is "redirect-locked": a regular file
+// ManagedDirFor(goos)/ballast/org.json exists, is owned by uid 0, is not
+// group/other-writable, passes LoadOrgConfig validation and declares
+// "tier":"T1". It costs one Lstat plus, only when that file exists, one
+// read of a few hundred bytes; it never fails (any doubt ⇒ false, i.e.
+// the current behaviour).
+//
+// Production wiring (internal/cli) calls Locked before resolving the
+// layout and passes the result as layout.Options.IgnoreRedirects, so on a
+// locked host BALLAST_HOME / BALLAST_MANAGED_DIR / BALLAST_INSTALL_ROOT
+// are ignored and the home directory comes from the passwd database
+// instead of $HOME (docs/p2-design.md §3.2 "重定向锁"). The hook audits
+// diag "env_redirect_ignored" once per session when a variable was
+// present; doctor reports it as warn. Tests that need redirection never
+// create a root-owned org.json at the real managed dir, so they are
+// unaffected; tests of the lock itself use a fake FS and Owner.
+func Locked(fsys sys.FS, goos string, owner func(fi fs.FileInfo) (uid uint32, ok bool)) bool {
+	panic("unimplemented: tier.Locked (unit P2-TIER)")
+}
+
+// ManagedForms returns the exact denyWrite and permissions.deny strings
+// that `org render` emits and that Detect requires (condition 5). It is
+// pure: it reads only lay.GOOS and the directory of lay.OrgRules; home and
+// repo entries are the literal "~/" and "./" forms, independent of any
+// user or repo, so the same strings work for every user on the host.
+//
+//	denyWrite = [dir(OrgRules), "~/.ballast", "./.ballast", dir(self),
+//	             extra..., "~/.claude/settings*.json", "./.claude/settings*.json"]
+//	permDeny  = for tool in [Edit, Write, NotebookEdit]:
+//	              tool(dir(OrgRules)/**), tool(~/.ballast/**), tool(./.ballast/**),
+//	              tool(dir(self)/**), for each extra e: tool(e), tool(e/**),
+//	              tool(~/.claude/settings*.json), tool(./.claude/settings*.json)
+//
+// self is used literally (never resolved): org render passes --binary as
+// given, Detect passes the matched managed hook's command string. dir()
+// splits on '/' (and '\' when GOOS is windows); duplicates keep the first
+// occurrence. testdata/managed_forms.json is the frozen golden.
+func ManagedForms(lay layout.Layout, self string, extra []string) (denyWrite, permDeny []string) {
+	panic("unimplemented: tier.ManagedForms (unit P2-TIER)")
 }
 
 // ProtectedKind classifies a protected path.
@@ -125,11 +215,13 @@ type ProtectedPath struct {
 	Glob     bool
 }
 
-// ProtectedPaths returns the plan B0 protected-path list in a stable order.
-// repo is the work-tree root ("" when unknown: org render emits the
-// "<repo>" placeholder rules via its own template, see docs/p2-design.md
-// §3.5). It performs EvalSymlinks through fsys and never fails: unresolved
-// paths keep Resolved "".
+// ProtectedPaths returns the plan B0 protected-path list as absolute paths
+// for one user and one repo, in a stable order. It is the input of the
+// runner sandbox (docs/p2-design.md §3.4) and of doctor's listing; it is
+// NOT used for the managed-settings coverage check (that is ManagedForms,
+// which is repo- and user-independent). repo is the work-tree root (""
+// when unknown ⇒ repo entries omitted). It performs EvalSymlinks through
+// fsys and never fails: unresolved paths keep Resolved "".
 func ProtectedPaths(fsys sys.FS, lay layout.Layout, self, repo string, extra []string) []ProtectedPath {
 	panic("unimplemented: tier.ProtectedPaths (unit P2-TIER)")
 }

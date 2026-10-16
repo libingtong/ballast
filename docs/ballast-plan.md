@@ -1,6 +1,6 @@
 # Ballast(压舱石)实施计划 v0.4
 
-> v0.5(2026-10-16):核心路径完成并通过系统审计,P2 计划见末尾"v0.5 P2 计划",详细设计见 `docs/p2-design.md`。
+> v0.5(2026-10-16):核心路径完成并通过系统审计,P2 计划见末尾"v0.5 P2 计划"(含 v0.5.1 审核修订),详细设计见 `docs/p2-design.md`。
 
 > v0.4(2026-10-16):M0a/M0c 实测完成,并按用户要求加入多客户端支持(参照 pinrule)。改动见末尾"v0.4 变更",与正文冲突时以 v0.4 变更为准。
 
@@ -638,8 +638,8 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 
 | 工作包 | 内容 | 验收(可执行) |
 |---|---|---|
-| **M0b 托管层容器取证** | 一次性 Linux 容器(Claude Code 固定版本,`/etc/claude-code/managed-settings.json` 与 `managed-settings.d/`),不使用凭据:先核实无凭据时 SessionStart/UserPromptSubmit 是否触发(无 key / 假 key + 拒绝连接端点 / 假 key + 挂起端点三种模式),再测 `allowManagedHooksOnly`、低层 `disableAllHooks`、hook 合并、`.d` 合并规则、托管 hook 的路径要求、ConfigChange payload、MCP 白名单键名、容器内 bwrap 条件。沙箱 denyWrite、permissions.deny、MCP 写入、hook 是否在沙箱外标为【需凭据】,给出一条命令的补测方式 | `scripts/probe-m0b/run.sh` 生成 `docs/facts/m0b-cases.json`、`M0b-CONCLUSIONS.md`;`go run ./scripts/probe-m0b/check docs/facts/m0b-cases.json` 通过(每个必需 case 字段齐全,`needs_credentials` 带 `recheck`) |
-| **T1 沙箱化 runner 与 hook 代起 verify**(B0) | 层级判定五条件(GOOS、无测试重定向变量、二进制链 root 所有、root 所有的 `org.json` 声明 T1、托管设置完整),agent 无法伪造;PreToolUse 识别规范 `ballast verify <name>`,T1 下 hook 以 detached 方式启动 Ballast 自身(`verify --hook-start`),返回带 job id 的 deny,不依赖 `updatedInput`;runner 在进程内把测试命令包进 sandbox-exec(macOS)或 bwrap(Linux),受保护路径 denyWrite;沙箱不可用时按策略表退化(T1 默认 `require`:不执行、记 infra);证据 `tier:"T1"` 当且仅当 runner 自判 T1 且确实用了沙箱 | `go test ./internal/tier ./internal/sandbox ./internal/runner ./internal/hook`;bench 新场景(假 T1 规范 verify)p95 ≤ 30ms;`scripts/boundary-t1.sh` |
+| **M0b 托管层容器取证** | 一次性 Linux 容器(Claude Code 固定版本,`/etc/claude-code/managed-settings.json` 与 `managed-settings.d/`),不使用凭据:先核实无凭据时 SessionStart/UserPromptSubmit 是否触发(无 key / 假 key + 拒绝连接端点 / 假 key + 挂起端点三种模式),再测 `allowManagedHooksOnly`、低层 `disableAllHooks`、hook 合并、`.d` 合并规则、托管 hook 的路径要求、ConfigChange payload、MCP 白名单键名、容器内 bwrap 条件。hook 是否在沙箱外(A20)也用无凭据方式实测(托管 SessionStart hook 在 `sandbox.enabled` 下写 denyWrite 路径);沙箱 denyWrite 对 Bash、permissions.deny、MCP 写入标为【需凭据】,给出一条命令的补测方式 | `scripts/probe-m0b/run.sh` 生成 `docs/facts/m0b-cases.json`、`M0b-CONCLUSIONS.md`;`go run ./scripts/probe-m0b/check docs/facts/m0b-cases.json` 通过(每个必需 case 字段齐全,`needs_credentials` 带 `recheck`) |
+| **T1 沙箱化 runner 与 hook 代起 verify**(B0) | 层级判定五条件(GOOS、重定向变量未生效、二进制链 root 所有、root 所有的 `org.json` 声明 T1、托管设置完整,覆盖判定用 `tier.ManagedForms` 的精确字符串),agent 无法伪造;声明 T1 的主机上重定向变量一律被忽略(重定向锁),降级也做不到;PreToolUse 识别规范 `ballast verify <name>`,T1 下 hook 以 detached 方式启动 Ballast 自身(`verify --hook-start`),返回带 job id 的 deny,不依赖 `updatedInput`;runner 在进程内把测试命令包进 sandbox-exec(macOS)或 bwrap(Linux),**默认拒写**(只放行仓库、git dir、job 临时目录与 `runner_allow_write`,其中再拒受保护路径与 git hooks/config 等,祖先目录固定),网络默认 deny;hook 代起的 job 一律必须沙箱,不可用即不执行、记 infra;`runner_sandbox`(require/prefer/off)只管人工运行的 verify;证据 `tier:"T1"` 当且仅当 runner 自判 T1 且确实用了沙箱 | `go test ./internal/tier ./internal/sandbox ./internal/runner ./internal/hook`;bench 新场景(假 T1 规范 verify)p95 ≤ 30ms;`scripts/boundary-t1.sh` |
 | **P2-a 脱敏与可选上报** | 新 L0 包 `internal/redact`,hook 与 audit 共用;`ballast report --out <file>` 只输出脱敏后的聚合统计,默认不产生、不在热路径、不联网;网络上报不在 P2 实现,只冻结约束(单独二进制、显式 endpoint 加二次确认参数、`ballast` 二进制永不链接 `net/*`) | ≥ 50 条正样本零泄漏 + ≥ 20 条负样本不变;`go test ./internal/redact -run '^$' -fuzz FuzzString -fuzztime 60s`;`go test ./internal/report`;archtest `TestBinaryNoNet` |
 | **M4 边界** | ConfigChange 只审计(stdout 恒空),payload 取证后再安装;`boundary-t0.sh` 覆盖 trust-model §2.1 的全部"识别的写入"并把"未覆盖的写法"作为 gap 断言;`boundary-t1.sh` 在容器中用 `org render` 生成的托管配置与沙箱 runner 验证 agent 不可写,不需要模型的部分做成断言,agent 实际尝试的部分标【需凭据】 | `scripts/boundary-t0.sh`(三平台);`scripts/boundary-t1.sh`(Linux + Docker);`--with-credentials` 补测 |
 | **客户端取证** | Hermes:在隔离环境(Docker 或临时 venv,不碰真实 `~/.hermes`)中用 `hermes hooks test` 离线验证安装后的调用链(载荷、stdout 协议、阻断语义),写 `docs/facts/hermes-cases.json`,据此修正 adapter/hermes(`patch` 工具、`pre_verify` 续跑映射等);Codex、Cursor 不碰凭据无法取证,写补测命令 | `bash scripts/probe-clients/hermes.sh`;`go test ./internal/adapter/...` |
@@ -650,7 +650,7 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 ### 2. 已定事项(本版裁决)
 
 - 层级配置放在独立的 root 所有文件 `<托管目录>/ballast/org.json`,`schema/rules.v1.json` 不变。
-- 新鲜度不按 tier 过滤:T1 主机上只有沙箱外进程能写证据,tier 用于审计与 CI 判读。
+- 新鲜度不按 tier 过滤:hook 代起的测试一律在默认拒写的沙箱里执行,T1 主机上能写证据的只有 runner 本身与人工运行的 verify,tier 用于审计与 CI 判读。
 - hook 代起 verify 的 deny 是合成决策,与同事件规则结果按既有裁决合并;spawn 失败仍然 deny 并审计。
 - 统一脱敏器放在 L0,hook 可直接 import(对"hook 只依赖契约包"的唯一放宽)。
 - ConfigChange 只审计、绝不阻断;M0b 未取得 payload 之前不安装。
@@ -665,3 +665,14 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - M0b、boundary-t1 中标【需凭据】的用例:用户提供凭据后运行设计文档 §6.5、§5.3 的补测命令(脚本只从环境读取变量并经 `docker run -e` 传入,不落盘)。
 - Codex、Cursor 的真实取证:用户在临时配置根中自行登录后运行 `scripts/probe-clients/{codex,cursor}.sh`。
 - 在此之前,这些项在文档、`doctor` 与能力矩阵中保持【未核验】。
+
+### 5. v0.5.1 修订(2026-10-16,P2 设计第 1 轮独立审核)
+
+设计文档升至 v1.1、架构升至 v2.0.1,逐条处置见 `docs/p2-design.md` §13。计划层面的变化:
+
+- **runner 沙箱改为默认拒写**(blocker):v0.5 的"默认全允许、只拒受保护路径"会让 hook 代起的 verify 成为沙箱逃逸原语(写 shell rc、git hooks,重命名祖先目录替换受保护文件,联网外传)。改后的规则已在本机 macOS 与 Debian 12 容器里做过设计期实测,正式用例由 P2-SANDBOX 集成测试与 `boundary-t1.sh` 固化。
+- **hook 代起的 job 一律必须沙箱**;`runner_sandbox` 只管人工运行的 verify。
+- **重定向锁**:声明 T1 的主机上忽略 `BALLAST_HOME` 等测试重定向变量,家目录取自 passwd;`boundary-t1.sh` 断言带重定向变量时 org 规则仍然生效。
+- **覆盖判定冻结为精确字符串包含**(`tier.ManagedForms` + 共享 golden),`org render` 与 `Detect` 不会各自实现出分歧。
+- **M0b 无凭据用例 14 个、需凭据 5 个**:`hooks-run-outside-sandbox`(A20)改为无凭据实测;它若失败,P2-RUNNER 与 P2-HOOK 暂停,走契约变更。
+- 单元划分不变(仍是 13 个),所有权补齐:`internal/dsl/lint.go` 归 P2-HERMES(只追加),`internal/layout/resolvewith.go` 归 P2-TIER,`verify --status` 回退归 P2-RUNNER,`.github/workflows/**` 等三平台 CI 修复分支合入后再由 P2-CLI 修改。

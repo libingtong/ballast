@@ -1,6 +1,6 @@
 # Ballast 架构与接口契约(冻结版 v2.0)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`);变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1 为 P2 设计第 1 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -83,7 +83,7 @@
 | `internal/cli`、`cmd/ballast` | U12 | 子命令解析、接线(wiring)、退出码 | `hook` 分支是 |
 | `rules/`、`examples/`、`testdata/bash-regress.json`、`docs/pinrule-mapping.md` | U11 | 规则内容 | — |
 | `internal/redact`(v2.0) | P2-REDACT | 统一脱敏器(hook 状态环、audit、report 共用),只用标准库 | 是 |
-| `internal/tier`(v2.0) | P2-TIER | T0/T1 判定(`ports.TierProbe`)、受保护路径唯一来源、`org.json` | 是(惰性) |
+| `internal/tier`(v2.0) | P2-TIER | T0/T1 判定(`ports.TierProbe`)、重定向锁(`Locked`)、托管配置字面形式(`ManagedForms`)与受保护绝对路径(`ProtectedPaths`)、`org.json` | 是(惰性) |
 | `internal/sandbox`(v2.0) | P2-SANDBOX | runner 测试命令的 OS 沙箱包装(sandbox-exec / bwrap) | 否 |
 | `internal/report`(v2.0) | P2-REPORT | `ballast report --out` 的脱敏聚合与隐私自检 | 否 |
 
@@ -119,7 +119,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 
 ## 3. 磁盘布局与文件格式
 
-### 3.1 `~/.ballast/`(`BALLAST_HOME` 可重定向,仅供测试;Windows 为 `%USERPROFILE%\.ballast`)
+### 3.1 `~/.ballast/`(`BALLAST_HOME` 可重定向,仅供测试;Windows 为 `%USERPROFILE%\.ballast`。v2.0.1:在声明 T1 的已锁定主机上,生产构建忽略 `BALLAST_HOME`、`BALLAST_INSTALL_ROOT`、`BALLAST_MANAGED_DIR`,家目录取自 passwd,见 `docs/p2-design.md` §3.2)
 
 | 路径 | 所有者 | 格式 | 写入方式 |
 |---|---|---|---|
@@ -331,7 +331,7 @@ hooks:
 
 MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question)。
 
-v2.0:受保护路径改由 `tier.ProtectedPaths` 生成(新增 `<repo>/.claude/settings*.json`),输出增加 `org.json` 段,`--write --i-am-admin` 同时写 `<托管目录>/ballast/org.json`;各键在真实托管环境中的效果由 M0b 取证,见 `docs/p2-design.md` §3.5、§6。
+v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.ManagedForms`(新增 `./.claude/settings*.json`;`--protect` 的条目同时写 `T(e)` 与 `T(e/**)` 并写进 org.json `protected_extra`),共享 golden `internal/tier/testdata/managed_forms.json`;输出增加 `org.json` 段,`--write --i-am-admin` 同时写 `<托管目录>/ballast/org.json`;各键在真实托管环境中的效果由 M0b 取证,见 `docs/p2-design.md` §3.5、§6。
 
 ---
 
@@ -536,6 +536,22 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 
 ## 14. 修订记录
 
+### v2.0.1(2026-10-16,P2 设计第 1 轮独立审核修订)
+
+配套 `docs/p2-design.md` v1.1(其 §13 有逐条处置)。仍然全部是**追加**或对 v2.0 新增骨架的修改,未改动 v1.x 已实现的导出签名。
+
+| 项 | 处理 | 涉及文件 |
+|---|---|---|
+| runner 沙箱模型(blocker) | 由"默认全允许、只拒受保护路径"改为**默认拒写**:可写集合 = 仓库 + git dir + job 临时目录 + org.json `runner_allow_write`;集合内再拒受保护路径与 `RepoMandatoryDeny`/`GitDirMandatoryDeny`;集合内受保护路径的祖先固定(macOS literal、Linux 挂载点);网络默认 deny(`model.NetworkPolicy`);`sandbox.Spec` 扩展,新增 `AncestorPins`、`ValidateSpec`、`PostCheck`、`DarwinEscapeDenials` | `internal/sandbox/sandbox.go`、`internal/model/tier.go` |
+| hook 代起的 job 一律沙箱 | origin=hook 不受 `runner_sandbox` 影响,无后端即不执行(infra、`sandbox_unavailable`);`sandbox.Decide` 增加 `origin` 参数;`runner_sandbox` 只管 origin=cli | `internal/sandbox/sandbox.go`、`internal/model/tier.go` |
+| 重定向锁 | `tier.Locked` + `layout.Options`/`layout.ResolveWith`:默认托管目录下存在 root 所有、声明 T1 的 org.json 时忽略 `BALLAST_HOME`/`BALLAST_MANAGED_DIR`/`BALLAST_INSTALL_ROOT`,家目录取自 passwd;tier 只读编译期默认托管目录;`TierInfo.Locked` | `internal/tier/tier.go`、`internal/layout/resolvewith.go`、`internal/model/tier.go` |
+| 覆盖判定 | `tier.ManagedForms`(纯函数,与 org render 逐字一致);覆盖 = 精确字符串集合包含;共享 golden;hook 命令与 Self 都先 `EvalSymlinks`,只接受绝对路径 | `internal/tier/tier.go`、`internal/tier/testdata/managed_forms.json`、§5.5 |
+| `verify --status <request_id>` 回退 | `runner.RequestStatus`(归 P2-RUNNER) | `internal/runner/t1.go` |
+| M0b | `hooks-run-outside-sandbox` 改为无凭据用例(前提 `nocred-events`);bwrap 在 Docker 中需要 `systempaths=unconfined`(设计期实测) | `docs/p2-design.md` §6 |
+| 单元所有权 | `internal/dsl/lint.go` 只追加、归 P2-HERMES;`internal/layout/resolvewith.go` 归 P2-TIER;`hermes.sh` 不依赖 `lib.sh`;workflows 等 CI 修复分支合入后再改 | `docs/p2-design.md` §9 |
+
+骨架状态下 `go build ./...`、`go vet ./...`、`GOOS=windows go vet ./...`、`go test ./...` 均通过。
+
 ### v2.0(2026-10-16,P2 设计与契约增补)
 
 配套文档 `docs/p2-design.md`(冻结版 v1.0)是 P2 的详细契约,本条只列契约面的变化。全部是**追加**,未修改任何已有导出签名;新增内部依赖已同步 §2 与 `internal/archtest`。
@@ -543,7 +559,7 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 | 项 | 处理 | 涉及文件 |
 |---|---|---|
 | 新包 `internal/redact`(L0,只用标准库,热路径) | 统一 audit 与 hook 两套脱敏;hook 允许直接 import(§2.2 唯一放宽);`audit.Redact` 将改为包装,签名不变 | `internal/redact/redact.go`、archtest |
-| 新包 `internal/tier`(L2,热路径,惰性) | T1 判定五条件(GOOS、无测试重定向变量、二进制链 root 所有、root 所有的 `org.json` 声明 T1、托管设置完整);受保护路径唯一来源 `ProtectedPaths` | `internal/tier/tier.go`、archtest |
+| 新包 `internal/tier`(L2,热路径,惰性) | T1 判定五条件(GOOS、重定向变量未生效、二进制链 root 所有、root 所有的 `org.json` 声明 T1、托管设置完整);`ProtectedPaths`(v2.0.1 起只供 runner 沙箱与 doctor;托管配置的覆盖判定改用 `ManagedForms`) | `internal/tier/tier.go`、archtest |
 | 新包 `internal/sandbox`(L2,非热路径) | runner 测试命令的 sandbox-exec / bwrap 包装、探测与退化策略 | `internal/sandbox/sandbox.go`、archtest |
 | 新包 `internal/report`(L4) | `ballast report --out` 的聚合、隐私契约与自检 | `internal/report/report.go`、archtest |
 | `model` 追加 | `TierInfo`、`SandboxPolicy`、`TierMissing*`;`VerifyRequest`/`ParseVerifyRequest`、`VerifyRequestFile`、`HookStartRequest`/`HookStartArgv`/`ParseHookStartArgv`、`VerifyOrigin`;`VerifyRecord.Sandbox/Origin/TierMissing`;`EventConfigChange` 与 Claude 表 `ConfigChange` 行(`Install:false, Verified:false`);`AuditConfigChange` | `internal/model/{tier,verifyreq,evidence,client,audit}.go` |

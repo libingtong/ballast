@@ -70,11 +70,19 @@ T1 完全依赖客户端的**托管设置**机制。设计中的组成如下(全
 - ConfigChange 事件只覆盖 Claude 设置与 skills,**不会**监视任意 Ballast 文件,部分托管刷新也不触发它(文档依据)。
 - 磁盘写满会使 hook 按"任何异常都放行"的设计失效强制。
 
+### 2.4 T1 设计中的两条特权链路(P2 设计,`docs/p2-design.md` §3)
+
+以下是 P2 设计冻结的防御,**当前版本尚未实现**:
+
+- **降级攻击**:agent 不需要伪造 T1,只要把 `BALLAST_HOME`、`BALLAST_MANAGED_DIR`、`BALLAST_INSTALL_ROOT` 塞进 Claude Code 进程的环境(例如先设法改写 shell 启动文件),判定就会落到 T0,org 规则和 `no-tamper` 也会改从 agent 可控的目录读取——"降到 T0"本身就是攻击目标,不是防御。P2 的对策是**重定向锁**:只要编译期默认托管目录下存在 root 所有、声明 `tier:"T1"` 的 `org.json`,生产构建就忽略这三个变量,家目录取自 passwd 而不是 `$HOME`,并审计 `env_redirect_ignored`。
+- **hook 代起的 verify**:hook 在 Claude 沙箱之外启动 runner,runner 执行的测试代码是 agent 可以改写的。如果 runner 的沙箱弱于 Claude 自己的 Bash 沙箱,这条链路就是一个沙箱逃逸原语(写 shell 启动文件、git hooks、`~/.claude.json`,重命名受保护路径的祖先目录再重建,联网外传)。P2 的对策:runner 沙箱**默认拒写**(只放行仓库、git dir、job 临时目录与管理员给出的 `runner_allow_write`,其中仍拒受保护路径、git hooks/config 等,并固定这些路径的祖先目录),网络默认拒绝;hook 代起的 job **一律**必须在沙箱里运行,沙箱不可用就不执行。
+- 残余风险:Linux 上自定义位置的 unix socket(例如家目录下的 docker.sock)仍可从沙箱内连接;macOS 上经 LaunchServices、AppleEvents、launchd 的逃逸通道能否全部关闭待 P2 实测。
+
 ## 3. verify 链路与信任
 
 - `ballast verify` 一律**后台**运行:detached 的 runner 执行 `project.json` 里的命令,写下 `VerifyRecord`(退出码、起止快照 `S_start`/`S_end`,并 fsync);证据标注 `tier:"T0"`。
 - T0 下 agent 自己也能运行 `ballast verify`,所以 agent 理论上可以让测试命令"恰好通过"。Ballast 防不住这一点;`project.json` 里的命令应当是项目真正的测试命令,最终由 CI 复核。
-- T1 下的设计是:agent 在沙箱里运行的 `ballast verify` 写不了证据,由 hook 在沙箱外代为发起 runner,并把测试命令本身放进 OS 沙箱执行。**这条沙箱化 runner 链路属于 P2,当前未实现。** 所以即使部署了托管设置,当前版本的 verify 证据仍然是 T0 强度。
+- T1 下的设计是:agent 在沙箱里运行的 `ballast verify` 写不了证据,由 hook 在沙箱外代为发起 runner,并把测试命令本身放进默认拒写的 OS 沙箱执行(§2.4)。**这条沙箱化 runner 链路属于 P2,当前未实现。** 所以即使部署了托管设置,当前版本的 verify 证据仍然是 T0 强度。
 - 新鲜度判断:`S_end == C`(验证结束时的内容快照等于将要提交的内容),并要求所有 required 的验证最新一条记录有效通过。工作区之后任何变化都会让它自动失效,不依赖编辑 hook。
 
 ## 4. org 部署指南(**未核验,待 M0b**)
