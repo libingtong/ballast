@@ -88,7 +88,10 @@ HYGIENE_PATTERNS = [
     # per-user temp roots on macOS carry a machine-identifying hash
     re.compile(r"/(private/)?var/folders/"),
     re.compile(r"[~]/NewCode"),
+    # logged-in account e-mail (Cursor puts user_email into every hook payload)
+    re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"),
 ]
+EMAIL_RE = HYGIENE_PATTERNS[-1]
 
 
 def die(msg, code=1):
@@ -535,6 +538,8 @@ CURSOR_CASES = [
 CASES = {"codex": CODEX_CASES, "cursor": CURSOR_CASES}
 ID_KEY = re.compile(r"(^id$|_id$|Id$|^uuid$)")
 TEXT_KEYS = {"last_assistant_message", "text", "user_message", "agent_message"}
+# keys that carry the logged-in account: user_email, email, account, *_email, *_account
+ACCOUNT_KEY = re.compile(r"(?i)(^|[_-])(e-?mail|account)$|^(e-?mail|account)[_-]")
 
 
 def case_by_id(client, cid):
@@ -615,6 +620,8 @@ class Sanitizer:
         if isinstance(obj, str):
             if key == "transcript_path":
                 return "<transcript-path>"
+            if key and ACCOUNT_KEY.search(key):
+                return "<%s>" % re.sub(r"[^a-z0-9_]", "_", key.lower())
             if key and ID_KEY.search(key):
                 m = self.ids.setdefault((key, obj), "<%s-%d>" % (key, 1 + sum(1 for k in self.ids if k[0] == key)))
                 return m
@@ -622,7 +629,7 @@ class Sanitizer:
                 return "<redacted len=%d>" % len(obj)
             if key == "prompt" and obj not in prompts:
                 return "<redacted len=%d>" % len(obj)
-            return self.text(obj)
+            return EMAIL_RE.sub("<email>", self.text(obj))
         return obj
 
     def check(self, text):
@@ -801,7 +808,13 @@ def collect(client, probe, facts_dir, work, version, rel_recheck):
         results.append((rec, san_docs))
     if not anything:
         return None
-    cdir_written = []
+    # Render and scan the summary first: a refusal here must leave docs/facts
+    # exactly as it was (no payload deleted, none rewritten).
+    out = os.path.join(facts_dir, "%s-cases.json" % client)
+    text = json.dumps([r for r, _ in results], indent=1, ensure_ascii=False) + "\n"
+    why = san.check(text)
+    if why:
+        die("refuse to write %s: %s (nothing was changed)" % (out, why), 3)
     for rec, docs in results:
         cdir = os.path.join(payload_root, rec["case_id"])
         if os.path.isdir(cdir):
@@ -810,16 +823,10 @@ def collect(client, probe, facts_dir, work, version, rel_recheck):
                     os.remove(os.path.join(cdir, f))
         if docs:
             os.makedirs(cdir, exist_ok=True)
-            for name, text in docs:
+            for name, text_doc in docs:
                 with open(os.path.join(cdir, name), "w") as f:
-                    f.write(text)
-            cdir_written.append(cdir)
-    out = os.path.join(facts_dir, "%s-cases.json" % client)
+                    f.write(text_doc)
     os.makedirs(facts_dir, exist_ok=True)
-    text = json.dumps([r for r, _ in results], indent=1, ensure_ascii=False) + "\n"
-    why = san.check(text)
-    if why:
-        die("refuse to write %s: %s" % (out, why), 3)
     write_atomic(out, text)
     return out, collections.Counter(r["result"] for r, _ in results)
 
@@ -1246,6 +1253,8 @@ pc_selftest_guards() {
   chk() { printf '%s' "$1" >"$hf"; if pc_py check_text "$hf" >/dev/null 2>&1; then echo pass; else echo reject; fi; }
   pc_t_eq "卫生扫描: /var/folders 与 /private/var/folders 被拒绝,普通文本通过" \
     "$(chk '{"p":"/var/folders/ab/xyz/T/x"}') $(chk '{"p":"/private/var/folders/ab/xyz/T"}') $(chk '{"p":"<work>/a.txt"}')" "reject reject pass"
+  pc_t_eq "卫生扫描: 邮箱地址被拒绝(含 user_email 字段),占位符与普通文本通过" \
+    "$(chk '{"user_email":"alice.real@corp-example.com"}') $(chk '{"x":"mail bob@example.org now"}') $(chk '{"user_email":"<user_email>"}') $(chk '{"p":"a @ b"}')" "reject reject pass pass"
   case "$hhost" in
     "" | localhost | ??) pc_t_skip "卫生扫描: 主机名被拒绝" "本机主机名为空、localhost 或短于 3 个字符" ;;
     *) pc_t_eq "卫生扫描: 出现本机主机名被拒绝" "$(chk "{\"tool_response\":\"host $hhost up\"}")" "reject" ;;

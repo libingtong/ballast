@@ -17,7 +17,9 @@
 #             merge logic, the probe hook and the collect/sanitise pipeline
 #
 # What it never does: start codex (the codex on PATH may be a shell function
-# that switches to a real account; the launch command uses `command codex`),
+# that switches to a real account; the launch command runs the binary through
+# `env`, which bypasses same-named shell functions and aliases, and clears
+# OPENAI_API_KEY / CODEX_API_KEY so a key exported in the shell is not used),
 # read auth.json / config.toml of a real home, or touch a real user directory.
 # CODEX_HOME and BALLAST_HOME must be existing, empty (or previously created
 # by this script) directories that are neither a real home nor inside one of
@@ -89,8 +91,8 @@ setup_env() {
   # --codex-trust carry no environment, so without it they fall back to the
   # real ~/.ballast. env runs the binary directly, which already bypasses
   # same-named shell functions and aliases.
-  LAUNCH="cd $(pc_q "$WORK") && env CODEX_HOME=$(pc_q "$CH") BALLAST_HOME=$(pc_q "$BH") codex"
-  EXEC="cd $(pc_q "$WORK") && env CODEX_HOME=$(pc_q "$CH") BALLAST_HOME=$(pc_q "$BH") codex exec 'Run the shell command: echo ballast-probe-exec'"
+  LAUNCH="cd $(pc_q "$WORK") && env -u OPENAI_API_KEY -u CODEX_API_KEY CODEX_HOME=$(pc_q "$CH") BALLAST_HOME=$(pc_q "$BH") codex"
+  EXEC="cd $(pc_q "$WORK") && env -u OPENAI_API_KEY -u CODEX_API_KEY CODEX_HOME=$(pc_q "$CH") BALLAST_HOME=$(pc_q "$BH") codex exec 'Run the shell command: echo ballast-probe-exec'"
 }
 
 cmd_prepare() {
@@ -203,11 +205,11 @@ selftest_e2e() {
   # The Ballast hooks carry no environment, so the printed commands must pin
   # BALLAST_HOME themselves or the hooks fall back to the real ~/.ballast.
   pc_t_eq "LAUNCH 行同时带规范化后的 CODEX_HOME 与 BALLAST_HOME,且不使用 command" \
-    "$(grep -F "LAUNCH:" "$root/prepare.out" | grep -cF "env CODEX_HOME=$(pc_q "$cch") BALLAST_HOME=$(pc_q "$cbh") codex")" "1"
+    "$(grep -F "LAUNCH:" "$root/prepare.out" | grep -cF "env -u OPENAI_API_KEY -u CODEX_API_KEY CODEX_HOME=$(pc_q "$cch") BALLAST_HOME=$(pc_q "$cbh") codex")" "1"
   pc_t_eq "启动命令不含多余的 command 前缀(env 找不到 command 的平台会失败)" \
     "$(grep -cE "(LAUNCH|EXEC):.*env .* command codex" "$root/prepare.out" || true)" "0"
   pc_t_eq "EXEC 命令同样带 BALLAST_HOME" \
-    "$(grep -F "EXEC:" "$root/prepare.out" | grep -cF "env CODEX_HOME=$(pc_q "$cch") BALLAST_HOME=$(pc_q "$cbh") codex exec")" "1"
+    "$(grep -F "EXEC:" "$root/prepare.out" | grep -cF "env -u OPENAI_API_KEY -u CODEX_API_KEY CODEX_HOME=$(pc_q "$cch") BALLAST_HOME=$(pc_q "$cbh") codex exec")" "1"
   hook="$cbh/probe-clients/codex/hook.sh"
   # Run the installed Ballast hook the way the LAUNCH line would (only
   # CODEX_HOME / BALLAST_HOME set) with a decoy HOME: state must land in the

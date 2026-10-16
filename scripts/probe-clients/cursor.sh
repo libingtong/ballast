@@ -75,7 +75,7 @@ setup_env() {
   VERSION="${BALLAST_PROBE_CURSOR_VERSION:-unknown}"
   # BALLAST_HOME is explicit so a value exported in the user's shell cannot
   # send the Ballast hooks outside the throwaway HOME.
-  LAUNCH="cd $(pc_q "$WORK") && env HOME=$(pc_q "$PH") BALLAST_HOME=$(pc_q "$BH") cursor-agent    # CLI;IDE: env HOME=$(pc_q "$PH") BALLAST_HOME=$(pc_q "$BH") cursor $(pc_q "$WORK") 然后 Developer: Reload Window"
+  LAUNCH="cd $(pc_q "$WORK") && env -u CURSOR_API_KEY HOME=$(pc_q "$PH") BALLAST_HOME=$(pc_q "$BH") cursor-agent    # CLI;IDE: env -u CURSOR_API_KEY HOME=$(pc_q "$PH") BALLAST_HOME=$(pc_q "$BH") cursor $(pc_q "$WORK") 然后 Developer: Reload Window"
   EXEC=""
 }
 
@@ -181,7 +181,7 @@ selftest_e2e() {
   pc_t_eq "prepare 成功" "$rc" "0"
   cph="$(pc_canon "$ph")"
   pc_t_eq "LAUNCH 行显式带 HOME 与 BALLAST_HOME(不继承 shell 里已导出的值)" \
-    "$(grep -F "LAUNCH:" "$root/prepare.out" | grep -cF "env HOME=$(pc_q "$cph") BALLAST_HOME=$(pc_q "$cph/.ballast") cursor-agent")" "1"
+    "$(grep -F "LAUNCH:" "$root/prepare.out" | grep -cF "env -u CURSOR_API_KEY HOME=$(pc_q "$cph") BALLAST_HOME=$(pc_q "$cph/.ballast") cursor-agent")" "1"
   hook="$cph/probe-clients/cursor/hook.sh"
   pc_t_eq "hooks.json: version 1、10 个事件各有 Ballast 与探针条目、stop 带 loop_limit" \
     "$(python3 -I -c '
@@ -206,7 +206,7 @@ print(d["version"],len(h),sorted({len(v) for v in h.values()}),
     hout="$(printf '%s' "$2" | "$hook" "$1" 2>"$err")" || hrc=$?
   }
   base() { # EVENT EXTRA
-    printf '{"conversation_id":"conv-0f3e","generation_id":"gen-77","hook_event_name":"%s","workspace_roots":["%s"],"transcript_path":"%s/.cursor/projects/t.jsonl"%s}' \
+    printf '{"conversation_id":"conv-0f3e","generation_id":"gen-77","user_email":"alice.real@corp-example.com","cursor_version":"0.0.0","hook_event_name":"%s","workspace_roots":["%s"],"transcript_path":"%s/.cursor/projects/t.jsonl"%s}' \
       "$1" "$work" "$cph" "${2:-}"
   }
   run_script mark session-start
@@ -271,8 +271,8 @@ d={c["case_id"]:c["result"] for c in json.load(open(sys.argv[1]))}
 print(",".join("%s=%s"%(k,d[k]) for k in ["session-start","shell-ok","shell-deny","read-deny","prompt-context","stop-followup","pretool-deny","subagent"]))' "$json")" \
     "session-start=pass,shell-ok=pass,shell-deny=pass,read-deny=pass,prompt-context=pass,stop-followup=pass,pretool-deny=needs_credentials,subagent=needs_credentials"
   local leak
-  leak="$(grep -rlE "$(printf '%s' "$root" | sed 's/[][\.*^$/]/\\&/g')|conv-0f3e|gen-77|sess-1|$(id -un)" "$facts" 2>/dev/null || true)"
-  pc_t_eq "输出目录不含临时路径、会话 ID 或本地用户名" "$leak" ""
+  leak="$(grep -rlE "$(printf '%s' "$root" | sed 's/[][\.*^$/]/\\&/g')|conv-0f3e|gen-77|sess-1|alice.real|corp-example|$(id -un)" "$facts" 2>/dev/null || true)"
+  pc_t_eq "输出目录不含临时路径、会话 ID、登录邮箱或本地用户名" "$leak" ""
   pc_t_eq "输出通过脚本自带的卫生/密钥扫描" \
     "$(for f in "$json" "$facts"/payloads/cursor/*/*.json; do pc_py check_text "$f" >/dev/null 2>&1 || echo "FAIL:$f"; done | tr '\n' ' ')" ""
   pc_t_eq "payload 已规范化(ID/路径占位符、afterAgentResponse.text 脱敏)" \
@@ -281,6 +281,20 @@ import json,sys
 d=json.load(open(sys.argv[1]))
 print(d["conversation_id"],d["workspace_roots"][0],d["transcript_path"],d["text"])' "$facts/payloads/cursor/stop-followup/01-afterAgentResponse.json")" \
     "<conversation_id-1> <work> <transcript-path> <redacted len=4>"
+  pc_t_eq "payload 里的 user_email 被替换成占位符" \
+    "$(python3 -I -c '
+import json,sys
+print(json.load(open(sys.argv[1]))["user_email"])' "$facts/payloads/cursor/shell-ok/01-beforeShellExecution.json")" "<user_email>"
+
+  # a refused summary must leave docs/facts untouched (no half-updated state):
+  # a raw key that looks like an e-mail address ends up in schema_keys
+  local snap_before snap_after
+  snap_before="$(find "$facts" -type f -exec cksum {} + | sort | cksum)"
+  printf '{"hook_event_name":"beforeShellExecution","bob@example.org":1}' >"$cph/probe-clients/cursor/out/shell-ok/99-zz.json"
+  rc=0
+  run_script collect >/dev/null 2>&1 || rc=$?
+  snap_after="$(find "$facts" -type f -exec cksum {} + | sort | cksum)"
+  pc_t_eq "整体扫描失败: 退出码 3 且 docs/facts 保持原样" "$rc:$([ "$snap_before" = "$snap_after" ] && echo same || echo changed)" "3:same"
   unset BALLAST_CURSOR_PROBE_HOME BALLAST_PROBE_FACTS_DIR
 }
 
