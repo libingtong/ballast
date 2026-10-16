@@ -148,7 +148,7 @@ func TestGolden(t *testing.T) {
 	// The fixture is full of paths, ids, hostnames and a planted token; none
 	// of it may be in the golden file.
 	for _, leak := range []string{
-		"alice", "bob", "/Users", "/home", "toolu_", "s-aaaa", "s-bbbb", "s-old", "repo-aaaa", "repo-bbbb",
+		"alice", "bob", "/Users", "/home", "<home>", ".ballast/logs", "toolu_", "s-aaaa", "s-bbbb", "s-old", "repo-aaaa", "repo-bbbb",
 		"0123456789abcdef", "ghp_", "Ab12Cd34", "internal.example.com", "secret-project", "my-private-note",
 		"acme-no-prod-deploy", "brand_new_name", "mystery-client", "settings.json", "job-1", "weird",
 		"abc.jsonl", "robot", "docker",

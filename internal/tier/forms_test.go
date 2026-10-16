@@ -72,10 +72,8 @@ func TestManagedFormsAnyDepthForms(t *testing.T) {
 	if idx(dw, "**/.claude/settings*.json") != idx(dw, "./.claude/settings*.json")+1 {
 		t.Errorf("**/.claude/settings*.json does not follow ./.claude/settings*.json: %q", dw)
 	}
-	for _, tool := range []string{"Edit", "Write", "NotebookEdit"} {
-		if idx(pd, tool+"(**/.ballast/**)") < 0 || idx(pd, tool+"(**/.claude/settings*.json)") < 0 {
-			t.Errorf("%s lacks the any-depth forms", tool)
-		}
+	if idx(pd, "Edit(**/.ballast/**)") < 0 || idx(pd, "Edit(**/.claude/settings*.json)") < 0 {
+		t.Errorf("Edit lacks the any-depth forms: %q", pd)
 	}
 }
 

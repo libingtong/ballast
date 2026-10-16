@@ -386,15 +386,22 @@ func worseStatus(a, b install.CheckStatus) install.CheckStatus {
 	return a
 }
 
+// The two documents `ballast org render` can print (--part).
+const (
+	orgPartManagedSettings = "managed-settings"
+	orgPartOrgJSON         = "org-json"
+)
+
 func runOrg(a *app, c *command, args []string) int {
 	if len(args) == 0 || args[0] != "render" {
 		return a.usageErr(c, "expected the subcommand \"render\"")
 	}
 	fs := newFlagSet("org render")
-	var client, binary string
+	var client, binary, part string
 	var write, admin bool
 	var homeRoots, protect multiFlag
 	fs.StringVar(&client, "client", string(model.ClientClaude), "")
+	fs.StringVar(&part, "part", orgPartManagedSettings, "")
 	fs.StringVar(&binary, "binary", "", "")
 	fs.BoolVar(&write, "write", false, "")
 	fs.BoolVar(&admin, "i-am-admin", false, "")
@@ -410,6 +417,9 @@ func runOrg(a *app, c *command, args []string) int {
 	if client != string(model.ClientClaude) {
 		return a.usageErr(c, "only --client claude-code has a managed template, got %q", client)
 	}
+	if part != orgPartManagedSettings && part != orgPartOrgJSON {
+		return a.usageErr(c, "--part must be %q or %q, got %q", orgPartManagedSettings, orgPartOrgJSON, part)
+	}
 	r, err := install.OrgRenderFull(a.lay, a.fs, install.OrgRenderOptions{
 		GOOS: a.env.GOOS(), Binary: binary, Write: write, IAmAdmin: admin,
 		HomeRoot: homeRoots, Protected: protect, Env: a.env,
@@ -423,7 +433,21 @@ func runOrg(a *app, c *command, args []string) int {
 		}
 		return a.errorf(ExitInfra, "%v", err)
 	}
-	_, _ = a.out.Write(r.Stdout)
+	// stdout is exactly one pure JSON document, so an administrator can
+	// redirect it to a file: the managed-settings fragment by default,
+	// org.json for --part org-json. --write puts both files down whatever
+	// the part is. The org.json risk notes go to stderr.
+	out := r.Settings
+	if part == orgPartOrgJSON {
+		if r.OrgJSON == nil {
+			return a.usageErr(c, "--part org-json: this platform is T0 only and has no org.json")
+		}
+		out = r.OrgJSON
+	}
+	_, _ = a.out.Write(out)
+	for _, n := range r.OrgNotes {
+		fmt.Fprintf(a.errw, "ballast: org.json 注意:%s\n", n)
+	}
 	for _, w := range r.Written {
 		fmt.Fprintf(a.errw, "ballast: 已写入 %s\n", w)
 	}

@@ -1,0 +1,4 @@
+runner_allow_write:每一项都等于把该目录交给 agent 可改写的测试代码,写入在 job 结束后仍然存在且不进入内容快照;共享构建缓存会被沙箱外的构建复用。runner 已把常见缓存变量指向每个 job 的临时目录,建议保持为空。
+runner_network:deny 在 macOS 上连回环也拒绝;loopback 让 macOS 上的测试能连主机回环上的任何服务,allow 放开出站 IP 但不放开本地 socket,两者都是残余风险。
+weakened_project:deny 会让带削弱设置的项目里所有工具调用被拒,audit 只审计。当前取值 deny,依据:M0b 用例 managed-denywrite-anydepth 尚未证明 `**/` 形式有效(未证明 ⇒ deny);证明有效后缺省改为 audit。
+home_root:仅当 passwd 查不到当前 uid 时才采信 $HOME,且其父目录必须恰好是这里的某一项、整条链 root 所有且不可被组或其他用户写。

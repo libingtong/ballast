@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -97,6 +98,7 @@ func main() {
 		"CODEX_DIR":    os.Getenv("CODEX_HOME"),
 		"HERMES_DIR":   os.Getenv("HERMES_HOME"),
 		"MANAGED":      os.Getenv("BALLAST_MANAGED_DIR"),
+		"ORG_MANAGED":  defaultManagedDir(),
 		"HOME":         os.Getenv("HOME"),
 		"TMP":          tmpRoot,
 	}
@@ -110,6 +112,23 @@ func main() {
 	fmt.Printf("T0CASES pass=%d fail=%d\n", d.pass, d.fail)
 	if d.fail > 0 {
 		os.Exit(1)
+	}
+}
+
+// defaultManagedDir is the platform's default Claude managed directory
+// (internal/layout.ManagedDirFor), the literal location of the org rules
+// directory <managed>/ballast/ that the shipped no-tamper rule protects. The
+// sandbox redirects BALLAST_MANAGED_DIR into a temp dir, which no static rule
+// path can name, so org-directory rows use this literal path in synthetic
+// payloads only: the hook parses them and never writes anything.
+func defaultManagedDir() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "/Library/Application Support/ClaudeCode"
+	case "windows":
+		return `C:\Program Files\ClaudeCode`
+	default:
+		return "/etc/claude-code"
 	}
 }
 

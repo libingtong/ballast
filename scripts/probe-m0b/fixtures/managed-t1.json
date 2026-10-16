@@ -43,30 +43,14 @@
   },
   "permissions": {
     "deny": [
-      "Edit(/etc/claude-code/ballast/**)",
+      "Edit(//etc/claude-code/ballast/**)",
       "Edit(~/.ballast/**)",
       "Edit(./.ballast/**)",
       "Edit(**/.ballast/**)",
-      "Edit(/usr/local/libexec/ballast/**)",
+      "Edit(//usr/local/libexec/ballast/**)",
       "Edit(~/.claude/settings*.json)",
       "Edit(./.claude/settings*.json)",
-      "Edit(**/.claude/settings*.json)",
-      "Write(/etc/claude-code/ballast/**)",
-      "Write(~/.ballast/**)",
-      "Write(./.ballast/**)",
-      "Write(**/.ballast/**)",
-      "Write(/usr/local/libexec/ballast/**)",
-      "Write(~/.claude/settings*.json)",
-      "Write(./.claude/settings*.json)",
-      "Write(**/.claude/settings*.json)",
-      "NotebookEdit(/etc/claude-code/ballast/**)",
-      "NotebookEdit(~/.ballast/**)",
-      "NotebookEdit(./.ballast/**)",
-      "NotebookEdit(**/.ballast/**)",
-      "NotebookEdit(/usr/local/libexec/ballast/**)",
-      "NotebookEdit(~/.claude/settings*.json)",
-      "NotebookEdit(./.claude/settings*.json)",
-      "NotebookEdit(**/.claude/settings*.json)"
+      "Edit(**/.claude/settings*.json)"
     ]
   },
   "allowManagedPermissionRulesOnly": true

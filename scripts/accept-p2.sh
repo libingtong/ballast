@@ -129,8 +129,8 @@ fi
 section "hygiene of the added artifacts"
 cd "$REPO_ROOT"
 if git rev-parse --git-dir >/dev/null 2>&1; then
-  paths_hit="$(git grep --untracked -nIE '(^|[^A-Za-z:}])/Users/[a-z][A-Za-z0-9._-]*/(NewCode|Documents|Desktop|Library|\.claude|\.ballast)' -- . ':!internal/*_test.go' ':!.github/workflows/ci.yml' ':!internal/report/testdata' || true)"
-  check_eq "no local absolute paths (the report fixture plants fake ones on purpose)" "$paths_hit" ""
+  paths_hit="$(git grep --untracked -nIE '(^|[^A-Za-z:}])/Users/[a-z][A-Za-z0-9._-]*/(NewCode|Documents|Desktop|Library|\.claude|\.ballast)' -- . ':!internal/*_test.go' ':!.github/workflows/ci.yml' || true)"
+  check_eq "no local absolute paths" "$paths_hit" ""
   uid_hit="$(git grep --untracked -nIE '[~]/NewCode|claude-[0-9]+-' -- . ':!.github/workflows/ci.yml' ':!scripts/accept-p2.sh' || true)"
   check_eq "no local directory layout or uid fragments" "$uid_hit" ""
   secret_hit="$(git grep --untracked -nIE 'sk-ant-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[abprs]-[A-Za-z0-9-]{10,}' -- . ':!internal/redact' ':!internal/audit' ':!internal/report' ':!internal/hook' ':!internal/*_test.go' ':!scripts/boundary-t0.sh' ':!scripts/accept-p2.sh' ':!scripts/probe-m0b' ':!docs/facts' ':!schema/examples' || true)"

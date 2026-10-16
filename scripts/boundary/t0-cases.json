@@ -1,12 +1,12 @@
 {
  "version": 1,
- "_comment": "scripts/boundary-t0.sh fixture (docs/p2-design.md §5.2). Each row is fed to the real `ballast hook` as a synthetic PreToolUse payload (rows with several targets expand to one run per target). detected: the audit must hold a no-tamper hit; gap: it must NOT (a gap that becomes detected fails the script: update docs/trust-model.md §2.1). `class` of a gap row is the numbered class of §2.1 \"未覆盖的写法\". Placeholders: {{T}} the row's target, {{BALLAST_HOME}}, {{REPO}}, {{CLAUDE_DIR}}, {{MANAGED}}, {{HOME}}.",
+ "_comment": "scripts/boundary-t0.sh fixture (docs/p2-design.md §5.2). Each row is fed to the real `ballast hook` as a synthetic PreToolUse payload (rows with several targets expand to one run per target). detected: the audit must hold a no-tamper hit; gap: it must NOT (a gap that becomes detected fails the script: update docs/trust-model.md §2.1). `class` of a gap row is the numbered class of §2.1 \"未覆盖的写法\". Placeholders: {{T}} the row's target, {{BALLAST_HOME}}, {{REPO}}, {{CLAUDE_DIR}}, {{MANAGED}}, {{ORG_MANAGED}} (the platform default managed directory, a literal path used only inside synthetic payloads because the shipped no-tamper rule names the default location), {{HOME}}.",
  "targets": {
   "rules": "{{BALLAST_HOME}}/rules.json",
   "evidence": "{{BALLAST_HOME}}/evidence/0123456789abcdef/test/20261016T000000-aaaaaa.json",
   "project": "{{REPO}}/.ballast/project.json",
   "settings": "{{CLAUDE_DIR}}/settings.json",
-  "org": "{{MANAGED}}/ballast/rules.json"
+  "org": "{{ORG_MANAGED}}/ballast/rules.json"
  },
  "cases": [
   {
@@ -1017,28 +1017,41 @@
    "class": 7
   },
   {
-   "id": "gap-org-dir-redirect",
+   "id": "org-dir-redirect",
    "client": "claude-code",
    "tool": "Bash",
    "input": {
-    "command": "echo x > {{T}}"
+    "command": "echo x > '{{T}}'"
    },
-   "expect": "gap",
-   "via": "org rules directory is not in the no-tamper path list",
+   "expect": "detected",
+   "via": "redirect > into the org rules directory (<managed dir>/ballast/)",
    "targets": [
     "org"
    ]
   },
   {
-   "id": "gap-org-dir-write",
+   "id": "org-dir-write",
    "client": "claude-code",
    "tool": "Write",
    "input": {
     "file_path": "{{T}}",
     "content": "x"
    },
-   "expect": "gap",
-   "via": "org rules directory is not in the no-tamper path list",
+   "expect": "detected",
+   "via": "file tool write into the org rules directory (<managed dir>/ballast/)",
+   "targets": [
+    "org"
+   ]
+  },
+  {
+   "id": "org-dir-cp",
+   "client": "claude-code",
+   "tool": "Bash",
+   "input": {
+    "command": "cp /tmp/forged '{{T}}'"
+   },
+   "expect": "detected",
+   "via": "cp onto the org rules directory (<managed dir>/ballast/)",
    "targets": [
     "org"
    ]

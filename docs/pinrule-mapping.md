@@ -98,7 +98,7 @@
 
 | pinrule 行为(源码) | Ballast | 类别 |
 |---|---|---|
-| 命令含 pinrule 状态文件路径(`~/.pinrule/{session-state,violations.jsonl,rules.json,config.json}`,`bypass_pinrule.py:42-77`)并写入它 | `no-tamper`:`path` 列表含 `**/.ballast/**`、`~/.ballast/**`,对 Bash/PowerShell 取解析出的写入目标 | DSL 等价 |
+| 命令含 pinrule 状态文件路径(`~/.pinrule/{session-state,violations.jsonl,rules.json,config.json}`,`bypass_pinrule.py:42-77`)并写入它 | `no-tamper`:`path` 列表含 `**/.ballast/**`、`~/.ballast/**`(以及各平台托管目录下的 org 规则目录 `ballast/**`),对 Bash/PowerShell 取解析出的写入目标 | DSL 等价 |
 | 命令含内部字段名(`last_test_pass_ts`、`pending_bg_tasks` 等,`bypass_pinrule.py:33-39`) | 不匹配字段名:Ballast 的状态与证据都在被保护路径下,任何写入都落在路径上 | 舍弃 |
 | 写操作信号不含 `cp/mv/rm`,避免拦合法备份和轮转(`bypass_pinrule.py:79-84`) | `cp`、`mv`、`install`、`rsync`、`rm`、`truncate`、`touch`、`sed -i`、`dd of=`、`tee`、重定向都产生写入目标,因而命中;合法维护走 `ballast` CLI,它在进程内写文件,不是 shell 写入目标 | 有意改变(更严) |
 | `mv` 把状态文件搬走(`mv ~/.pinrule/rules.json /tmp/x`)不在 pinrule 的写操作信号里,pinrule 同样放行 | `mv` 的**目标**是写入目标;**源路径**不算(bashparse 契约:`cp/mv/install SRC.. DEST` 只取 DEST),所以 `mv ~/.ballast/rules.json /tmp/x` 与 `mv ~/.ballast /tmp/b` 不命中 `no-tamper`;`rm`、`cp` 到被保护路径、重定向、`sed -i` 等都命中。T0 本来就只检测、不是安全边界(T1 的 `denyWrite` 才能拦住) | 有意改变(已知局限) |
@@ -107,7 +107,7 @@
 | Python 写接口:`.write_text`、`.write`、`json.dump`、`os.system`、`shutil`…(`bypass_pinrule.py:90-105`) | 不识别语言内写入(dsl-semantics §14);T0 本来就不是安全边界,T1 由沙箱 `denyWrite` 兜底 | 舍弃 |
 | 官方 CLI(`pinrule init\|reset\|stats…`)命令头豁免(`bypass_pinrule.py:117`、`:155-157`) | 不需要:`ballast verify`、`ballast rules promote` 等不会产生 shell 写入目标。计划中的"只放行 ballast 绝对路径"也因此不必实现 | 有意改变 |
 | `PINRULE_HOME` 重定向时把实际路径加入检测(`bypass_pinrule.py:42-73`) | `BALLAST_HOME` 仅用于测试;规则写死 `~/.ballast/**`,自定义 `BALLAST_HOME` 不在覆盖范围 | 有意改变(已知局限) |
-| 保护客户端 hook 配置 | 新增:`~/.claude/settings*.json`、`**/.claude/settings*.json`、`~/.codex/{hooks.json,config.toml}`、`~/.cursor/hooks.json`、`~/.cursor/rules/ballast.mdc`、`~/.hermes/config.yaml`(原实现没有) | 有意改变(新增) |
+| 保护客户端 hook 配置 | 新增:`~/.claude/settings*.json`、`**/.claude/settings*.json`、`~/.codex/{hooks.json,config.toml}`、`~/.cursor/hooks.json`、`~/.cursor/rules/ballast.mdc`、`~/.hermes/config.yaml`,以及 org 规则目录(三个平台默认托管目录下的 `ballast/**`:`/etc/claude-code`、`/Library/Application Support/ClaudeCode`、`c:/Program Files/ClaudeCode`)(原实现没有) | 有意改变(新增) |
 | 第二路:最近一条 Bash 是测试命令且失败(`recent_bash[-1].is_test_cmd and output_failed`),又 `Edit` 了没读过的文件(`bypass_pinrule.py:129-147`) | `read-after-test-fail`:`verify_failed_since_read` 加 `path_exists`;信号来自 verify 记录(outcome 为 fail/timeout/signal)而不是对 Bash 输出的猜测 | 有意改变 |
 | 第二路只检查 `Edit`(`bypass_pinrule.py:131`) | 同时覆盖 MultiEdit、Write(已存在)与 NotebookEdit | 有意改变 |
 

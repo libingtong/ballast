@@ -41,7 +41,7 @@ Ballast 把保证强度分成两级(详见 [`docs/trust-model.md`](docs/trust-mo
 | **T1 托管强制** | macOS / Linux / WSL2,且组织用托管设置部署了 Ballast | 设计目标是 agent 不可写规则、状态、证据和二进制。托管层的合并与强制行为已在 Linux 容器里用 Claude Code 2.1.300 取证(M0b),沙箱化 runner 在真实 bwrap 下验收(`scripts/boundary-t1.sh`);**让真实模型 agent 去尝试逃逸的部分仍是【需凭据】,macOS 与 Windows 的托管路径没有取过证** |
 | **T0 尽力而为** | 个人安装、没有托管部署,或原生 Windows | **篡改可检测、不可防**:agent 与 Ballast 同一用户权限,能改规则和状态文件;`no-tamper` 规则与审计只能让这种行为被发现 |
 
-个人安装默认是 T0。`ballast doctor` 会输出当前层级和缺失的 T1 组件;想要 T1,让管理员用 `ballast org render` 生成托管设置模板与 `org.json` 自行下发(`--write --i-am-admin` 可由 root 代写)。已写入 root 所有的 `org.json` 的主机称为"已锁定":生产构建忽略 `BALLAST_HOME` 等重定向变量,家目录取自 passwd。
+个人安装默认是 T0。`ballast doctor` 会输出当前层级和缺失的 T1 组件;想要 T1,让管理员用 `ballast org render` 与 `ballast org render --part org-json` 分别生成托管设置模板与 `org.json` 自行下发(`--write --i-am-admin` 可由 root 代写)。已写入 root 所有的 `org.json` 的主机称为"已锁定":生产构建忽略 `BALLAST_HOME` 等重定向变量,家目录取自 passwd。
 
 其他边界:
 
@@ -213,7 +213,7 @@ ballast test-rules ~/.ballast/rules.json
 | `no-long-sleep` | PreToolUse | 不在前台 `sleep` 60 秒以上;等待请用后台运行或有界的短轮询 |
 | `evidence-before-commit` | PreToolUse | `git commit` 之前要有与待提交内容一致、已通过的 `ballast verify` 记录 |
 | `no-skip-verify` | PreToolUse | 不得用 `--no-verify` / `-n` 跳过 git hooks |
-| `no-tamper` | PreToolUse | 不得改写 Ballast 的规则、状态、证据,或客户端的 hook 配置(文件工具和 shell 写入都覆盖) |
+| `no-tamper` | PreToolUse | 不得改写 Ballast 的规则、状态、证据(含各平台托管目录下的 org 规则目录 `ballast/`),或客户端的 hook 配置(文件工具和 shell 写入都覆盖) |
 
 默认包需要你把它**复制**到自己的规则文件(`~/.ballast/rules.json` 或 `<repo>/.ballast/rules.json`)后才生效。它的 `message`、`inject` 文案是中文——这是面向中文使用者的有意取舍,只会影响 Agent 看到的提示语言,不参与匹配;如果你的团队用其他语言,直接改自己副本里的这两个字段即可(改完用 `ballast lint` 和 `ballast test-rules` 复查)。个人偏好类规则(如 `chinese_plain`)不在默认包里。
 
@@ -317,7 +317,7 @@ git 在提交阶段会把 `GIT_INDEX_FILE` 指向真正要提交的索引,`commi
 | `ballast audit lint` | 检查审计日志格式 |
 | `ballast report --out <文件> [--since 30d] [--force]` | 把审计日志脱敏聚合成一个**本地**文件(只含计数、枚举与分桶数值,不含 id、路径、命令文本;非内置规则 id 只输出哈希);默认不运行,不联网,不发送任何数据;分享前请自行检查 |
 | `ballast install --client <id>` / `uninstall` / `doctor` | 安装、卸载、自检(层级 T0 / T1 与各客户端状态) |
-| `ballast org render [--home-root <目录>] [--write --i-am-admin]` | 输出组织托管设置模板与 `org.json` 段(T1);`--write` 由 root 写入托管目录 |
+| `ballast org render [--part managed-settings\|org-json] [--home-root <目录>] [--write --i-am-admin]` | stdout 恒为单个合法 JSON:缺省输出组织托管设置模板(T1),`--part org-json` 输出 `org.json`,均可直接重定向成文件;风险提示写 stderr;`--write` 由 root 把两个文件各写入托管目录 |
 
 退出码约定见 [`docs/architecture.md` §7](docs/architecture.md)。
 

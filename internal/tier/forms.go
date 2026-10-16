@@ -27,13 +27,18 @@ func managedForms(lay layout.Layout, self string, extra []string) (denyWrite, pe
 	binDir := dirOfLiteral(self, lay.GOOS)
 
 	// Each tuple is one protected location: the denyWrite string plus how it
-	// appears inside Edit(...)/Write(...)/NotebookEdit(...).
+	// appears inside Edit(...). Only Edit(...) is emitted: in Claude Code
+	// 2.1.300 an Edit rule covers the Edit and Write tools alike, and
+	// Write(...) / NotebookEdit(...) path entries are warned about as invalid
+	// (docs/facts/M0b-CONCLUSIONS.md "org render 的路径写法与 ManagedForms").
 	type form struct {
 		dw   []string // strings for sandbox.filesystem.denyWrite
 		perm []string // strings inside Tool(...)
 	}
 	var forms []form
-	dir := func(p string) form { return form{dw: []string{p}, perm: []string{p + "/**"}} }
+	dir := func(p string) form {
+		return form{dw: []string{p}, perm: []string{strings.TrimSuffix(permAbs(p), "/") + "/**"}}
+	}
 	forms = append(forms,
 		dir(orgDir),
 		dir("~/.ballast"),
@@ -42,7 +47,7 @@ func managedForms(lay layout.Layout, self string, extra []string) (denyWrite, pe
 		dir(binDir),
 	)
 	for _, e := range extra {
-		forms = append(forms, form{dw: []string{e}, perm: []string{e, e + "/**"}})
+		forms = append(forms, form{dw: []string{e}, perm: []string{permAbs(e), permAbs(e) + "/**"}})
 	}
 	for _, p := range []string{"~/.claude/settings*.json", "./.claude/settings*.json", "**/.claude/settings*.json"} {
 		forms = append(forms, form{dw: []string{p}, perm: []string{p}})
@@ -57,7 +62,7 @@ func managedForms(lay layout.Layout, self string, extra []string) (denyWrite, pe
 			}
 		}
 	}
-	for _, tool := range []string{"Edit", "Write", "NotebookEdit"} {
+	for _, tool := range []string{"Edit"} {
 		seenP := map[string]bool{}
 		for _, f := range forms {
 			for _, s := range f.perm {
@@ -70,6 +75,19 @@ func managedForms(lay layout.Layout, self string, extra []string) (denyWrite, pe
 		}
 	}
 	return denyWrite, permDeny
+}
+
+// permAbs rewrites a POSIX absolute path into the "//" form that Claude's
+// permission rules read as a filesystem-absolute path: a single leading "/"
+// is project-relative in Edit(...) rules, so Edit(/srv/x/**) does not stop a
+// write to /srv/x/y while Edit(//srv/x/**) does (M0b, 2.1.300). Anything
+// else ("~/", "./", "**/", a Windows drive path) is returned unchanged, and
+// so is a path that already starts with "//".
+func permAbs(p string) string {
+	if strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") {
+		return "/" + p
+	}
+	return p
 }
 
 // protectedPaths implements ProtectedPaths.

@@ -165,28 +165,18 @@ type OrgRendered struct {
 	// byte what --write puts into <managed>/ballast/org.json. nil on
 	// Windows, which is T0 only and has no org.json.
 	OrgJSON []byte
-	// Stdout is the human rendering for `ballast org render`: Settings,
-	// then the org.json section introduced by "//" comment lines (risk
-	// notes of docs/p2-design.md §3.5). It is not valid JSON as a whole.
-	Stdout []byte
+	// OrgNotes are the risk notes of docs/p2-design.md §3.5 for the org.json
+	// fields (one line each, no comment marker). They never go into stdout:
+	// `ballast org render` prints exactly one pure JSON document per --part
+	// (Settings by default, OrgJSON for --part org-json), so an administrator
+	// can redirect either to a file; the CLI sends OrgNotes to stderr. Empty
+	// on Windows, which has no org.json.
+	OrgNotes []string
 	// Written lists the files --write created or replaced.
 	Written []string
 	// Notes are one-line hints for stderr (for example the missing
 	// pre-flight when --write runs without SUDO_UID).
 	Notes []string
-}
-
-// orgStdout is the stdout rendering: the settings fragment followed by the
-// org.json section with "//" comment lines (the written org.json has none).
-func orgStdout(settings, orgJSON []byte, orgPath string, o orgFile) []byte {
-	var b bytes.Buffer
-	b.Write(settings)
-	fmt.Fprintf(&b, "\n// ---- org.json(部署到 %s,纯 JSON,不含注释) ----\n", orgPath)
-	for _, line := range orgNotes(o) {
-		b.WriteString("// " + line + "\n")
-	}
-	b.Write(orgJSON)
-	return b.Bytes()
 }
 
 func orgNotes(o orgFile) []string {
@@ -326,7 +316,7 @@ func OrgRenderFull(lay layout.Layout, fsys sys.FS, opt OrgRenderOptions) (*OrgRe
 	if err != nil {
 		return nil, err
 	}
-	res := &OrgRendered{Settings: settings, Stdout: settings}
+	res := &OrgRendered{Settings: settings}
 
 	orgPath := lay.OrgConfig
 	if orgPath == "" {
@@ -351,7 +341,7 @@ func OrgRenderFull(lay layout.Layout, fsys sys.FS, opt OrgRenderOptions) (*OrgRe
 		if err := validateOrgJSON(res.OrgJSON, orgPath); err != nil {
 			return nil, err
 		}
-		res.Stdout = orgStdout(settings, res.OrgJSON, orgPath, of)
+		res.OrgNotes = orgNotes(of)
 	}
 
 	if !opt.Write {

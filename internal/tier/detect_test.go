@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/libingtong/ballast/internal/layout"
 	"github.com/libingtong/ballast/internal/model"
 )
 
@@ -273,5 +274,68 @@ func TestDetectIsDeterministic(t *testing.T) {
 	a, b := Detect(opt), Detect(opt)
 	if !reflect.DeepEqual(a, b) {
 		t.Fatalf("not deterministic: %+v vs %+v", a, b)
+	}
+}
+
+// Condition 5 judges permissions.deny by exact string inclusion of the M0b
+// forms: Edit(...) entries with "//" for POSIX absolute paths. The pre-M0b
+// single-slash Edit forms do not count as coverage (Claude does not read
+// them as filesystem-absolute), and Write(...) / NotebookEdit(...) entries
+// are neither required nor a substitute.
+func TestDetectCondition5PermissionFormsM0b(t *testing.T) {
+	_, pd := ManagedForms(layout.Layout{GOOS: "linux", OrgRules: tManaged + "/ballast/rules.json"}, tSelf, baseExtra)
+	for _, s := range pd {
+		if !strings.HasPrefix(s, "Edit(") {
+			t.Fatalf("ManagedForms emits a non-Edit permission entry %q", s)
+		}
+	}
+	hasAbs := false
+	for _, s := range pd {
+		if strings.HasPrefix(s, "Edit(//") {
+			hasAbs = true
+		}
+		if strings.HasPrefix(s, "Edit(/") && !strings.HasPrefix(s, "Edit(//") {
+			t.Errorf("single-slash absolute form %q", s)
+		}
+	}
+	if !hasAbs {
+		t.Fatal("no Edit(//...) entry")
+	}
+
+	cases := []struct {
+		name string
+		deny func(pd []string) []string
+		want []string
+	}{
+		{"exact M0b forms", func(pd []string) []string { return pd }, nil},
+		{"extra Write and NotebookEdit entries are harmless", func(pd []string) []string {
+			return append(append([]string{}, pd...), "Write(//etc/claude-code/ballast/**)", "NotebookEdit(~/.ballast/**)")
+		}, nil},
+		{"single-slash Edit forms do not cover", func(pd []string) []string {
+			out := make([]string, len(pd))
+			for i, s := range pd {
+				out[i] = strings.Replace(s, "Edit(//", "Edit(/", 1)
+			}
+			return out
+		}, []string{model.TierMissingPermDeny}},
+		{"Write forms cannot replace Edit forms", func(pd []string) []string {
+			out := make([]string, len(pd))
+			for i, s := range pd {
+				out[i] = strings.Replace(s, "Edit(", "Write(", 1)
+			}
+			return out
+		}, []string{model.TierMissingPermDeny}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m, opt := baseline(t)
+			doc := settingsDoc(tSelf, baseExtra)
+			doc["permissions"] = map[string]any{"deny": toAny(c.deny(pd))}
+			m.writeFile(tMS, mustJSON(t, doc), 0, 0o644)
+			got := Detect(opt)
+			if !reflect.DeepEqual(got.Missing, c.want) {
+				t.Errorf("missing = %v, want %v", got.Missing, c.want)
+			}
+		})
 	}
 }

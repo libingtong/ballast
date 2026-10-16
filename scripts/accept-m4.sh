@@ -7,8 +7,10 @@
 #     idempotence, the user's own hooks survive, a missing original file,
 #     refusal under a managed deployment and on unparsable configuration,
 #     backup cap
-#   * `ballast org render` prints the T1 template and refuses --write for
-#     non-admins; `ballast doctor` reports the tier honestly
+#   * `ballast org render` prints the T1 template as ONE pure JSON document
+#     (the managed-settings fragment; --part org-json prints org.json
+#     alone) and refuses --write for non-admins; `ballast doctor` reports
+#     the tier honestly
 #
 # The container-based T1 boundary tests (boundary-t1.sh / boundary-t0.sh) are
 # P2 in the plan and are not part of this script. No arguments.
@@ -51,7 +53,20 @@ check_eq "sandbox.enabled" "$("$ACCUTIL" json get "$BL_OUT_FILE" sandbox.enabled
 check_eq "sandbox.failIfUnavailable" "$("$ACCUTIL" json get "$BL_OUT_FILE" sandbox.failIfUnavailable)" "true"
 check_eq "allowManagedPermissionRulesOnly" "$("$ACCUTIL" json get "$BL_OUT_FILE" allowManagedPermissionRulesOnly)" "true"
 check_int_ge "one managed hook per Claude Code event" "$("$ACCUTIL" json len "$BL_OUT_FILE" hooks)" 9
+check_eq "permissions.deny uses the // absolute form" "$("$ACCUTIL" json get "$BL_OUT_FILE" permissions.deny.4)" "Edit(//usr/local/libexec/ballast/**)"
+check_false "no Write(...) / NotebookEdit(...) permission entries" grep -Eq '"(Write|NotebookEdit)\(' "$BL_OUT_FILE"
 check_no_file "printing the template wrote no managed settings" "$SB_MANAGED/managed-settings.d"
+cp "$BL_OUT_FILE" "$TMP_ROOT/org-render-default.json"
+bl org render --binary /usr/local/libexec/ballast/ballast --part managed-settings
+expect_rc "org render --part managed-settings" 0
+check_eq "--part managed-settings is the default" "$(cat "$BL_OUT_FILE")" "$(cat "$TMP_ROOT/org-render-default.json")"
+bl org render --part org-json
+expect_rc "org render --part org-json" 0
+check_true "org.json is a single JSON document" "$ACCUTIL" json valid "$BL_OUT_FILE"
+check_eq "org.json tier" "$("$ACCUTIL" json get "$BL_OUT_FILE" tier)" "T1"
+check_eq "org.json runner_sandbox" "$("$ACCUTIL" json get "$BL_OUT_FILE" runner_sandbox)" "require"
+bl org render --part bogus
+expect_rc "an unknown --part is a usage error (2)" 2
 bl org render --write
 expect_rc "--write without --i-am-admin is refused (4)" 4
 if [ "$(id -u 2>/dev/null || echo 1)" != 0 ]; then

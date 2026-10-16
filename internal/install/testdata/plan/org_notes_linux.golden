@@ -1,0 +1,4 @@
+runner_allow_write:每一项都等于把该目录交给 agent 可改写的测试代码,写入在 job 结束后仍然存在且不进入内容快照;共享构建缓存会被沙箱外的构建复用。runner 已把常见缓存变量指向每个 job 的临时目录,建议保持为空。
+runner_network:deny 在 macOS 上连回环也拒绝;loopback 让 macOS 上的测试能连主机回环上的任何服务,allow 放开出站 IP 但不放开本地 socket,两者都是残余风险。
+weakened_project:deny 会让带削弱设置的项目里所有工具调用被拒,audit 只审计。当前取值 deny,依据:M0b 用例 managed-denywrite-anydepth 尚未证明 `**/` 形式有效(未证明 ⇒ deny);证明有效后缺省改为 audit。
+home_root:未设置。sssd/LDAP 用户在静态构建下查不到 passwd 条目,已锁定主机上他们的每次 hook 调用都会放行;修复方式(按推荐顺序):(1) 在 org.json 写 home_root(org render --home-root /home,推荐);(2) 使用启用 cgo 的构建(走 NSS,仅在 NSS 由本地缓存提供时可用:sssd 本地缓存或 nscd);(3) 把该用户加入本地 /etc/passwd。

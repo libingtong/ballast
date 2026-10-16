@@ -84,9 +84,19 @@ func TestOrgRenderManagedFormsGolden(t *testing.T) {
 					t.Errorf("denyWrite lacks %q", want)
 				}
 			}
-			for _, want := range []string{"Edit(**/.ballast/**)", "Write(**/.claude/settings*.json)", "NotebookEdit(./.claude/settings*.json)"} {
+			for _, want := range []string{"Edit(**/.ballast/**)", "Edit(**/.claude/settings*.json)", "Edit(./.claude/settings*.json)"} {
 				if !contains(s.Permissions.Deny, want) {
 					t.Errorf("permissions.deny lacks %q", want)
+				}
+			}
+			// M0b: only Edit(...) entries (Write/NotebookEdit path entries
+			// are invalid) and "//" for POSIX absolute paths.
+			for _, d := range s.Permissions.Deny {
+				if !strings.HasPrefix(d, "Edit(") {
+					t.Errorf("permissions.deny has a non-Edit entry %q", d)
+				}
+				if strings.HasPrefix(d, "Edit(/") && !strings.HasPrefix(d, "Edit(//") {
+					t.Errorf("permissions.deny has a single-slash absolute path %q", d)
 				}
 			}
 		})
@@ -163,11 +173,9 @@ func TestOrgRenderFullShape(t *testing.T) {
 		t.Error("settings differ from ManagedForms(org.protected_extra)")
 	}
 
-	// stdout rendering: settings first, then the commented org.json section.
-	out := string(r.Stdout)
-	if !strings.HasPrefix(out, string(r.Settings)) || !strings.HasSuffix(out, string(r.OrgJSON)) {
-		t.Fatalf("stdout must be settings + org section:\n%s", out)
-	}
+	// The risk notes are not part of any JSON document: they are returned
+	// separately (the CLI sends them to stderr).
+	notes := strings.Join(r.OrgNotes, "\n")
 	for _, want := range []string{
 		"runner_allow_write:每一项都等于把该目录交给 agent 可改写的测试代码",
 		"共享构建缓存会被沙箱外的构建复用",
@@ -179,34 +187,35 @@ func TestOrgRenderFullShape(t *testing.T) {
 		"managed-denywrite-anydepth",
 		"home_root:仅当 passwd 查不到当前 uid 时才采信 $HOME",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("stdout lacks %q", want)
+		if !strings.Contains(notes, want) {
+			t.Errorf("OrgNotes lack %q", want)
 		}
 	}
-	for _, line := range strings.Split(strings.TrimSuffix(out[len(r.Settings):], string(r.OrgJSON)), "\n") {
-		if line != "" && !strings.HasPrefix(line, "// ") {
-			t.Errorf("non-comment line before org.json: %q", line)
+	for _, n := range r.OrgNotes {
+		if strings.Contains(n, "\n") || strings.HasPrefix(n, "//") {
+			t.Errorf("a note must be one plain line: %q", n)
 		}
 	}
-	checkGolden(t, "org_stdout_linux_home_root", out)
+	checkGolden(t, "org_notes_linux_home_root", notes+"\n")
 
-	// without home_root the stdout warns about sssd/LDAP users
+	// without home_root the notes warn about sssd/LDAP users
 	r2, err := OrgRenderFull(lay, sys.OSFS{}, OrgRenderOptions{GOOS: "linux"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(r2.Stdout), "home_root:未设置") || strings.Contains(string(r2.OrgJSON), "home_root") {
-		t.Errorf("no --home-root:\n%s", r2.Stdout)
+	notes2 := strings.Join(r2.OrgNotes, "\n")
+	if !strings.Contains(notes2, "home_root:未设置") || strings.Contains(string(r2.OrgJSON), "home_root") {
+		t.Errorf("no --home-root:\n%s", notes2)
 	}
-	checkGolden(t, "org_stdout_linux", string(r2.Stdout))
+	checkGolden(t, "org_notes_linux", notes2+"\n")
 	checkGolden(t, "org_json_linux", string(r2.OrgJSON))
 
-	// Windows is T0 only: no org.json, stdout == settings.
+	// Windows is T0 only: no org.json and no org.json notes.
 	r3, err := OrgRenderFull(orgLayout(t, "windows"), sys.OSFS{}, OrgRenderOptions{GOOS: "windows"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r3.OrgJSON != nil || string(r3.Stdout) != string(r3.Settings) {
+	if r3.OrgJSON != nil || len(r3.OrgNotes) != 0 {
 		t.Error("windows must not render org.json")
 	}
 }

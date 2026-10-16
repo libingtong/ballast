@@ -1,6 +1,6 @@
-# Ballast 架构与接口契约(冻结版 v2.0.7)
+# Ballast 架构与接口契约(冻结版 v2.0.8)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4、v2.0.5、v2.0.6、v2.0.7 为 P2 设计第 1、2、3、4、5、6、7 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4、v2.0.5、v2.0.6、v2.0.7 为 P2 设计第 1、2、3、4、5、6、7 轮独立审核修订,v2.0.8 为 P2 集成阶段按项目负责人裁决处理 M0b 与 P2-CLI 报告的契约问题;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -326,7 +326,7 @@ hooks:
     "excludedCommands": [],
     "filesystem": {"denyWrite": ["<org 规则目录>", "~/.ballast", "<repo>/.ballast", "<二进制目录>", "~/.claude/settings*.json"]}
   },
-  "permissions": {"deny": ["Edit(<受保护路径>/**)", "Write(<受保护路径>/**)", "NotebookEdit(<受保护路径>/**)"]},
+  "permissions": {"deny": ["Edit(//<绝对受保护路径>/**)", "Edit(~/<受保护路径>/**)", "Edit(./<受保护路径>/**)"]},
   "allowManagedPermissionRulesOnly": true
 }
 ```
@@ -379,7 +379,7 @@ v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.Mana
 | `install --client … [--dry-run] [--codex-trust] [--binary] [--force]` | 0 成功或无变化;1 托管层已部署而拒绝;2 用法/客户端未检测到且无 `--force`/二进制路径不稳定;3 配置解析失败(未写入);5 I/O |
 | `uninstall [--client\|--all] [--dry-run]` | 0;1 部分条目被用户改过而保留(已警告);3 解析失败;5 I/O |
 | `doctor [--json]` | 0 无 fail(可有 warn);1 有 fail。P2:`tier.*` 检查(`tier.level` 逐条列出 Missing,`tier.declared_mismatch`、`tier.runner_sandbox`(沙箱探测由 CLI 注入)、`tier.redirect_ignored`、`tier.locked_home`、`tier.repo_sandbox_weakened`(当前目录与仓库顶层)、`tier.binary_hardening`)。已锁定主机的家目录取不到时 doctor 仍运行到 `tier.locked_home`(此时用 `$HOME` 作诊断回退,重定向变量仍被忽略,不读写状态),其余命令与 hook 则失败(hook 按 B7 放行) |
-| `org render [--client claude-code] [--binary] [--home-root <dir>]... [--protect <path>]... [--write --i-am-admin]` | 0;2 用法(含 `--home-root` 不合规,以及 `--write` 的家目录预检失败:`SUDO_UID` 的用户在 passwd 里没有条目又没有 `home_root`,此时什么都不写);4 `--write` 但非 root 或缺 `--i-am-admin`;5 I/O。stdout 是托管设置片段(纯 JSON)加以 `//` 开头的注释行引出的 org.json 段;`--write` 先写 `managed-settings.d/ballast.json` 再写 `<托管目录>/ballast/org.json`(写入即锁定本机),写入的文件是纯 JSON |
+| `org render [--client claude-code] [--binary] [--home-root <dir>]... [--protect <path>]... [--part managed-settings\|org-json] [--write --i-am-admin]` | 0;2 用法(含 `--home-root` 不合规,以及 `--write` 的家目录预检失败:`SUDO_UID` 的用户在 passwd 里没有条目又没有 `home_root`,此时什么都不写);4 `--write` 但非 root 或缺 `--i-am-admin`;5 I/O。stdout 恒为**单个合法 JSON 文档**,可直接重定向成文件:`--part managed-settings`(缺省)是托管设置片段,`--part org-json` 是 org.json(无效取值与 Windows 上的 `org-json` 退出 2);org.json 各字段的风险提示写 stderr;`--write` 不受 `--part` 影响,先写 `managed-settings.d/ballast.json` 再写 `<托管目录>/ballast/org.json`(写入即锁定本机),写入的文件是纯 JSON |
 | `gc`(内部) | 0;5(写 stderr,不影响任何人)。P2 起另清理 `requests/` 与 `quarantine/` 下超过 30 天的条目、`work/<job_id>/` 中 job 已结束且超过 24 小时的残留(`runner.GCRequests`) |
 | `version` | 0 |
 
@@ -537,6 +537,17 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 ---
 
 ## 14. 修订记录
+
+### v2.0.8(2026-10-16,P2 集成:项目负责人对契约问题的裁决)
+
+配套 `docs/p2-design.md` v1.5.3。依据 `docs/facts/M0b-CONCLUSIONS.md` 的【契约问题】2 与 P2-CLI 集成报告;全部是对 P2 新增面的修改,未改动 v1.x 已实现的导出签名(`install.OrgRendered` 是 P2 新增类型)。
+
+| 项 | 处理 | 涉及文件 |
+|---|---|---|
+| `org render` 的 stdout 夹带以 `//` 开头的 org.json 段,不是合法 JSON,管理员不能直接重定向成托管设置文件,`accept-m4.sh` 的"模板是 JSON"检查因此失败(major) | stdout 恒为单个纯 JSON:新增 `--part managed-settings\|org-json`(缺省 `managed-settings`),`--write` 两个文件各写各的;`install.OrgRendered.Stdout` 删除,换成 `OrgNotes`(org.json 风险提示,CLI 写 stderr);accept-m4 的对应检查按新契约调整并追加 `--part` 断言 | `internal/install/org.go`、`internal/cli/cmd_install.go`、`scripts/accept-m4.sh` |
+| 默认 `no-tamper` 的路径表不含 org 规则目录 | 路径表追加三个平台默认托管目录下的 `ballast/**`;`t0-cases.json` 的 org 行从 gap 改为 detected;trust-model §2.1 同步 | `rules/default.json`、`scripts/boundary/t0*`、`docs/trust-model.md` |
+| M0b:`permissions.deny` 里单斜杠绝对路径不生效;`Write(...)`/`NotebookEdit(...)` 条目冗余并被客户端警告为无效 | `tier.ManagedForms` 的权限条目只留 `Edit(...)`,POSIX 绝对路径写成 `Edit(//…)`;共享 golden 与 install golden 同步;`Detect` 条件 5 仍按精确字符串集合包含判定,旧写法不再算覆盖 | `internal/tier/forms.go`、`testdata/managed_forms.json`、`internal/install/testdata/plan/*` |
+| `internal/report/testdata` 出现本机样式的家目录路径 | 改为 `<home>` 占位符 | `internal/report/testdata` |
 
 ### v2.0.7(2026-10-16,P2 设计第 7 轮独立审核修订)
 

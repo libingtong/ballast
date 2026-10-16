@@ -121,17 +121,16 @@ type OrgRenderOptions struct {
 // hooks for every claude-code NativeEvent (command+args, absolute root-owned
 // binary), allowManagedHooksOnly, sandbox {enabled, allowUnsandboxedCommands
 // false, failIfUnavailable true, excludedCommands [], filesystem.denyWrite
-// = tier.ManagedForms}, permissions.deny Edit/Write/NotebookEdit =
-// tier.ManagedForms, allowManagedPermissionRulesOnly true. Exact keys:
+// = tier.ManagedForms}, permissions.deny (Edit(...) entries only, "//" form
+// for absolute paths) = tier.ManagedForms, allowManagedPermissionRulesOnly true. Exact keys:
 // architecture §5.5 (M0b-unverified). With Write+IAmAdmin and root it writes
 // <ManagedDir>/managed-settings.d/ballast.json and
 // <ManagedDir>/ballast/org.json; otherwise prints only.
 //
 // OrgRender returns ONLY the settings fragment (so its output is a valid
-// JSON document and equals the written ballast.json). The org.json section
-// and the commented stdout rendering of docs/p2-design.md §3.5, the written
-// paths and the stderr hints come from OrgRenderFull, which `ballast org
-// render` should print (OrgRendered.Stdout).
+// JSON document and equals the written ballast.json). org.json (a second
+// pure JSON document), its risk notes, the written paths and the stderr
+// hints come from OrgRenderFull (OrgRendered).
 func OrgRender(lay layout.Layout, fsys sys.FS, opt OrgRenderOptions) ([]byte, error) {
 	return renderOrg(lay, fsys, opt)
 }

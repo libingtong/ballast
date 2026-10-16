@@ -83,9 +83,11 @@
 //
 // P2 (P2-INSTALL, docs/p2-design.md §3.5): imports tier in addition.
 // `org render` prints tier.ManagedForms (shared golden
-// internal/tier/testdata/managed_forms.json) and an org.json section
-// (OrgRenderFull; --home-root, protected_extra, weakened_project =
-// tier.DefaultWeakenedProject); --write puts down managed-settings.d/ballast.json
+// internal/tier/testdata/managed_forms.json) as the managed-settings
+// fragment, and org.json as a separate pure JSON document (OrgRenderFull;
+// --home-root, protected_extra, weakened_project =
+// tier.DefaultWeakenedProject; the CLI selects one with --part, the risk
+// notes in OrgRendered.OrgNotes go to stderr); --write puts down managed-settings.d/ballast.json
 // and then org.json, after a home-directory pre-flight for SUDO_UID
 // (sys.LookupHome; ErrNoPasswdEntry without home_root ⇒ ErrUsage, nothing
 // written). Doctor derives tier.level from tier.Detect and adds

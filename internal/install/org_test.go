@@ -107,7 +107,7 @@ func TestOrgRenderShape(t *testing.T) {
 		}
 	}
 	joined := strings.Join(doc.Permissions.Deny, "\n")
-	for _, want := range []string{"Edit(/Library/Application Support/ClaudeCode/ballast/**)", "Write(~/.ballast/**)", "NotebookEdit(/usr/local/libexec/ballast/**)", "Edit(~/.claude/settings*.json)"} {
+	for _, want := range []string{"Edit(//Library/Application Support/ClaudeCode/ballast/**)", "Edit(~/.ballast/**)", "Edit(//usr/local/libexec/ballast/**)", "Edit(~/.claude/settings*.json)"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("permissions.deny lacks %q:\n%s", want, joined)
 		}

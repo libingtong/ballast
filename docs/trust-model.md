@@ -28,18 +28,20 @@ hook、规则文件、状态与证据文件都和 agent 以**同一个用户**�
 
   **识别的写入**(`bashparse` 写入目标表,契约见 `internal/bashparse/doc.go`、`docs/dsl-semantics.md` §6):重定向 `> >> &> >|`;`tee`;`cp`/`mv`/`install`/`rsync` 的**目标**;`sed -i`;`perl -i`/`ruby -i`(含 `-pi`、`-pi.bak`);`git checkout [<rev>] -- <path>`、`git restore <path>`;`rm`、`truncate`、`dd of=`、`touch`、`ln` 的链接;PowerShell 的 `Set-Content` 等(覆盖面窄于 bash)。
 
+  **受检测的路径**:默认 `no-tamper` 的路径表覆盖 `**/.ballast/**`、`~/.ballast/**`、各客户端的 hook 配置文件,以及 org 规则目录,即三个平台默认托管目录下的 `ballast/`(`/etc/claude-code/ballast/**`、`/Library/Application Support/ClaudeCode/ballast/**`、`c:/Program Files/ClaudeCode/ballast/**`)。org 规则目录在真实部署里是 root 所有,权限本身就拦得住非 root 的写入;把它列进路径表是为了让 agent 以同一用户权限(例如 root 会话或权限被误配的目录)改写它时也留下审计命中。同样只是检测,不是屏障。
+
   **未覆盖的写法**(尽力列举,不穷尽;命中不了就不会进审计):
   1. 语言运行时内部的写入:`python -c "open(...).write()"`、`node -e`、`php -r`、不带 `-i` 的 `perl -e`/`ruby -e`、`lua`/`awk` 程序里的 `print > file`、`jq`/`yq` 的 `-i`、`gawk -i inplace`;Hermes 的 `execute_code`(模型提交的 Python 脚本在 Hermes 的代码执行环境里运行,脚本内部直接 `open(...).write()` 不会再产生 `write_file`/`patch` 的 `pre_tool_call`;Ballast 把它保留为原名 `execute_code`,规则可以按名字匹配它,但 `no-tamper` 看不到其中的写入);
   2. 先写脚本再执行(`./fix.sh`、`make`、`npm run …`、`python script.py`),或经管道/heredoc 交给解释器(`python <<EOF`、`curl … | sh`、`base64 -d | sh`);
   3. 其他会改写文件的命令:`patch`、`git apply`、`ed`/`ex`/`vim -es`/`emacs --batch`、`sponge`、`curl -o`/`wget -O`、`tar -x`/`unzip`、`find … -delete`/`-exec`、`xargs` 间接调用、`chmod`/`chattr`;
   4. 用 git 把工作区回退到别的状态:`git reset --hard`、`git stash`、`git switch`/`git checkout <分支>`、`git merge`/`pull`/`cherry-pick`、`git clean`,以及不带 `--` 的 `git checkout <path>`(与切换分支无法区分);`git restore` 的 `--pathspec-from-file` 也不展开;
-  5. "搬走"与目录级操作:`mv ~/.ballast/rules.json /tmp/x` 的**源**不算写入目标(见 `docs/pinrule-mapping.md` §2.4),`cp -r` 到父目录、`rm -rf ~/.claude` 这类目标是目录本身而非受保护文件的写法不命中路径匹配(`rm -r ~/.ballast` 例外:`**/.ballast/**` 连目录本身一起匹配,会被检测);默认 `no-tamper` 的路径表也**不含 org 规则目录**(`<托管目录>/ballast/`):它在任何真实部署里都是 root 所有,保护靠文件权限与 T1 的托管 denyWrite,而不是靠 T0 的检测;
+  5. "搬走"与目录级操作:`mv ~/.ballast/rules.json /tmp/x` 的**源**不算写入目标(见 `docs/pinrule-mapping.md` §2.4),`cp -r` 到父目录、`rm -rf ~/.claude` 这类目标是目录本身而非受保护文件的写法不命中路径匹配(`rm -r ~/.ballast` 例外:`**/.ballast/**` 连目录本身一起匹配,会被检测);
   6. 动态内容:命令词本身是变量或 `eval`(`CommandList.Unknown`,按"不确定"放行并审计)、`sh -c "$CMD"`、递归深度超过 2 层的 `sh -c`;
   7. 其他通道:MCP 工具、编辑器/IDE 的自带写文件能力、另一个进程(包括 agent 先启动的后台进程)稍后改写。
 
   这些都只能靠 T1(沙箱的 `denyWrite`、`permissions.deny`)才拦得住。
 
-  **本节的两张清单是可执行的**:`scripts/boundary-t0.sh`(三平台,不需要模型和容器)把每一类写法都做成 `scripts/boundary/t0-cases.json` 里的行,喂给真实的 `ballast hook`:"识别的写入"必须在审计里留下 `no-tamper` 命中,"未覆盖的写法"(第 1–7 类各不少于两例,另有 org 规则目录两行)必须**不**留下。**哪个缺口被检测到了,脚本就失败**并提示"覆盖面变了,请同步更新 trust-model §2.1"——所以这两张清单与代码不会悄悄漂移。同一脚本还断言:手写一条 `S_end` 随意填的伪造 pass 记录,`ballast verify --check` 仍判过期(10);伪造者若先算出真实的内容快照 `C` 再写进记录,则**能**骗过 `--check`(0)——这正是 T0 "可检测、不可防"的边界,脚本把它记为一条缺口,不隐藏;以及 ConfigChange 审计行(`type:"config_change"`,detail `{source, file, protected}`,stdout 恒空,绝不阻断)。
+  **本节的两张清单是可执行的**:`scripts/boundary-t0.sh`(三平台,不需要模型和容器)把每一类写法都做成 `scripts/boundary/t0-cases.json` 里的行,喂给真实的 `ballast hook`:"识别的写入"(含对 org 规则目录的重定向、文件工具写入与 `cp`)必须在审计里留下 `no-tamper` 命中,"未覆盖的写法"(第 1–7 类各不少于两例,)必须**不**留下。**哪个缺口被检测到了,脚本就失败**并提示"覆盖面变了,请同步更新 trust-model §2.1"——所以这两张清单与代码不会悄悄漂移。同一脚本还断言:手写一条 `S_end` 随意填的伪造 pass 记录,`ballast verify --check` 仍判过期(10);伪造者若先算出真实的内容快照 `C` 再写进记录,则**能**骗过 `--check`(0)——这正是 T0 "可检测、不可防"的边界,脚本把它记为一条缺口,不隐藏;以及 ConfigChange 审计行(`type:"config_change"`,detail `{source, file, protected}`,stdout 恒空,绝不阻断)。
 
 原生 Windows 上 Claude Code 没有沙箱,因此永远是 T0(文档依据;真实模型调用下的效果【需凭据】)。
 
@@ -50,7 +52,7 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 1. **托管 hook**:命令用 root 拥有的绝对路径(例如 `/usr/local/libexec/ballast/ballast`),不经过 `PATH`,也不调用 agent 能改的脚本。
 2. **`allowManagedHooksOnly: true`**:只运行托管层的 hook,阻止用户层、项目层、本地层和插件 hook(托管设置强制启用的插件 hook 例外)。文档称低层的 `disableAllHooks` 不能关闭托管 hook。
 3. **sandbox**(`failIfUnavailable: true` 已核验:没有 bwrap/socat 时客户端启动阶段拒绝运行;其余键对真实 Bash 调用的效果为【需凭据】):`enabled: true`、`allowUnsandboxedCommands: false`、`failIfUnavailable: true`、`excludedCommands: []`,并在 `filesystem.denyWrite` 里列出受保护路径。托管层写空列表**挡不住低层追加**(数组设置一般跨层合并,见 §2.3),所以 P2 的层级判定还要求用户层没有削弱沙箱的键,项目层与本地层则只能按会话检查(见 §2.3 的全机前提)。
-4. **`permissions.deny`**:对受保护路径禁止 `Edit`、`Write`、`NotebookEdit`,并设 `allowManagedPermissionRulesOnly: true` 使低层不能放宽。
+4. **`permissions.deny`**:对受保护路径给出 `Edit(...)` 条目(绝对路径用 `//` 开头的形式;`Edit` 规则同时覆盖 Edit 与 Write 工具,不再输出会被客户端警告为无效的 `Write(...)`、`NotebookEdit(...)` 条目),并设 `allowManagedPermissionRulesOnly: true` 使低层不能放宽。
 5. **MCP 白名单**:见下文"残余风险"。
 
 **受保护路径**(`org render` 默认包含前四项):
@@ -66,7 +68,7 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 
 - 字面的 `./` 形式只以**会话目录**为锚点:会话在仓库子目录启动时,保护不到仓库根。
 - **`sandbox.filesystem.denyWrite` 里的 glob(`settings*.json`)与 `**/` 形式在 Linux 上对 Bash 不生效**:`**/.claude/settings*.json`、`**/.ballast` 拦不住 Bash 对 `a/b/.claude/settings.json`、`a/.ballast/project.json` 的写入(`echo >`、`python3 -c`);只有 Edit/Write 工具在会话目录之下的 `**/.ballast/**` 规则被证明生效。**不要把 `**/` 形式当作 Bash 写入的保护**。字面的 `~/`、`./`、绝对路径形式生效,denyWrite 优先于 allowWrite。
-- `permissions.deny` 里**单斜杠开头的绝对路径不按文件系统绝对路径解释**(`Edit(/srv/x/**)` 挡不住 `/srv/x/y`),`//` 形式才行;`~/` 与 `./` 形式生效。`Edit(...)` 规则同时覆盖 Edit 与 Write 工具,`Write(...)` 与 `NotebookEdit(...)` 条目对 Write 工具是冗余的(保留无害,不能当作屏障)。这与 `org render` 目前输出的 org 规则目录、二进制目录的写法有关,已作为【契约问题】登记在 M0b 结论里,待架构师裁决后改 `ManagedForms` 与共享 golden。
+- `permissions.deny` 里**单斜杠开头的绝对路径不按文件系统绝对路径解释**(`Edit(/srv/x/**)` 挡不住 `/srv/x/y`),`//` 形式才行;`~/` 与 `./` 形式生效。`Edit(...)` 规则同时覆盖 Edit 与 Write 工具,`Write(...)` 与 `NotebookEdit(...)` 条目对 Write 工具是冗余的,Claude Code 2.1.300 还会把它们警告为无效条目。架构师已裁决(M0b 结论【契约问题】2):`ManagedForms` 输出的 `permissions.deny` 只含 `Edit(...)` 条目,org 规则目录、二进制目录与绝对路径 `protected_extra` 一律写成 `Edit(//…)`,共享 golden `internal/tier/testdata/managed_forms.json` 与 `tier.Detect` 条件 5 的"覆盖"判定同步(按字符串集合逐字包含,所以旧的单斜杠或 `Write(...)` 写法不再算覆盖)。`sandbox.filesystem.denyWrite` 里的绝对路径保持单斜杠形式。
 - 因此 `org.json` 的 `weakened_project` 缺省值保持 **`deny`**(`tier.DefaultWeakenedProject`;条件契约要求 `managed-denywrite-anydepth` 在 credentials 模式 pass 才能改为 `audit`,目前是 `needs_credentials`)。`scripts/boundary-t1.sh --with-credentials` 的补测会重新核对。
 
 ### 2.3 T1 的残余风险
@@ -125,12 +127,13 @@ T1 完全依赖客户端的**托管设置**机制。组成如下(合并与强制
 2. **渲染模板**(只打印,不写系统路径):
 
    ```sh
-   ballast org render --binary /usr/local/libexec/ballast/ballast > ballast-render.txt
+   ballast org render --binary /usr/local/libexec/ballast/ballast > ballast.json
+   ballast org render --binary /usr/local/libexec/ballast/ballast --part org-json > org.json
    ```
 
-   注意:输出**不是**单个 JSON 文档——托管设置片段(纯 JSON)之后紧跟一行 `// ---- org.json(部署到 …) ----` 和以 `//` 开头的风险注释,再后面才是 org.json 的内容。需要纯 JSON 文件时,用 `--write`(root)让 Ballast 代写两个文件,或自己在那一行处截断。
+   stdout 恒为**单个合法 JSON 文档**,可以直接重定向成文件:默认 `--part managed-settings` 是托管设置片段(部署为 `managed-settings.d/ballast.json`),`--part org-json` 是 org.json(部署为 `<托管目录>/ballast/org.json`)。两次调用要带相同的 `--binary`、`--home-root`、`--protect`。org.json 各字段的风险提示写到 stderr,不进 stdout。Windows 只有 T0,没有 org.json(`--part org-json` 退出码 2)。
 
-   输出包含:每个 Claude Code 原生事件(含 ConfigChange)的托管 hook(`command` + `args`)、`allowManagedHooksOnly`、`sandbox`、`permissions.deny` 与 `allowManagedPermissionRulesOnly`,然后是以 `//` 注释行开头的 **org.json 段**(`tier`、`runner_sandbox`、`runner_network`、`runner_allow_write`、`weakened_project`,以及 `--home-root`/`--protect` 给出的 `home_root`/`protected_extra`)。注释写明了各项的风险(`runner_allow_write` 的每一项都等于把该目录交给 agent 可改写的测试代码,建议保持为空;`runner_network:"loopback"`/`"allow"` 是残余风险)。写入磁盘的 org.json 是纯 JSON。sssd/LDAP 用户在静态构建下 passwd 里查不到,请加 `--home-root /home`(推荐),否则这些用户在已锁定的主机上每次 hook 调用都会放行,`ballast doctor` 的 `tier.locked_home` 报 fail。
+   输出包含:每个 Claude Code 原生事件(含 ConfigChange)的托管 hook(`command` + `args`)、`allowManagedHooksOnly`、`sandbox`、`permissions.deny` 与 `allowManagedPermissionRulesOnly`,`--part org-json` 输出的 **org.json**(`tier`、`runner_sandbox`、`runner_network`、`runner_allow_write`、`weakened_project`,以及 `--home-root`/`--protect` 给出的 `home_root`/`protected_extra`)。stderr 的提示写明了各项的风险(`runner_allow_write` 的每一项都等于把该目录交给 agent 可改写的测试代码,建议保持为空;`runner_network:"loopback"`/`"allow"` 是残余风险)。`--write` 时两个文件各写各的,内容与上面两个 stdout 一致。sssd/LDAP 用户在静态构建下 passwd 里查不到,请加 `--home-root /home`(推荐),否则这些用户在已锁定的主机上每次 hook 调用都会放行,`ballast doctor` 的 `tier.locked_home` 报 fail。
 
 3. **人工审阅并补全**:
    - 核对 `sandbox.filesystem.denyWrite` 与 `permissions.deny` 里的受保护路径,按需追加(例如 `<repo>/.claude/settings*.json`)。

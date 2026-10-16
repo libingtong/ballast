@@ -21,7 +21,7 @@ const topUsage = `ballast(压舱石):AI 编码客户端的行为策略引擎
   install       把 hook 安装到客户端配置
   uninstall     按 manifest 卸载
   doctor        自检(层级 T0/T1、各客户端状态)
-  org render    输出组织托管设置模板与 org.json 段
+  org render    输出组织托管设置模板;--part org-json 输出 org.json
   report        把审计日志脱敏聚合成一个本地文件(--out <文件>),不联网
   gc            清理过期状态(内部)
   version       显示版本
@@ -131,9 +131,11 @@ const doctorUsage = `用法:ballast doctor [--json]
 `
 
 const orgUsage = `用法:ballast org render [--client claude-code] [--binary <绝对路径>] [--home-root <目录>]... [--protect <路径>]...
-                        [--write --i-am-admin]
+                        [--part managed-settings|org-json] [--write --i-am-admin]
 
-输出 Claude 托管设置片段(T1 模板)与 org.json 段(风险注释以 "//" 开头,写入的文件是纯 JSON)。
+stdout 只输出一个合法 JSON,可直接重定向到文件:默认 --part managed-settings 为 Claude 托管设置片段(T1 模板),
+--part org-json 为 org.json;org.json 各字段的风险提示写到 stderr。
+  --part       输出哪一份文档,默认 managed-settings(Windows 只有 T0,没有 org.json)
   --home-root  写入 org.json 的 home_root(可重复;sssd/LDAP 用户 passwd 查不到时的家目录父目录)
   --protect    额外受保护路径(可重复),同时写入 org.json 的 protected_extra
   --write      需要 --i-am-admin 且以 root 运行:先写 <托管目录>/managed-settings.d/ballast.json,

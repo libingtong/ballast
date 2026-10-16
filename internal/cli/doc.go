@@ -27,7 +27,7 @@
 //	ballast install --client <id>[,<id>...] [--binary <abs>] [--dry-run] [--codex-trust] [--force]
 //	ballast uninstall [--client <id>|--all] [--dry-run]
 //	ballast doctor [--json]
-//	ballast org render [--client claude-code] [--binary <abs>] [--home-root <dir>]... [--protect <path>]... [--write --i-am-admin]
+//	ballast org render [--client claude-code] [--binary <abs>] [--home-root <dir>]... [--protect <path>]... [--part managed-settings|org-json] [--write --i-am-admin]
 //	ballast gc                                      internal (detached from SessionStart)
 //	ballast version
 //
@@ -78,8 +78,10 @@
 //   - verify --status <id> falls back to runner.RequestStatus when no job has
 //     that id (no request file either: 11); verify --hook-start runs
 //     runner.StartRequest. report --out runs report.Build / report.Write.
-//     org render prints install.OrgRenderFull; doctor gets Self, Cwd and the
-//     sandbox probe. gc also runs runner.GCRequests.
+//     org render prints install.OrgRenderFull (stdout is one pure JSON
+//     document: --part managed-settings (default) or org-json; the org.json
+//     risk notes go to stderr); doctor gets Self, Cwd and the sandbox probe.
+//     gc also runs runner.GCRequests.
 //   - Binaries built with `-tags ballast_fault` read BALLAST_TEST_LOCKED,
 //     BALLAST_TEST_WEAKENED and BALLAST_TEST_TIER (faults_on.go, bench
 //     scenarios 12-14); production builds ignore them (faults_off.go).

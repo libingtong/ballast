@@ -377,20 +377,36 @@ func TestDoctorFreshHomeOnlyWarns(t *testing.T) {
 func TestOrgRender(t *testing.T) {
 	s := newSandbox(t)
 	r := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast")
-	// stdout = the managed-settings fragment (pure JSON), then the org.json
-	// section introduced by "//" comment lines (docs/p2-design.md §3.5).
-	settings, org := splitOrgStdout(t, r.stdout)
+	// stdout is exactly one JSON document, the managed-settings fragment, so
+	// an administrator can redirect it to a file; the org.json risk notes are
+	// on stderr, never in stdout.
 	var doc map[string]any
-	if err := json.Unmarshal([]byte(settings), &doc); err != nil {
-		t.Fatalf("org render settings fragment is not JSON: %v\n%s", err, settings)
+	if err := json.Unmarshal([]byte(r.stdout), &doc); err != nil {
+		t.Fatalf("org render stdout is not a single JSON document: %v\n%s", err, r.stdout)
 	}
+	if strings.Contains(r.stdout, "//") && strings.Contains(r.stdout, "org.json") {
+		t.Errorf("org render stdout carries org.json commentary:\n%s", r.stdout)
+	}
+	if !strings.Contains(r.stderr, "runner_allow_write") || !strings.Contains(r.stderr, "home_root:未设置") {
+		t.Errorf("the org.json risk notes belong on stderr:\n%s", r.stderr)
+	}
+	// --part managed-settings is the default; --part org-json prints org.json
+	// alone, also as a single JSON document.
+	if r2 := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast", "--part", "managed-settings"); r2.stdout != r.stdout {
+		t.Error("--part managed-settings differs from the default output")
+	}
+	ro := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast", "--part", "org-json")
 	var orgDoc map[string]any
-	if err := json.Unmarshal([]byte(org), &orgDoc); err != nil {
-		t.Fatalf("org.json section is not JSON: %v\n%s", err, org)
+	if err := json.Unmarshal([]byte(ro.stdout), &orgDoc); err != nil {
+		t.Fatalf("--part org-json stdout is not a single JSON document: %v\n%s", err, ro.stdout)
 	}
 	if orgDoc["tier"] != "T1" || orgDoc["runner_sandbox"] != "require" || orgDoc["runner_network"] != "deny" {
-		t.Errorf("org.json section: %v", orgDoc)
+		t.Errorf("org.json: %v", orgDoc)
 	}
+	if _, ok := orgDoc["hooks"]; ok {
+		t.Error("--part org-json printed the managed settings")
+	}
+	s.mustExit(2, "", "", "org", "render", "--part", "bogus")
 	if doc["allowManagedHooksOnly"] != true || dig(doc, "sandbox", "enabled") != true || dig(doc, "sandbox", "failIfUnavailable") != true {
 		t.Errorf("T1 template keys: %v", doc)
 	}
@@ -416,32 +432,14 @@ func TestOrgRender(t *testing.T) {
 	}
 }
 
-// splitOrgStdout splits `ballast org render` stdout into the settings JSON
-// and the org.json JSON (its "//" comment lines removed).
-func splitOrgStdout(t *testing.T, out string) (settings, org string) {
-	t.Helper()
-	i := strings.Index(out, "// ---- org.json")
-	if i < 0 {
-		t.Fatalf("org render output has no org.json section:\n%s", out)
-	}
-	settings = out[:i]
-	var keep []string
-	for _, ln := range strings.Split(out[i:], "\n") {
-		if strings.HasPrefix(strings.TrimSpace(ln), "//") {
-			continue
-		}
-		keep = append(keep, ln)
-	}
-	return settings, strings.Join(keep, "\n")
-}
-
-// TestOrgRenderHomeRoot: --home-root lands in the org.json section, a bad
-// value is a usage error and nothing is written without --write.
+// TestOrgRenderHomeRoot: --home-root lands in the org.json document
+// (--part org-json), a bad value is a usage error and nothing is written
+// without --write.
 func TestOrgRenderHomeRoot(t *testing.T) {
 	s := newSandbox(t)
 	r := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast",
-		"--home-root", "/home", "--home-root", "/home/corp.example", "--protect", "/opt/secret")
-	_, org := splitOrgStdout(t, r.stdout)
+		"--home-root", "/home", "--home-root", "/home/corp.example", "--protect", "/opt/secret", "--part", "org-json")
+	org := r.stdout
 	var doc struct {
 		HomeRoot       []string `json:"home_root"`
 		ProtectedExtra []string `json:"protected_extra"`
