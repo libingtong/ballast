@@ -160,9 +160,9 @@ func TestParseBudget(t *testing.T) {
 // With a raised bound the gate follows it, and the correctness checks still
 // gate the scenario.
 func TestGateRaisedBudget(t *testing.T) {
-	old := budget
-	defer func() { budget = old }()
-	budget = 60 * time.Millisecond
+	oldB, oldH := budget, heavyBudget
+	defer func() { budget, heavyBudget = oldB, oldH }()
+	budget, heavyBudget = 60*time.Millisecond, 60*time.Millisecond
 	r := good()
 	r.P95 = 51
 	gate(&r)
@@ -180,5 +180,54 @@ func TestGateRaisedBudget(t *testing.T) {
 	gate(&r)
 	if r.Pass {
 		t.Error("Bad runs must still fail")
+	}
+}
+
+// The whole-work-tree scenarios have their own (higher) bound; every other
+// scenario keeps the tight one.
+func TestGateHeavyBudget(t *testing.T) {
+	oldB, oldH := budget, heavyBudget
+	defer func() { budget, heavyBudget = oldB, oldH }()
+	budget, heavyBudget = 150*time.Millisecond, 400*time.Millisecond
+	r := good()
+	r.P95, r.Heavy = 306, true
+	gate(&r)
+	if !r.Pass {
+		t.Errorf("a heavy scenario inside the heavy bound failed: %v", r.Failures)
+	}
+	r = good()
+	r.P95 = 306
+	gate(&r)
+	if r.Pass {
+		t.Error("a light scenario at 306 ms must fail against the 150 ms bound")
+	}
+	r = good()
+	r.P95, r.Heavy = 401, true
+	gate(&r)
+	if r.Pass {
+		t.Error("a heavy scenario over the heavy bound must fail")
+	}
+	for _, id := range []string{"6c", "6d", "8b", "8c"} {
+		if !heavyScenarios[id] {
+			t.Errorf("%s should be a heavy scenario", id)
+		}
+	}
+	for _, id := range []string{"1", "5", "6a", "6b", "10"} {
+		if heavyScenarios[id] {
+			t.Errorf("%s must not be a heavy scenario", id)
+		}
+	}
+}
+
+func TestParseHeavyBound(t *testing.T) {
+	got, err := parseBound(BenchP95HeavyMsEnv, "", 80*time.Millisecond)
+	if err != nil || got != 80*time.Millisecond {
+		t.Errorf("default = %v, %v", got, err)
+	}
+	if _, err := parseBound(BenchP95HeavyMsEnv, "79", 80*time.Millisecond); err == nil {
+		t.Error("a heavy bound below the general one must be an error")
+	}
+	if got, err := parseBound(BenchP95HeavyMsEnv, "400", 80*time.Millisecond); err != nil || got != 400*time.Millisecond {
+		t.Errorf("400 = %v, %v", got, err)
 	}
 }

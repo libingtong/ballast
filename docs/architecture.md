@@ -437,7 +437,7 @@ MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question
 ## 9. 热路径预算与性能约束
 
 - **门槛**:B10 的 11 个场景 p95 ≤ 30ms,三平台(macOS arm64、Linux、Windows)都设门槛。M0c 原型最差 p95 17.13ms(繁忙机器);进程创建 + Go 运行时初始化约占 3–5ms。
-  - 规格本身未改。GitHub 托管的 macOS / Windows runner 达不到 30ms,CI 在那两个平台用 `BALLAST_BENCH_P95_MS` 设了**固定的临时平台上限**(macOS 80ms、Windows 250ms,依据与实测数据见 `scripts/bench/README.md`),Linux CI 与开发机仍是 30ms。这是 CI 修复期间的临时措施,**是否接受(或应改为别的口径)待负责人确认**;Windows 上钩子自身比进程创建下限多约 30ms 是产品性能缺口,见本节末"已知缺口"。
+  - 规格本身未改。GitHub 托管的 macOS / Windows runner 达不到 30ms,CI 在那两个平台用 `BALLAST_BENCH_P95_MS` / `BALLAST_BENCH_P95_HEAVY_MS` 设了**固定的临时平台上限**(普通场景 macOS 45ms、Windows 150ms;遍历整个工作区的场景 6c/6d/8b/8c 为 macOS 80ms、Windows 400ms,依据与实测数据见 `scripts/bench/README.md`),Linux CI 与开发机仍是 30ms。这是 CI 修复期间的临时措施,**是否接受(或应改为别的口径)待负责人确认**;Windows 上钩子自身比进程创建下限多约 30ms 是产品性能缺口,见本节末"已知缺口"。
 - **热路径包**(`archtest.hotPath`):model、ports、sys、layout、version、paths、bashparse、psparse、dsl、config、inject、state、audit、adapter/*、hook、snapshot、evidence、project。
   - 不得依赖 `net/*`(传递闭包也不行)。
   - 不得 import `os/exec`,**唯一例外** `internal/snapshot/gitfallback.go`(受 deadline 约束)。hook、dsl、adapter、state、audit、config、inject、paths、bashparse、psparse 传递闭包也不得含 `os/exec`。

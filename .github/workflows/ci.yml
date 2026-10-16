@@ -118,10 +118,12 @@ jobs:
     timeout-minutes: 60
     env:
       # bench 的 p95 门槛:产品的 30ms 在 Linux 上强制;托管 macOS(3 vCPU 虚拟机)与 Windows
-      # (Defender 扫描每个文件操作)上同一个二进制实测达不到,CI 在那里用固定的平台上限
-      # (macOS 80ms、Windows 250ms,留约 40% 余量,只防数量级退化)。依据与数据见
-      # scripts/bench/README.md;这是临时措施,架构规格 §9 未改,待负责人确认。
-      BALLAST_BENCH_P95_MS: ${{ matrix.os == 'macos-latest' && '80' || matrix.os == 'windows-latest' && '250' || '30' }}
+      # (Defender 扫描每个文件操作)上同一个二进制实测达不到,CI 在那里用固定的平台上限:
+      # 普通场景 macOS 45ms / Windows 150ms,遍历整个工作区的场景(6c/6d/8b/8c)macOS 80ms /
+      # Windows 400ms,各留 60% 以上余量,只防数量级退化。依据与数据见 scripts/bench/README.md;
+      # 这是临时措施,架构规格 §9 未改,待负责人确认。
+      BALLAST_BENCH_P95_MS: ${{ matrix.os == 'macos-latest' && '45' || matrix.os == 'windows-latest' && '150' || '30' }}
+      BALLAST_BENCH_P95_HEAVY_MS: ${{ matrix.os == 'macos-latest' && '80' || matrix.os == 'windows-latest' && '400' || '30' }}
     strategy:
       fail-fast: false
       matrix:

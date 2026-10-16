@@ -16,9 +16,13 @@ const (
 )
 
 // isTransientRead: a sharing or lock violation while opening or reading a
-// file that is being replaced.
+// file that is being replaced, or "access denied" on a file that is
+// delete-pending because a rename-over replaced it while another handle was
+// still open (the old name answers access denied until that handle closes).
+// A genuine permission denial also lands here and simply fails after the read
+// budget (30 ms) instead of at once.
 func isTransientRead(err error) bool {
-	return errors.Is(err, errorSharingViolation) || errors.Is(err, errorLockViolation)
+	return errors.Is(err, errorSharingViolation) || errors.Is(err, errorLockViolation) || errors.Is(err, errorAccessDenied)
 }
 
 // isTransientRename: the destination (or source) is open elsewhere. "Access

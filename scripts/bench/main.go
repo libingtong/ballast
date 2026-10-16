@@ -62,8 +62,25 @@ const (
 )
 
 // budget is the p95 bound in force for this run: productBudget unless a CI
-// platform raised it through BALLAST_BENCH_P95_MS.
-var budget = productBudget
+// platform raised it through BALLAST_BENCH_P95_MS. heavyBudget is the bound of
+// the scenarios that scan the whole work tree (see heavyScenarios): equal to
+// budget unless BALLAST_BENCH_P95_HEAVY_MS raised it further.
+var budget, heavyBudget = productBudget, productBudget
+
+// heavyScenarios walk every file of a 1k / 10k file work tree (the S-form
+// snapshot of `git commit -a` and the freshness check of a Stop claim), so
+// their time is dominated by the file system, not by the hook: on a hosted
+// Windows runner (Defender scans every stat/read) they cost 2-4x the others.
+// Giving them their own bound keeps the bound of every other scenario tight.
+var heavyScenarios = map[string]bool{"6c": true, "6d": true, "8b": true, "8c": true}
+
+// limitFor returns the p95 bound of a result.
+func limitFor(r *result) time.Duration {
+	if r.Heavy {
+		return heavyBudget
+	}
+	return budget
+}
 
 // ---- scenario model ----
 
@@ -119,6 +136,8 @@ type result struct {
 	Notes    []string `json:"notes,omitempty"`
 	LoadFrom string   `json:"load_start"`
 	LoadTo   string   `json:"load_end"`
+	// Heavy: a whole-work-tree scenario, judged against heavyBudget.
+	Heavy bool `json:"heavy,omitempty"`
 }
 
 // processFloor is p95 of a bare `ballast version` run (process creation, Go
@@ -140,30 +159,42 @@ var processFloor time.Duration
 // a usage error rather than silently ignored.
 const BenchP95MsEnv = "BALLAST_BENCH_P95_MS"
 
+// BenchP95HeavyMsEnv is the same for the heavyScenarios only; it defaults to
+// BALLAST_BENCH_P95_MS and cannot be below it.
+const BenchP95HeavyMsEnv = "BALLAST_BENCH_P95_HEAVY_MS"
+
 const maxBudgetMs = 1000
 
-func parseBudget(v string) (time.Duration, error) {
+func parseBudget(v string) (time.Duration, error) { return parseBound(BenchP95MsEnv, v, productBudget) }
+
+// parseBound parses one of the budget variables: empty means floor, anything
+// else must be a whole number of milliseconds in floor..maxBudgetMs.
+func parseBound(name, v string, floor time.Duration) (time.Duration, error) {
 	v = strings.TrimSpace(v)
 	if v == "" {
-		return productBudget, nil
+		return floor, nil
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		return 0, fmt.Errorf("%s=%q: not a whole number of milliseconds", BenchP95MsEnv, v)
+		return 0, fmt.Errorf("%s=%q: not a whole number of milliseconds", name, v)
 	}
 	d := time.Duration(n) * time.Millisecond
-	if d < productBudget || n > maxBudgetMs {
-		return 0, fmt.Errorf("%s=%d: must be %d..%d (it can only relax the product's %d ms bound)", BenchP95MsEnv, n, productBudget/time.Millisecond, maxBudgetMs, productBudget/time.Millisecond)
+	if d < floor || n > maxBudgetMs {
+		return 0, fmt.Errorf("%s=%d: must be %d..%d (it can only relax the bound)", name, n, floor/time.Millisecond, maxBudgetMs)
 	}
 	return d, nil
 }
 
 // budgetText describes the p95 bound for the reports.
 func budgetText() string {
-	if budget != productBudget {
-		return fmt.Sprintf("%dms(本环境的平台上限,产品门槛 %dms;%s)", budget/time.Millisecond, productBudget/time.Millisecond, BenchP95MsEnv)
+	if budget == productBudget && heavyBudget == productBudget {
+		return fmt.Sprintf("%dms", budget/time.Millisecond)
 	}
-	return fmt.Sprintf("%dms", budget/time.Millisecond)
+	t := fmt.Sprintf("%dms(本环境的平台上限,产品门槛 %dms;%s", budget/time.Millisecond, productBudget/time.Millisecond, BenchP95MsEnv)
+	if heavyBudget != budget {
+		t += fmt.Sprintf(";遍历整个工作区的场景 6c/6d/8b/8c 为 %dms,%s", heavyBudget/time.Millisecond, BenchP95HeavyMsEnv)
+	}
+	return t + ")"
 }
 
 // gate applies the pass/fail rules to a finished scenario. It is the only
@@ -180,8 +211,8 @@ func gate(r *result) {
 	if r.Samples != r.Want || r.Want == 0 {
 		r.Failures = append(r.Failures, fmt.Sprintf("samples=%d, expected %d", r.Samples, r.Want))
 	}
-	if r.Samples > 0 && ms2dur(r.P95) > budget {
-		r.Failures = append(r.Failures, fmt.Sprintf("p95=%.2fms > %dms", r.P95, budget/time.Millisecond))
+	if limit := limitFor(r); r.Samples > 0 && ms2dur(r.P95) > limit {
+		r.Failures = append(r.Failures, fmt.Sprintf("p95=%.2fms > %dms", r.P95, limit/time.Millisecond))
 	}
 	r.Pass = len(r.Failures) == 0
 }
@@ -720,8 +751,9 @@ func runScenario(sc scenario, o *options, rules []byte) result {
 			res.Notes = append(res.Notes, "问题: 预期规则 "+sc.hitRule+" 没有任何命中记录")
 		}
 	}
-	if budget != productBudget && ms2dur(res.P95) > productBudget {
-		res.Notes = append(res.Notes, fmt.Sprintf("p95 %.2fms 超过产品门槛 %dms,在本环境的平台上限 %dms 之内(%s)", res.P95, productBudget/time.Millisecond, budget/time.Millisecond, BenchP95MsEnv))
+	res.Heavy = heavyScenarios[sc.id]
+	if limit := limitFor(&res); limit != productBudget && ms2dur(res.P95) > productBudget {
+		res.Notes = append(res.Notes, fmt.Sprintf("p95 %.2fms 超过产品门槛 %dms,在本环境的平台上限 %dms 之内", res.P95, productBudget/time.Millisecond, limit/time.Millisecond))
 	}
 	gate(&res)
 	return res
@@ -1070,11 +1102,16 @@ func main() {
 		fatal(err)
 	}
 	b, berr := parseBudget(os.Getenv(BenchP95MsEnv))
+	if berr == nil {
+		var h time.Duration
+		if h, berr = parseBound(BenchP95HeavyMsEnv, os.Getenv(BenchP95HeavyMsEnv), b); berr == nil {
+			budget, heavyBudget = b, h
+		}
+	}
 	if berr != nil {
 		fmt.Fprintln(os.Stderr, "bench:", berr)
 		os.Exit(2)
 	}
-	budget = b
 	processFloor = measureFloor(&o)
 
 	all := scenarios()
@@ -1155,7 +1192,7 @@ func main() {
 
 	complete := o.only == nil
 	out := map[string]any{"env": info, "time": time.Now().Format(time.RFC3339), "complete": complete,
-		"budget_ms": int(budget / time.Millisecond), "product_budget_ms": int(productBudget / time.Millisecond), "pass": ok, "results": results, "coverage_problems": problems}
+		"budget_ms": int(budget / time.Millisecond), "product_budget_ms": int(productBudget / time.Millisecond), "heavy_budget_ms": int(heavyBudget / time.Millisecond), "pass": ok, "results": results, "coverage_problems": problems}
 	if o.jsonOut != "" {
 		b, _ := json.MarshalIndent(out, "", "  ")
 		if err := os.WriteFile(o.jsonOut, b, 0o644); err != nil {
