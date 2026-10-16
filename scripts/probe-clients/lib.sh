@@ -61,6 +61,7 @@ import json
 import os
 import pwd
 import re
+import socket
 import sys
 
 MARKER = ".ballast-probe"
@@ -84,6 +85,8 @@ HYGIENE_PATTERNS = [
     re.compile(r"/Users/[A-Za-z][A-Za-z0-9._-]*/"),
     re.compile(r"/home/[A-Za-z][A-Za-z0-9._-]*/"),
     re.compile(r"claude-[0-9]+-"),
+    # per-user temp roots on macOS carry a machine-identifying hash
+    re.compile(r"/(private/)?var/folders/"),
     re.compile(r"[~]/NewCode"),
 ]
 
@@ -589,6 +592,15 @@ class Sanitizer:
             self.user = getpass.getuser()
         except Exception:
             pass
+        # host names that identify this machine (full name and first label)
+        self.hosts = []
+        try:
+            full = socket.gethostname()
+        except Exception:
+            full = ""
+        for h in (full, full.split(".")[0]):
+            if len(h) >= 3 and h.lower() not in ("localhost", "localdomain") and h not in self.hosts:
+                self.hosts.append(h)
 
     def text(self, s):
         for old, new in self.repls:
@@ -623,6 +635,9 @@ class Sanitizer:
                 return "matches hygiene pattern " + p.pattern[:24]
         if self.user and len(self.user) >= 3 and re.search(r"(?<![A-Za-z0-9_])" + re.escape(self.user) + r"(?![A-Za-z0-9_])", text):
             return "contains the local user name"
+        for h in self.hosts:
+            if re.search(r"(?<![A-Za-z0-9_-])" + re.escape(h) + r"(?![A-Za-z0-9_-])", text, re.IGNORECASE):
+                return "contains the local host name"
         return None
 
 
@@ -1224,6 +1239,17 @@ pc_selftest_guards() {
   pc_t_eq "cursor 合并: 保留他人条目、幂等、stop 带 loop_limit" \
     "$(python3 -I -c 'import json,sys;d=json.load(open(sys.argv[1]));h=d["hooks"];print(d["version"],len(h["stop"]),h["stop"][1].get("loop_limit"),len(h["preToolUse"]),h["preToolUse"][0].get("loop_limit"))' "$cj")" \
     "1 2 10 1 None"
+
+  # ---- the final scan rejects machine identifiers ----
+  local hf="$root/hygiene.txt" hhost
+  hhost="$(python3 -I -c 'import socket;print(socket.gethostname())')"
+  chk() { printf '%s' "$1" >"$hf"; if pc_py check_text "$hf" >/dev/null 2>&1; then echo pass; else echo reject; fi; }
+  pc_t_eq "卫生扫描: /var/folders 与 /private/var/folders 被拒绝,普通文本通过" \
+    "$(chk '{"p":"/var/folders/ab/xyz/T/x"}') $(chk '{"p":"/private/var/folders/ab/xyz/T"}') $(chk '{"p":"<work>/a.txt"}')" "reject reject pass"
+  case "$hhost" in
+    "" | localhost | ??) pc_t_skip "卫生扫描: 主机名被拒绝" "本机主机名为空、localhost 或短于 3 个字符" ;;
+    *) pc_t_eq "卫生扫描: 出现本机主机名被拒绝" "$(chk "{\"tool_response\":\"host $hhost up\"}")" "reject" ;;
+  esac
 
   # ---- hygiene: this directory carries no local paths or user names ----
   local bad

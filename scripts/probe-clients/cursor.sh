@@ -73,7 +73,9 @@ setup_env() {
   WORK="$PH/work"
   FACTS="${BALLAST_PROBE_FACTS_DIR:-$PC_REPO_ROOT/docs/facts}"
   VERSION="${BALLAST_PROBE_CURSOR_VERSION:-unknown}"
-  LAUNCH="cd $(pc_q "$WORK") && env HOME=$(pc_q "$PH") cursor-agent    # CLI;IDE: env HOME=$(pc_q "$PH") cursor $(pc_q "$WORK") 然后 Developer: Reload Window"
+  # BALLAST_HOME is explicit so a value exported in the user's shell cannot
+  # send the Ballast hooks outside the throwaway HOME.
+  LAUNCH="cd $(pc_q "$WORK") && env HOME=$(pc_q "$PH") BALLAST_HOME=$(pc_q "$BH") cursor-agent    # CLI;IDE: env HOME=$(pc_q "$PH") BALLAST_HOME=$(pc_q "$BH") cursor $(pc_q "$WORK") 然后 Developer: Reload Window"
   EXEC=""
 }
 
@@ -175,9 +177,11 @@ selftest_e2e() {
   fi
 
   rc=0
-  run_script prepare >/dev/null 2>&1 || rc=$?
+  run_script prepare >"$root/prepare.out" 2>&1 || rc=$?
   pc_t_eq "prepare 成功" "$rc" "0"
   cph="$(pc_canon "$ph")"
+  pc_t_eq "LAUNCH 行显式带 HOME 与 BALLAST_HOME(不继承 shell 里已导出的值)" \
+    "$(grep -F "LAUNCH:" "$root/prepare.out" | grep -cF "env HOME=$(pc_q "$cph") BALLAST_HOME=$(pc_q "$cph/.ballast") cursor-agent")" "1"
   hook="$cph/probe-clients/cursor/hook.sh"
   pc_t_eq "hooks.json: version 1、10 个事件各有 Ballast 与探针条目、stop 带 loop_limit" \
     "$(python3 -I -c '

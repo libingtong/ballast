@@ -85,8 +85,12 @@ setup_env() {
   SANDBOX="$BH/sandbox-home"
   FACTS="${BALLAST_PROBE_FACTS_DIR:-$PC_REPO_ROOT/docs/facts}"
   VERSION="${BALLAST_PROBE_CODEX_VERSION:-unknown}"
-  LAUNCH="cd $(pc_q "$WORK") && env CODEX_HOME=$(pc_q "$CH") command codex"
-  EXEC="cd $(pc_q "$WORK") && env CODEX_HOME=$(pc_q "$CH") command codex exec 'Run the shell command: echo ballast-probe-exec'"
+  # BALLAST_HOME must be part of the command: the Ballast hooks written by
+  # --codex-trust carry no environment, so without it they fall back to the
+  # real ~/.ballast. env runs the binary directly, which already bypasses
+  # same-named shell functions and aliases.
+  LAUNCH="cd $(pc_q "$WORK") && env CODEX_HOME=$(pc_q "$CH") BALLAST_HOME=$(pc_q "$BH") codex"
+  EXEC="cd $(pc_q "$WORK") && env CODEX_HOME=$(pc_q "$CH") BALLAST_HOME=$(pc_q "$BH") codex exec 'Run the shell command: echo ballast-probe-exec'"
 }
 
 cmd_prepare() {
@@ -118,8 +122,10 @@ cmd_prepare() {
 
 print_launch() {
   pc_say ""
-  pc_say "已准备好。在新终端启动 Codex(使用 command 绕过同名 shell 函数/别名,不要用会切换到真实账号的包装):"
+  pc_say "已准备好。在新终端启动 Codex(env 直接执行二进制,绕过同名 shell 函数/别名,不要用会切换到真实账号的包装):"
   pc_say "  LAUNCH: $LAUNCH"
+  pc_say "exec-noninteractive 用例另开终端运行(同样固定 BALLAST_HOME,避免 hook 落到真实 ~/.ballast):"
+  pc_say "  EXEC: $EXEC"
   pc_say "在该 TUI 里自行登录(登录凭据只会写进临时 CODEX_HOME,本脚本不读取)。"
   pc_say "探针记录目录: $PROBE/out"
 }
@@ -177,7 +183,7 @@ selftest() {
 }
 
 selftest_e2e() {
-  local root=$1 ch bh facts hook rc json
+  local root=$1 ch bh facts hook rc json hrc
   ch="$root/e2e-ch"
   bh="$root/e2e-bh"
   facts="$root/e2e-facts"
@@ -189,12 +195,35 @@ selftest_e2e() {
   fi
 
   rc=0
-  run_script prepare >/dev/null 2>&1 || rc=$?
+  run_script prepare >"$root/prepare.out" 2>&1 || rc=$?
   pc_t_eq "prepare 成功" "$rc" "0"
   local cch cbh
   cch="$(pc_canon "$ch")"
   cbh="$(pc_canon "$bh")"
+  # The Ballast hooks carry no environment, so the printed commands must pin
+  # BALLAST_HOME themselves or the hooks fall back to the real ~/.ballast.
+  pc_t_eq "LAUNCH 行同时带规范化后的 CODEX_HOME 与 BALLAST_HOME,且不使用 command" \
+    "$(grep -F "LAUNCH:" "$root/prepare.out" | grep -cF "env CODEX_HOME=$(pc_q "$cch") BALLAST_HOME=$(pc_q "$cbh") codex")" "1"
+  pc_t_eq "启动命令不含多余的 command 前缀(env 找不到 command 的平台会失败)" \
+    "$(grep -cE "(LAUNCH|EXEC):.*env .* command codex" "$root/prepare.out" || true)" "0"
+  pc_t_eq "EXEC 命令同样带 BALLAST_HOME" \
+    "$(grep -F "EXEC:" "$root/prepare.out" | grep -cF "env CODEX_HOME=$(pc_q "$cch") BALLAST_HOME=$(pc_q "$cbh") codex exec")" "1"
   hook="$cbh/probe-clients/codex/hook.sh"
+  # Run the installed Ballast hook the way the LAUNCH line would (only
+  # CODEX_HOME / BALLAST_HOME set) with a decoy HOME: state must land in the
+  # throwaway BALLAST_HOME and nothing may appear under the decoy HOME.
+  local decoy="$root/decoy-home" bcmd
+  mkdir -p "$decoy"
+  bcmd="$(python3 -I -c 'import json,sys
+for g in json.load(open(sys.argv[1]))["hooks"]["PreToolUse"]:
+    for h in g["hooks"]:
+        if "hook.sh" not in h["command"]:
+            print(h["command"])' "$cch/hooks.json" | head -1)"
+  hrc=0
+  printf '{"session_id":"s","turn_id":"t","transcript_path":"","cwd":"%s","hook_event_name":"PreToolUse","model":"m","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"echo x"},"tool_use_id":"c"}' "$cbh" |
+    env -i PATH="$PATH" HOME="$decoy" CODEX_HOME="$cch" BALLAST_HOME="$cbh" sh -c "$bcmd" >/dev/null 2>&1 || hrc=$?
+  pc_t_eq "Ballast hook 按 LAUNCH 的环境运行: 状态写进临时 BALLAST_HOME,假 HOME 下没有 .ballast" \
+    "$(ls -d "$cbh/cache" "$cbh/state" 2>/dev/null | wc -l | tr -d ' '):$(ls -A "$decoy" | wc -l | tr -d ' ')" "2:0"
   pc_t_eq "hooks.json: 6 个 Ballast + 6 个探针 command hook" \
     "$(python3 -I -c 'import json,sys;d=json.load(open(sys.argv[1]))["hooks"];print(sum(len(g["hooks"]) for v in d.values() for g in v), sum(1 for v in d.values() for g in v for h in g["hooks"] if "hook.sh" in h["command"]))' "$cch/hooks.json")" \
     "12 6"
@@ -210,7 +239,7 @@ selftest_e2e() {
     "12 ok=12 missing=0 mismatch=0"
 
   # ---- the probe hook: recording and scripted answers ----
-  local work="$cbh/probe-clients/codex/work" sid="0f3e5a52-1111-4222-8333-444455556666" err hrc hout
+  local work="$cbh/probe-clients/codex/work" sid="0f3e5a52-1111-4222-8333-444455556666" err hout
   err="$root/hook.err"
   feed() { # EVENT JSON -> sets hout, hrc
     hrc=0
