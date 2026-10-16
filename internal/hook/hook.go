@@ -126,9 +126,12 @@ type Deps struct {
 	// detail {entries:["<basename>:<key>"...]} (no paths, no values). No
 	// session-state field is written.
 	ProjectSandbox ports.ProjectSandboxChecker
-	// WeakenedProject is org.json "weakened_project" of the locked host
-	// ("" ⇒ model.WeakenedProjectAudit), filled by internal/cli from
-	// tier.LockState. Under model.WeakenedProjectDeny (and ProjectSandbox
+	// WeakenedProject is the effective org.json "weakened_project" of the
+	// locked host, filled by internal/cli with
+	// tier.EffectiveWeakenedProject(org from tier.LockState) — never "" in
+	// production (v1.5: the default follows the conditional contract
+	// tier.DefaultWeakenedProject). "" (tests, unwired) ⇒
+	// model.WeakenedProjectAudit. Under model.WeakenedProjectDeny (and ProjectSandbox
 	// non-nil) the hook re-runs the check on EVERY claude-code PreToolUse
 	// (one Lstat when the project has no .claude directory) and, when it is
 	// non-empty, adds a synthetic deny merged like the hook-start deny,

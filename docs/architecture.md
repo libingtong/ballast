@@ -1,6 +1,6 @@
-# Ballast 架构与接口契约(冻结版 v2.0.4)
+# Ballast 架构与接口契约(冻结版 v2.0.5)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4 为 P2 设计第 1、2、3、4 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4、v2.0.5 为 P2 设计第 1、2、3、4、5 轮独立审核修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -138,6 +138,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | `labels/<rule_id>.jsonl` | 用户/U9 | `{"sample_id","label":"tp"\|"fp","note"}` | 用户追加 |
 | `install-manifest.json` | U10 | `model.InstallManifest` | 原子 + fsync |
 | `requests/<repo_inst>/<request_id>.json`(v2.0) | P2-RUNNER | `model.VerifyRequestFile`(hook 代起 verify 的请求 → job 映射);同目录 `<request_id>.spawn.log` 为子进程输出 | 原子;`ballast gc` 删除 30 天前的文件 |
+| `work/<job_id>/{index,index.tree,tree/}`(v2.0.5) | P2-RUNNER(`runner.Materialize`) | origin=hook 的 job 私有树:`S_start` 的树经临时索引 `read-tree` + `checkout-index --prefix` 检出到 `tree/`(无 `.git`),加上 project.json `verify[].inputs_untracked` 命中的未跟踪输入;沙箱内的测试只能写这里(`sandbox.Spec.Tree`,`layout.WorkDir`),见 `docs/p2-design.md` §3.4 | 目录 0700;job 收尾后删除;`ballast gc` 删除 job 已结束且超过 24 小时的残留 |
 | `quarantine/<job_id>/…`(v2.0.3) | P2-RUNNER(经 `sandbox.Quarantine`) | 沙箱内测试新建的受保护路径(任意深度的 `.git`、`.claude/`、`.vscode/`、`.mcp.json` 等)被移出仓库后的副本,保留相对路径(`layout.QuarantineDir`) | 只由 runner 写;`ballast gc` 删除 30 天前的条目 |
 | `gc.stamp` | U7 | 空文件,mtime 即上次 GC 时间 | 只由 hook 在派生 `ballast gc` 之前 touch;派生失败时删除以便下次重试;`ballast gc` 本身不写(v1.3;v1.5 删除了 `runGC` 里残留的 touch,hook 与 gc 不再双写) |
 | `replay-set.txt` | 用户 | 每行一个 transcript 路径(不入库) | — |
@@ -166,7 +167,7 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | Windows | `C:\Program Files\ClaudeCode` |
 
 - org 规则:`<托管目录>/ballast/rules.json`。
-- org 配置(v2.0):`<托管目录>/ballast/org.json`(`layout.OrgConfig`,`tier.OrgConfig`:`v`、`tier`、`runner_sandbox`、`runner_network`(deny/loopback/allow,v2.0.4 增加 loopback)、`runner_allow_write`、`home_root`、`weakened_project`(v2.0.4,audit/deny)、`protected_extra`),本身及托管目录到 `/` 的父目录链都 root 所有、组和其他不可写才被采信(v2.0.4 增加父目录链),见 `docs/p2-design.md` §3.2。
+- org 配置(v2.0):`<托管目录>/ballast/org.json`(`layout.OrgConfig`,`tier.OrgConfig`:`v`、`tier`、`runner_sandbox`、`runner_network`(deny/loopback/allow,v2.0.4 增加 loopback)、`runner_allow_write`、`home_root`、`weakened_project`(v2.0.4,audit/deny;v2.0.5 起缺省值按条件契约 `tier.DefaultWeakenedProject`,M0b 未证明任意深度托管形式有效时为 deny)、`protected_extra`),本身及托管目录到 `/` 的父目录链都 root 所有、组和其他不可写才被采信(v2.0.4 增加父目录链),见 `docs/p2-design.md` §3.2。
 - Claude 托管设置:`managed-settings.json`、`managed-settings.d/*.json`(用于托管层已部署检测与 `org render --write`)。
 
 ### 3.4 客户端配置根
@@ -332,7 +333,7 @@ hooks:
 
 MCP 白名单键名按 Claude 托管设置文档在实现时核对(open question)。
 
-v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.ManagedForms`(新增 `./.claude/settings*.json`;`--protect` 的条目同时写 `T(e)` 与 `T(e/**)` 并写进 org.json `protected_extra`),共享 golden `internal/tier/testdata/managed_forms.json`;输出增加 `org.json` 段,`--write --i-am-admin` 同时写 `<托管目录>/ballast/org.json`;各键在真实托管环境中的效果由 M0b 取证,见 `docs/p2-design.md` §3.5、§6。
+v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.ManagedForms`(新增 `./.claude/settings*.json`;v2.0.5 再增任意深度形式 `**/.ballast`、`**/.claude/settings*.json`;`--protect` 的条目同时写 `T(e)` 与 `T(e/**)` 并写进 org.json `protected_extra`),共享 golden `internal/tier/testdata/managed_forms.json`;输出增加 `org.json` 段,`--write --i-am-admin` 同时写 `<托管目录>/ballast/org.json`;各键在真实托管环境中的效果由 M0b 取证,见 `docs/p2-design.md` §3.5、§6。
 
 ---
 
@@ -536,6 +537,20 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 ---
 
 ## 14. 修订记录
+
+### v2.0.5(2026-10-16,P2 设计第 5 轮独立审核修订)
+
+配套 `docs/p2-design.md` v1.5(其 §13 有逐条处置;处理方向由项目负责人裁决)。仍然全部是**追加**或对 v2.0 新增骨架的修改,未改动 v1.x 已实现的导出签名。
+
+| 项 | 处理 | 涉及文件 |
+|---|---|---|
+| T1 证据可被未跟踪文件与 A-B-A 伪造(major) | origin=hook 的 job 在私有树里执行:新增 `runner.Materialize`/`TreeSEnd`/`CleanupTree`/`Tree` 与错误 `ErrTreeSubmodule`、`ErrInputsTooLarge`、`ErrMaterialize`;`sandbox.Spec.Tree`/`WorkRoot`(副本是 `W` 在 `~/.ballast` 内唯一的例外);`layout.WorkDir`;`model.VerifySpec.InputsUntracked`(project.json `verify[].inputs_untracked`,解码归 P2-RUNNER);`model.VerifyRecord.Workspace`(`WorkspaceWorktree`/`WorkspaceCopy`)与 `InputsHash`;冻结收尾顺序 | `internal/runner/{tree,t1}.go`、`internal/sandbox/sandbox.go`、`internal/layout/layout.go`、`internal/model/evidence.go`、§3.1 |
+| darwin IPC 默认全允许(major) | `DarwinEscapeDenials` 改为 IPC 默认拒绝片段(签名不变),新增 `sandbox.DarwinMachAllow`、`DarwinMachForbidden`;darwin profile 增加 `network-bind`/`network-inbound` 规则 | `internal/sandbox/sandbox.go` |
+| 托管配置只覆盖会话目录这一层;`CLAUDE_CONFIG_DIR` 重定向(major) | `tier.ManagedForms` 与共享 golden 增加 `**/` 任意深度形式;条件契约 `tier.DefaultWeakenedProject` 与 `tier.EffectiveWeakenedProject`;条件 5 在 `CLAUDE_CONFIG_DIR` 已设置且不等于 `<home>/.claude` 时判 `sandbox_deny_write` | `internal/tier/tier.go`、`internal/tier/testdata/managed_forms.json`、`internal/model/tier.go`、`internal/hook/hook.go`、§3.3、§5.5 |
+| ConfigChange 文件路径无字段(major) | 冻结 `model.Event.ConfigFile`(`source` 复用 `Event.Source`);claudecode adapter 映射占位 `fillConfigChange` | `internal/model/event.go`、`internal/adapter/claudecode/adapter.go` |
+| P2-SANDBOX 缺 Linux 可执行环境(major)与 minor | `scripts/sandbox-docker.sh` 归 P2-SANDBOX 并列为必过验收;`scripts/bench.sh` 归 P2-CLI;Hermes 补丁解析改为复制 | `docs/p2-design.md` §9 |
+
+骨架状态下 `go build ./...`、`go vet ./...`、`GOOS=windows go vet ./...`、`go test ./...` 均通过。
 
 ### v2.0.4(2026-10-16,P2 设计第 4 轮独立审核修订)
 

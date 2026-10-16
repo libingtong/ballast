@@ -10,9 +10,12 @@
 //
 // Frozen model: DEFAULT-DENY WRITES. The child may write only
 //
-//	W = Spec.AllowWrite (repo work tree, its git dir / common dir when
-//	    outside the work tree — provenance-checked by ResolveGitDirs —,
-//	    org.json runner_allow_write)
+//	W = Spec.AllowWrite — origin=hook (v1.5): the job's private
+//	    materialized tree Spec.Tree (runner.Materialize; neither the real
+//	    work tree nor its git dir / common dir is writable any more) and
+//	    org.json runner_allow_write; origin=cli: the repo work tree, its
+//	    git dir / common dir when outside the work tree — provenance-checked
+//	    by ResolveGitDirs —, and org.json runner_allow_write
 //	  ∪ Spec.TmpDir (per-job, created 0700 by the runner, removed after)
 //	  ∪ a fixed device set: /dev/null, /dev/zero, /dev/fd/* — and nothing
 //	    else (in particular NO /dev/tty*, see "terminal" below)
@@ -53,10 +56,15 @@
 //     Profile, in this order (SBPL: the last matching rule wins):
 //     (version 1)(allow default)
 //     (deny file-write*)
-//     (allow file-write* <W as (subpath …), devices as (literal …)/(regex …)>)
-//     (deny file-write* <D: DenyWrite as (subpath …)/(literal …),
-//     globs as (regex …), RepoMandatoryDeny / GitDirMandatoryDeny as
-//     anchored (regex …) that match at any depth>)
+//     (allow file-write* <W except Spec.Tree as (subpath …), devices as
+//     (literal …)/(regex …)>)
+//     (deny file-write* <D entries NOT inside Spec.Tree: DenyWrite as
+//     (subpath …)/(literal …), globs as (regex …)>)
+//     (allow file-write* (subpath <Spec.Tree>)) — v1.5, only when Tree is
+//     set: the one carve-out of W inside a D directory (~/.ballast)
+//     (deny file-write* <D entries inside Spec.Tree or another W root, and
+//     RepoMandatoryDeny / GitDirMandatoryDeny as anchored (regex …) that
+//     match at any depth>)
 //     (deny file-write* <AncestorPins as (literal …)>)
 //     (deny network-outbound) — always
 //     IP by policy: deny ⇒ nothing (NO loopback); loopback ⇒
@@ -66,9 +74,18 @@
 //     "/private/var/run/mDNSResponder"))) for name resolution
 //     (allow network-outbound (remote unix-socket (subpath <each W>))) —
 //     always, the only other unix sockets reachable
-//     plus the escape-channel denials in DarwinEscapeDenials (LaunchServices,
-//     AppleEvents and other "ask a process outside the sandbox to run
-//     something" services). SBPL matches paths, so rules also hold for
+//     (deny network-bind) (deny network-inbound) — always (v1.5), then
+//     (allow network-bind (local unix-socket (subpath <each W>))) always,
+//     and under loopback / allow only:
+//     (allow network-bind (local ip "localhost:*"))
+//     (allow network-inbound (local ip "localhost:*"))
+//     — a test may listen on loopback, never on another interface
+//     plus DarwinEscapeDenials() (v1.5: IPC DEFAULT-DENY — (deny mach-lookup)
+//     followed by the explicit DarwinMachAllow allowlist, explicit
+//     (deny mach-register), (deny job-creation), (deny user-preference-write),
+//     (deny lsopen), (deny appleevent-send), signals only within the sandbox,
+//     and process-exec denials of open / osascript / launchctl). File READS
+//     stay allowed. SBPL matches paths, so rules also hold for
 //     paths that do not exist yet (verified on macOS 26 at design time:
 //     writes outside W, writes/creates/renames/hard links into D, renaming
 //     W or an ancestor of D, symlink-then-write, and outbound TCP are all
@@ -79,10 +96,13 @@
 //     [--unshare-net unless network allow] --ro-bind / / --dev /dev
 //     --proc /proc --tmpfs /tmp --tmpfs /run --tmpfs /var/run (the two
 //     socket directories are masked under EVERY policy)
-//     then --bind A A for every W entry (existing), then --bind A A for
-//     every AncestorPins entry (existing), then --ro-bind P P for every
-//     existing D entry (globs expanded at wrap time; a glob whose directory
-//     lies inside W ro-binds that whole directory) and for every path of
+//     then --bind A A for every W entry except Spec.Tree (existing), then
+//     --ro-bind P P for every existing D entry NOT inside Spec.Tree, then
+//     (v1.5, only when Tree is set) --bind <Tree> <Tree> (the carve-out
+//     inside the read-only ~/.ballast), then --bind A A for every
+//     AncestorPins entry (existing), then --ro-bind P P for every
+//     existing D entry inside a W root (globs expanded at wrap time; a glob
+//     whose directory lies inside W ro-binds that whole directory) and for every path of
 //     Wrapped.Baseline (the mandatory matches that already exist, found by
 //     ScanMandatory), then --chdir <cwd> --setenv TMPDIR /tmp, one
 //     --setenv K V per Spec.LoaderEnv entry, -- argv.
@@ -108,6 +128,14 @@
 // denied directory, verifying that the denied write actually fails; it
 // caches the result per process.
 //
+// Wrap-up order (frozen, v1.5, docs/p2-design.md §3.4 "收尾顺序"): the
+// runner calls PostCheck only after the child exited (darwin: after it
+// SIGKILLed the child's session / process group; linux: bwrap's PID
+// namespace is gone with its init), then Quarantine on what PostCheck found,
+// and only THEN computes S_end (outside the sandbox) — so S_end never sees a
+// protected path that is about to be moved, and no sandboxed process is left
+// to write after S_end.
+//
 // Acceptance (P2-SANDBOX): DarwinProfile/BwrapArgs/AncestorPins golden
 // tests (testdata/profiles.json; paths with spaces, quotes, parens and
 // non-ASCII; BwrapArgs contains --new-session; no /dev/tty* in the darwin
@@ -129,6 +157,22 @@
 // TCP to a local test listener succeeds; the darwin escape channels are
 // proven closed by mach-lookup denial ALONE (see DarwinEscapeDenials); and
 // a LoaderEnv variable reaches the child but not the bwrap process itself.
+// v1.5 additions: the IPC section of every darwin golden (DarwinMachAllow in
+// order, none of DarwinMachForbidden, the explicit denials); darwin
+// integration cases `defaults write` into a preference domain outside W
+// (an absolute-path domain under a test-owned directory outside W, and in
+// CI also a named domain net.ballast.probe.<rand>) leaves the plist absent
+// or byte-identical; python3 ctypes CGEventPost of a key event and a
+// pasteboard write fail to reach WindowServer / pboard (the pasteboard read
+// back outside the sandbox is unchanged); `launchctl submit -l
+// net.ballast.probe.<rand> -- /usr/bin/touch <outside W>` creates nothing
+// and no such job is listed outside the sandbox; a listener on a
+// non-loopback address fails under every policy; with Spec.Tree set, a
+// write into the tree succeeds while writes to the real work tree, its .git
+// and the rest of ~/.ballast fail. The linux half of every integration
+// case runs in scripts/sandbox-docker.sh (Debian 12 container, the three
+// --security-opt of docs/p2-design.md §3.4, BALLAST_REQUIRE_BWRAP=1) — a
+// mandatory acceptance of the unit that needs Docker only.
 package sandbox
 
 import (
@@ -259,6 +303,19 @@ type Spec struct {
 	Home string
 	// Cwd is the child's working directory (must lie inside AllowWrite).
 	Cwd string
+	// Tree (v1.5) is the private materialized tree of an origin=hook job
+	// (runner.Materialize: <WorkRoot>/<job_id>/tree). When non-empty:
+	// RepoRoots == [Tree], GitDirs is empty, AllowWrite == [Tree] ∪ the
+	// expanded runner_allow_write, Cwd lies inside Tree, and Tree is the
+	// ONLY W entry allowed to lie inside a DenyWrite directory (the
+	// ~/.ballast subtree): ValidateSpec checks Tree == WorkRoot/<one
+	// element>/tree with no symlink on the way. Wrapped.Env then also sets
+	// GIT_CEILING_DIRECTORIES=<dir(Tree)> so git inside the test never
+	// discovers a repository above the copy (the copy has no .git; tests
+	// that need git metadata fail visibly). Empty for origin=cli.
+	Tree string
+	// WorkRoot (v1.5) is layout.WorkDir; required when Tree is set.
+	WorkRoot string
 	// LoaderEnv (v1.4) are the runner environment's dynamic-loader
 	// variables ("K=V", K matching LD_*) that the TEST may legitimately
 	// need (e.g. LD_LIBRARY_PATH). They must never reach the backend
@@ -409,7 +466,8 @@ func ResolveGitDirs(fsys sys.FS, workTree string) (gitDir, commonDir string, err
 
 // ValidateSpec rejects specs that would make the sandbox meaningless:
 // an AllowWrite entry equal to "/", to Home or to an ancestor of Home, or
-// equal to / inside a DenyWrite directory; a Cwd outside AllowWrite; a
+// equal to / inside a DenyWrite directory (sole exception, v1.5: Spec.Tree
+// under the rules documented on Spec.Tree); a Cwd outside AllowWrite; a
 // relative path anywhere; and a GitDirs set that differs from what
 // ResolveGitDirs(fsys, r) returns for the RepoRoots entries r (re-checked
 // through fsys at wrap time, so W can never be widened to an arbitrary
@@ -486,16 +544,75 @@ func AncestorPins(spec Spec) []string {
 	panic("unimplemented: sandbox.AncestorPins (unit P2-SANDBOX)")
 }
 
-// DarwinEscapeDenials is the SBPL fragment that closes "ask something
-// outside the sandbox to run code" channels left open by (allow default):
-// mach-lookup of com.apple.coreservices.launchservicesd,
-// com.apple.coreservices.appleevents, com.apple.lsd.* and the launchd job
-// submission path, plus process-exec of /usr/bin/open, /usr/bin/osascript
-// and /bin/launchctl [unverified: P2-SANDBOX must prove with integration
-// tests that `open -a`, `osascript -e 'do shell script …'` and
-// `launchctl submit` cannot write outside W; if any channel cannot be
-// closed this way the darwin profile switches to (deny default) plus an
-// explicit allowlist, which is an internal change of DarwinProfile only].
+// DarwinMachAllow (v1.5) is the mach-lookup allowlist of the darwin profile,
+// rendered in this order after (deny mach-lookup). Minimal set for the test
+// runners of go / node / python / java / dotnet, modelled on the macOS
+// allowlist approach of Claude Code's sandbox-runtime (deny by default, name
+// the services) and the Chromium / Codex seatbelt base policies 【静态依据待核:
+// P2-SANDBOX checks every name against the sandbox-runtime source and runs a
+// minimal test project per runtime (go test, npm test, pytest, mvn -q test,
+// dotnet test) under the profile; a missing service is added only with that
+// evidence recorded in docs/p2-design.md §3.4 and an argument that it is
+// neither a code-execution nor a write proxy】. Append-only; never one of
+// DarwinMachForbidden.
+var DarwinMachAllow = []string{
+	"com.apple.system.opendirectoryd.libinfo",    // getpwuid/getgrgid (every runtime: os/user, pwd, user.home)
+	"com.apple.system.opendirectoryd.membership", // group membership (getgrouplist, mbr_*)
+	"com.apple.system.notification_center",       // notify(3): libinfo cache invalidation, time zone changes
+	"com.apple.system.logger",                    // asl (older runtimes)
+	"com.apple.logd",                             // os_log (java, dotnet)
+	"com.apple.diagnosticd",                      // os_log activity streaming
+	"com.apple.cfprefsd.daemon",                  // CFPreferences READS; writes are refused by (deny user-preference-write)
+	"com.apple.cfprefsd.agent",                   // idem (per-user agent)
+	"com.apple.trustd.agent",                     // TLS chain evaluation (go crypto/x509, Security.framework) under allow
+	"com.apple.SystemConfiguration.configd",      // proxy / reachability reads (java, dotnet, python urllib)
+	"com.apple.FSEvents",                         // file watchers (node, dotnet)
+}
+
+// DarwinMachForbidden (v1.5) are mach service names (exact, or prefixes when
+// ending in '.') that must never appear in DarwinMachAllow: each one lets a
+// sandboxed process ask a process OUTSIDE the sandbox to run code, inject
+// input or exfiltrate (golden-asserted).
+var DarwinMachForbidden = []string{
+	"com.apple.coreservices.launchservicesd", // LaunchServices (open -a)
+	"com.apple.lsd.",                         // LaunchServices daemons
+	"com.apple.coreservices.appleevents",     // AppleEvents (osascript)
+	"com.apple.windowserver.",                // CGEventPost / window server
+	"com.apple.pasteboard.",                  // pboard
+	"com.apple.tccd",                         // privacy database
+	"com.apple.SecurityServer",               // keychain (not needed by the minimal set; listed until evidence says otherwise)
+	"com.apple.dock.",                        // Dock / Spaces
+	"com.apple.xpc.launchd.",                 // launchd domains
+}
+
+// DarwinEscapeDenials is the SBPL IPC fragment that DarwinProfile appends
+// last (v1.5: IPC DEFAULT-DENY; v1.4's "deny a few named services under
+// (allow default)" is replaced). Frozen content, in this order:
+//
+//	(deny mach-lookup)
+//	(allow mach-lookup (global-name "<each DarwinMachAllow entry>"))
+//	(deny mach-register)
+//	(deny job-creation)
+//	(deny user-preference-write)
+//	(deny lsopen)
+//	(deny appleevent-send)
+//	(deny signal) (allow signal (target same-sandbox))
+//	(deny process-exec (literal "/usr/bin/open") (literal "/usr/bin/osascript")
+//	                   (literal "/bin/launchctl"))
+//
+// (deny user-preference-write) is explicit because cfprefsd writes
+// preferences on the client's behalf outside the sandbox (a `defaults write`
+// into a terminal's start-up command would run outside every sandbox the next
+// time the human opens it); (deny job-creation) is explicit because launchd
+// job submission travels over the bootstrap port, not a named mach-lookup.
+// File reads, sysctl, IOKit and POSIX/SysV IPC stay under (allow default) —
+// registered residual surface, docs/p2-design.md §11. Whether every
+// operation name above is accepted by sandbox-exec on the supported macOS
+// releases, and whether cfprefsd honours user-preference-write for an
+// allowed lookup, is 【未核验】: the golden pins the text, the integration
+// cases (package doc) prove the effect; if cfprefsd does not honour it, the
+// two cfprefsd names leave DarwinMachAllow (preference reads then return
+// defaults) — an internal change of this fragment only.
 //
 // The process-exec rules only match the standard paths, so they alone
 // prove nothing (v1.4): the integration tests must ALSO run each channel
@@ -503,8 +620,8 @@ func AncestorPins(spec Spec) []string {
 // osascript and launchctl placed in Spec.TmpDir, and a python3 ctypes
 // call into LaunchServices / AppleEvents (LSOpenCFURLRef, AESendMessage)
 // and launchd job submission — and must pass with a test-only profile
-// variant that has the process-exec denials removed, so that the
-// mach-lookup denials are shown to work on their own.
+// variant that has the process-exec denials removed, so that the IPC
+// denials are shown to work on their own.
 func DarwinEscapeDenials() string {
 	panic("unimplemented: sandbox.DarwinEscapeDenials (unit P2-SANDBOX)")
 }

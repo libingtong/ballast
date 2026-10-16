@@ -52,7 +52,12 @@
 //     sandbox.enableWeakerNestedSandbox and
 //     sandbox.network.allowAllUnixSockets absent or false (else Missing
 //     "sandbox"); other managed sandbox keys (allowedDomains, allowWrite)
-//     are the administrator's choice.
+//     are the administrator's choice. v1.5: CLAUDE_CONFIG_DIR set
+//     (non-empty) and, after filepath.Clean, different from <home>/.claude
+//     ⇒ Missing "sandbox_deny_write": the user-layer files Claude actually
+//     loads are then outside the literal "~/.claude/settings*.json" forms
+//     of ManagedForms, so nothing in the managed configuration keeps the
+//     agent from writing them (condition 6 is only a point-in-time check).
 //  6. No lower Claude settings layer weakens the managed sandbox
 //     (model.TierMissingLowerSandbox, "lower_sandbox_weakened"). Claude
 //     merges array settings across layers, so a managed
@@ -171,8 +176,8 @@ type OrgConfig struct {
 	// independent of this value (model.NetworkPolicy).
 	RunnerNetwork model.NetworkPolicy `json:"runner_network,omitempty"`
 	// WeakenedProject (v1.4) is what the hook does in a session whose
-	// project layer weakens the managed sandbox; default "audit"
-	// (model.WeakenedProjectPolicy).
+	// project layer weakens the managed sandbox (model.WeakenedProjectPolicy);
+	// "" ⇒ DefaultWeakenedProject (v1.5 conditional contract).
 	WeakenedProject model.WeakenedProjectPolicy `json:"weakened_project,omitempty"`
 	// RunnerAllowWrite are extra writable locations for the sandboxed
 	// test command, on top of the repo, its git dirs and the per-job temp
@@ -433,15 +438,26 @@ func (c ProjectChecker) Weakened(dir string) []string {
 // ManagedForms returns the exact denyWrite and permissions.deny strings
 // that `org render` emits and that Detect requires (condition 5). It is
 // pure: it reads only lay.GOOS and the directory of lay.OrgRules; home and
-// repo entries are the literal "~/" and "./" forms, independent of any
-// user or repo, so the same strings work for every user on the host.
+// repo entries are the literal "~/", "./" and (v1.5) any-depth "**/" forms,
+// independent of any user or repo, so the same strings work for every user
+// on the host.
 //
-//	denyWrite = [dir(OrgRules), "~/.ballast", "./.ballast", dir(self),
-//	             extra..., "~/.claude/settings*.json", "./.claude/settings*.json"]
+//	denyWrite = [dir(OrgRules), "~/.ballast", "./.ballast", "**/.ballast",
+//	             dir(self), extra..., "~/.claude/settings*.json",
+//	             "./.claude/settings*.json", "**/.claude/settings*.json"]
 //	permDeny  = for tool in [Edit, Write, NotebookEdit]:
 //	              tool(dir(OrgRules)/**), tool(~/.ballast/**), tool(./.ballast/**),
-//	              tool(dir(self)/**), for each extra e: tool(e), tool(e/**),
-//	              tool(~/.claude/settings*.json), tool(./.claude/settings*.json)
+//	              tool(**/.ballast/**), tool(dir(self)/**),
+//	              for each extra e: tool(e), tool(e/**),
+//	              tool(~/.claude/settings*.json), tool(./.claude/settings*.json),
+//	              tool(**/.claude/settings*.json)
+//
+// The "**/" forms (v1.5) target project layers the agent could plant in any
+// subdirectory — or, from a session started in a monorepo subdirectory, at
+// the repository root — for later sessions. Whether Claude honours them in
+// managed denyWrite and permissions.deny, and what they are anchored at, is
+// unverified (M0b case managed-denywrite-anydepth); the frozen conditional
+// contract on that result is DefaultWeakenedProject.
 //
 // self is used literally (never resolved): org render passes --binary as
 // given, Detect passes the matched managed hook's command string. dir()
@@ -449,6 +465,30 @@ func (c ProjectChecker) Weakened(dir string) []string {
 // occurrence. testdata/managed_forms.json is the frozen golden.
 func ManagedForms(lay layout.Layout, self string, extra []string) (denyWrite, permDeny []string) {
 	panic("unimplemented: tier.ManagedForms (unit P2-TIER)")
+}
+
+// DefaultWeakenedProject (v1.5) is the effective weakened_project of a T1
+// host whose org.json omits the key, and the value `org render` emits.
+// FROZEN CONDITIONAL CONTRACT (docs/p2-design.md §3.2 "任意深度形式"):
+//
+//   - M0b case managed-denywrite-anydepth "pass" (the "**/" forms of
+//     ManagedForms refuse Bash and Edit/Write writes both at any depth below
+//     the session directory and at the repository root of a session started
+//     in a subdirectory) ⇒ the default is model.WeakenedProjectAudit;
+//   - "fail", "needs_credentials" or "unverifiable" (not proven) ⇒ the
+//     default is model.WeakenedProjectDeny.
+//
+// The skeleton freezes the not-proven branch (deny). P2-CLI sets the final
+// value at integration from docs/facts/m0b-cases.json, together with the
+// org render golden of P2-INSTALL; flipping it to audit requires that pass
+// row (contract change recorded in docs/p2-design.md §13).
+const DefaultWeakenedProject = model.WeakenedProjectDeny
+
+// EffectiveWeakenedProject returns org.WeakenedProject, or
+// DefaultWeakenedProject when it is "". internal/cli fills
+// hook.Deps.WeakenedProject with this value (never "") on a locked host.
+func EffectiveWeakenedProject(org OrgConfig) model.WeakenedProjectPolicy {
+	panic("unimplemented: tier.EffectiveWeakenedProject (unit P2-TIER)")
 }
 
 // ProtectedKind classifies a protected path.

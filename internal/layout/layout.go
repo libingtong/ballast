@@ -27,6 +27,7 @@ type Layout struct {
 	JobsDir       string // ~/.ballast/jobs/<repo_inst>/<name>/<job_id>.{json,log}
 	RequestsDir   string // ~/.ballast/requests/<repo_inst>/<request_id>.json (P2: hook-started verify)
 	QuarantineDir string // ~/.ballast/quarantine/<job_id>/ (P2: protected paths a sandboxed test created, sandbox.Quarantine)
+	WorkDir       string // ~/.ballast/work/<job_id>/{index,index.tree,tree/} (P2 v1.5: private materialized tree of an origin=hook job, runner.Materialize)
 	AuditDir      string // ~/.ballast/audit/YYYY-MM[.N].jsonl
 	CacheDir      string // ~/.ballast/cache/rules-<generation>-<key[:8]>.json, cache/stat.json
 	LKGDir        string // ~/.ballast/cache/lkg/<layer>-<sha256(path)[:12]>.json
@@ -71,6 +72,7 @@ func Resolve(env sys.Env) (Layout, error) {
 	l.JobsDir = filepath.Join(l.Home, "jobs")
 	l.RequestsDir = filepath.Join(l.Home, "requests")
 	l.QuarantineDir = filepath.Join(l.Home, "quarantine")
+	l.WorkDir = filepath.Join(l.Home, "work")
 	l.AuditDir = filepath.Join(l.Home, "audit")
 	l.CacheDir = filepath.Join(l.Home, "cache")
 	l.LKGDir = filepath.Join(l.Home, "cache", "lkg")

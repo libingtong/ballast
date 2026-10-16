@@ -81,7 +81,27 @@ type VerifyRecord struct {
 	Sandbox     string       `json:"sandbox,omitempty"`
 	Origin      VerifyOrigin `json:"origin,omitempty"`
 	TierMissing []string     `json:"tier_missing,omitempty"`
+
+	// P2 v1.5 (docs/p2-design.md §3.4 "job 私有树"). Workspace says where the
+	// test command ran: WorkspaceCopy for every origin=hook job (the S_start
+	// tree materialized into <layout.WorkDir>/<job_id>/tree; S_start and S_end
+	// are computed on that copy), WorkspaceWorktree for origin=cli ("" in
+	// pre-v1.5 records ⇒ worktree). InputsHash is the content digest of the
+	// project.json verify[].inputs_untracked files copied into the private
+	// tree: hex sha256 over the lines "<mode> <sha256 hex of content or link
+	// target> <repo-relative path>\n" sorted by path ("" when the entry has no
+	// inputs_untracked). Those inputs are NOT part of S or C: freshness
+	// ignores them, the digest only makes them auditable (residual risk,
+	// docs/p2-design.md §11).
+	Workspace  string `json:"workspace,omitempty"`
+	InputsHash string `json:"inputs_hash,omitempty"`
 }
+
+// VerifyRecord.Workspace values (P2 v1.5).
+const (
+	WorkspaceWorktree = "worktree"
+	WorkspaceCopy     = "copy"
+)
 
 // ValidPass reports outcome=pass with S_start == S_end (plan B3).
 func (r *VerifyRecord) ValidPass() bool {
@@ -177,6 +197,15 @@ type VerifySpec struct {
 	Required bool     `json:"required,omitempty"`
 	Env      []string `json:"env,omitempty"` // extra KEY=VALUE
 	Cwd      string   `json:"cwd,omitempty"` // relative to the repo root
+	// InputsUntracked (P2 v1.5, docs/p2-design.md §3.4 "job 私有树"):
+	// repo-relative doublestar globs (validated like "exempt") of UNTRACKED
+	// or IGNORED build inputs — e.g. "node_modules/**" — that an origin=hook
+	// job copies into its private tree in addition to the tracked S_start
+	// content. Default empty: nothing untracked and nothing ignored is
+	// copied. Copied files are digested into VerifyRecord.InputsHash. Decoding
+	// in internal/project (rawSpec field + validation) is owned by unit
+	// P2-RUNNER (§9); origin=cli runs ignore it (they run in the work tree).
+	InputsUntracked []string `json:"inputs_untracked,omitempty"`
 }
 
 // ProjectConfig is <repo>/.ballast/project.json (plan B3).

@@ -39,7 +39,26 @@ func (a *Adapter) ParseEvent(native string, stdin []byte) (*model.Event, error) 
 	ev := &model.Event{Client: model.ClientClaude, Name: name, Native: native}
 	common.FillCommon(ev, f)
 	common.FillTools(ev, f, a.NormalizeTool)
+	if name == model.EventConfigChange {
+		fillConfigChange(ev, f)
+	}
 	return ev, nil
+}
+
+// configChangeFileKey is the ConfigChange payload key that carries the
+// changed settings file 【静态依据:Claude Code hooks 文档;未核验,M0b case
+// configchange-payload】. Mapping placeholder frozen by the P2 v1.5 design
+// commit (docs/p2-design.md §5.1, §9): ev.Source already holds the payload's
+// "source" (common.FillCommon); model.Event.ConfigFile is the only new field.
+const configChangeFileKey = "file_path"
+
+// fillConfigChange maps the ConfigChange-only payload fields. Owned by unit
+// P2-CC: once M0b has captured the payload it sets
+// ev.ConfigFile, _ = f.Str(configChangeFileKey) (correcting the key if the
+// capture shows another one) and adds golden rows. Until then it is a no-op,
+// so ConfigFile stays "" (ConfigChange is Install:false meanwhile).
+func fillConfigChange(ev *model.Event, f common.Fields) {
+	_, _, _ = ev, f, configChangeFileKey
 }
 
 // NormalizeTool implements ports.Adapter.

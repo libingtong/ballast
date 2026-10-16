@@ -30,8 +30,19 @@ type Event struct {
 	// agent and is ignored by default (plan v0.4 §3).
 	HasAgentType bool `json:"-"`
 
-	// SessionStart
-	Source string `json:"source,omitempty"` // startup|resume|clear|compact|fork
+	// SessionStart: startup|resume|clear|compact|fork. ConfigChange (P2,
+	// v1.5 docs/p2-design.md §5.1) REUSES this field for the payload's
+	// "source" (which settings layer changed; common.FillCommon already maps
+	// the "source" key for every event) — there is no separate ConfigSource.
+	Source string `json:"source,omitempty"`
+
+	// ConfigFile (P2, frozen by the v1.5 design commit) is the ConfigChange
+	// payload's changed-file path, verbatim (not normalized). Filled ONLY by
+	// the claudecode adapter (unit P2-CC, once M0b case configchange-payload
+	// has confirmed the key; until then it stays ""); read ONLY by the hook's
+	// ConfigChange audit (unit P2-HOOK), which rewrites it into the "~/" /
+	// "<repo>/" relative form for detail.file. Other clients never set it.
+	ConfigFile string `json:"config_file,omitempty"`
 
 	// UserPromptSubmit / Hermes pre_llm_call
 	Prompt      string `json:"prompt,omitempty"`

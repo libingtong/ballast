@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared golden for tier.ManagedForms (docs/p2-design.md §3.2 condition 5, §3.5). Frozen by the P2 design; owned by P2-TIER. internal/tier tests assert ManagedForms(layout{GOOS, OrgRules=<managed_dir>/ballast/rules.json}, self, extra) == (deny_write, perm_deny) byte-for-byte; internal/install tests (P2-INSTALL) assert that org render's sandbox.filesystem.denyWrite and permissions.deny are exactly these strings for the same inputs. Changing a row is a contract change (architecture §12).",
+  "_comment": "Shared golden for tier.ManagedForms (docs/p2-design.md §3.2 condition 5, §3.5). Frozen by the P2 design; owned by P2-TIER. internal/tier tests assert ManagedForms(layout{GOOS, OrgRules=<managed_dir>/ballast/rules.json}, self, extra) == (deny_write, perm_deny) byte-for-byte; internal/install tests (P2-INSTALL) assert that org render's sandbox.filesystem.denyWrite and permissions.deny are exactly these strings for the same inputs. Changing a row is a contract change (architecture §12). v1.5 (docs/p2-design.md §3.2): adds the any-depth forms \"**/.ballast\" / \"**/.ballast/**\" and \"**/.claude/settings*.json\" right after the \"./\" form of each group; their effect is decided by M0b managed-denywrite-anydepth (conditional contract tier.DefaultWeakenedProject).",
   "cases": [
     {
       "name": "linux-default",
@@ -11,29 +11,37 @@
         "/etc/claude-code/ballast",
         "~/.ballast",
         "./.ballast",
+        "**/.ballast",
         "/usr/local/libexec/ballast",
         "~/.claude/settings*.json",
-        "./.claude/settings*.json"
+        "./.claude/settings*.json",
+        "**/.claude/settings*.json"
       ],
       "perm_deny": [
         "Edit(/etc/claude-code/ballast/**)",
         "Edit(~/.ballast/**)",
         "Edit(./.ballast/**)",
+        "Edit(**/.ballast/**)",
         "Edit(/usr/local/libexec/ballast/**)",
         "Edit(~/.claude/settings*.json)",
         "Edit(./.claude/settings*.json)",
+        "Edit(**/.claude/settings*.json)",
         "Write(/etc/claude-code/ballast/**)",
         "Write(~/.ballast/**)",
         "Write(./.ballast/**)",
+        "Write(**/.ballast/**)",
         "Write(/usr/local/libexec/ballast/**)",
         "Write(~/.claude/settings*.json)",
         "Write(./.claude/settings*.json)",
+        "Write(**/.claude/settings*.json)",
         "NotebookEdit(/etc/claude-code/ballast/**)",
         "NotebookEdit(~/.ballast/**)",
         "NotebookEdit(./.ballast/**)",
+        "NotebookEdit(**/.ballast/**)",
         "NotebookEdit(/usr/local/libexec/ballast/**)",
         "NotebookEdit(~/.claude/settings*.json)",
-        "NotebookEdit(./.claude/settings*.json)"
+        "NotebookEdit(./.claude/settings*.json)",
+        "NotebookEdit(**/.claude/settings*.json)"
       ]
     },
     {
@@ -41,21 +49,28 @@
       "goos": "linux",
       "managed_dir": "/etc/claude-code",
       "self": "/opt/ballast/bin/ballast",
-      "extra": ["/srv/policy", "~/.config/acme/ci-token", "/srv/policy"],
+      "extra": [
+        "/srv/policy",
+        "~/.config/acme/ci-token",
+        "/srv/policy"
+      ],
       "deny_write": [
         "/etc/claude-code/ballast",
         "~/.ballast",
         "./.ballast",
+        "**/.ballast",
         "/opt/ballast/bin",
         "/srv/policy",
         "~/.config/acme/ci-token",
         "~/.claude/settings*.json",
-        "./.claude/settings*.json"
+        "./.claude/settings*.json",
+        "**/.claude/settings*.json"
       ],
       "perm_deny": [
         "Edit(/etc/claude-code/ballast/**)",
         "Edit(~/.ballast/**)",
         "Edit(./.ballast/**)",
+        "Edit(**/.ballast/**)",
         "Edit(/opt/ballast/bin/**)",
         "Edit(/srv/policy)",
         "Edit(/srv/policy/**)",
@@ -63,9 +78,11 @@
         "Edit(~/.config/acme/ci-token/**)",
         "Edit(~/.claude/settings*.json)",
         "Edit(./.claude/settings*.json)",
+        "Edit(**/.claude/settings*.json)",
         "Write(/etc/claude-code/ballast/**)",
         "Write(~/.ballast/**)",
         "Write(./.ballast/**)",
+        "Write(**/.ballast/**)",
         "Write(/opt/ballast/bin/**)",
         "Write(/srv/policy)",
         "Write(/srv/policy/**)",
@@ -73,16 +90,19 @@
         "Write(~/.config/acme/ci-token/**)",
         "Write(~/.claude/settings*.json)",
         "Write(./.claude/settings*.json)",
+        "Write(**/.claude/settings*.json)",
         "NotebookEdit(/etc/claude-code/ballast/**)",
         "NotebookEdit(~/.ballast/**)",
         "NotebookEdit(./.ballast/**)",
+        "NotebookEdit(**/.ballast/**)",
         "NotebookEdit(/opt/ballast/bin/**)",
         "NotebookEdit(/srv/policy)",
         "NotebookEdit(/srv/policy/**)",
         "NotebookEdit(~/.config/acme/ci-token)",
         "NotebookEdit(~/.config/acme/ci-token/**)",
         "NotebookEdit(~/.claude/settings*.json)",
-        "NotebookEdit(./.claude/settings*.json)"
+        "NotebookEdit(./.claude/settings*.json)",
+        "NotebookEdit(**/.claude/settings*.json)"
       ]
     },
     {
@@ -96,29 +116,37 @@
         "/Library/Application Support/ClaudeCode/ballast",
         "~/.ballast",
         "./.ballast",
+        "**/.ballast",
         "/usr/local/bin",
         "~/.claude/settings*.json",
-        "./.claude/settings*.json"
+        "./.claude/settings*.json",
+        "**/.claude/settings*.json"
       ],
       "perm_deny": [
         "Edit(/Library/Application Support/ClaudeCode/ballast/**)",
         "Edit(~/.ballast/**)",
         "Edit(./.ballast/**)",
+        "Edit(**/.ballast/**)",
         "Edit(/usr/local/bin/**)",
         "Edit(~/.claude/settings*.json)",
         "Edit(./.claude/settings*.json)",
+        "Edit(**/.claude/settings*.json)",
         "Write(/Library/Application Support/ClaudeCode/ballast/**)",
         "Write(~/.ballast/**)",
         "Write(./.ballast/**)",
+        "Write(**/.ballast/**)",
         "Write(/usr/local/bin/**)",
         "Write(~/.claude/settings*.json)",
         "Write(./.claude/settings*.json)",
+        "Write(**/.claude/settings*.json)",
         "NotebookEdit(/Library/Application Support/ClaudeCode/ballast/**)",
         "NotebookEdit(~/.ballast/**)",
         "NotebookEdit(./.ballast/**)",
+        "NotebookEdit(**/.ballast/**)",
         "NotebookEdit(/usr/local/bin/**)",
         "NotebookEdit(~/.claude/settings*.json)",
-        "NotebookEdit(./.claude/settings*.json)"
+        "NotebookEdit(./.claude/settings*.json)",
+        "NotebookEdit(**/.claude/settings*.json)"
       ]
     },
     {
@@ -132,29 +160,37 @@
         "C:\\Program Files\\ClaudeCode\\ballast",
         "~/.ballast",
         "./.ballast",
+        "**/.ballast",
         "C:\\Program Files\\Ballast",
         "~/.claude/settings*.json",
-        "./.claude/settings*.json"
+        "./.claude/settings*.json",
+        "**/.claude/settings*.json"
       ],
       "perm_deny": [
         "Edit(C:\\Program Files\\ClaudeCode\\ballast/**)",
         "Edit(~/.ballast/**)",
         "Edit(./.ballast/**)",
+        "Edit(**/.ballast/**)",
         "Edit(C:\\Program Files\\Ballast/**)",
         "Edit(~/.claude/settings*.json)",
         "Edit(./.claude/settings*.json)",
+        "Edit(**/.claude/settings*.json)",
         "Write(C:\\Program Files\\ClaudeCode\\ballast/**)",
         "Write(~/.ballast/**)",
         "Write(./.ballast/**)",
+        "Write(**/.ballast/**)",
         "Write(C:\\Program Files\\Ballast/**)",
         "Write(~/.claude/settings*.json)",
         "Write(./.claude/settings*.json)",
+        "Write(**/.claude/settings*.json)",
         "NotebookEdit(C:\\Program Files\\ClaudeCode\\ballast/**)",
         "NotebookEdit(~/.ballast/**)",
         "NotebookEdit(./.ballast/**)",
+        "NotebookEdit(**/.ballast/**)",
         "NotebookEdit(C:\\Program Files\\Ballast/**)",
         "NotebookEdit(~/.claude/settings*.json)",
-        "NotebookEdit(./.claude/settings*.json)"
+        "NotebookEdit(./.claude/settings*.json)",
+        "NotebookEdit(**/.claude/settings*.json)"
       ]
     }
   ]

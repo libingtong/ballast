@@ -62,10 +62,14 @@ const (
 type WeakenedProjectPolicy string
 
 const (
-	// WeakenedProjectAudit (default): audit diag "lower_sandbox_weakened"
-	// once, on the first event of the session; nothing is blocked.
+	// WeakenedProjectAudit: audit diag "lower_sandbox_weakened" once, on the
+	// first event of the session; nothing is blocked. Default only when M0b
+	// proves the any-depth managed forms effective (v1.5 conditional
+	// contract, tier.DefaultWeakenedProject).
 	WeakenedProjectAudit WeakenedProjectPolicy = "audit"
-	// WeakenedProjectDeny: additionally deny EVERY PreToolUse of that
+	// WeakenedProjectDeny (default while the any-depth managed forms are not
+	// proven effective, tier.DefaultWeakenedProject, v1.5): additionally deny
+	// EVERY PreToolUse of that
 	// session (synthetic deny, audit diag "lower_sandbox_deny"), so no tool
 	// call can use the weakened sandbox. It cannot stop settings that act
 	// before or outside tool calls (e.g. helper commands Claude runs at
@@ -85,7 +89,7 @@ const (
 	TierMissingManagedHooks = "managed_hooks"            // no managed Ballast hook whose command == Self
 	TierMissingManagedOnly  = "allow_managed_hooks_only" // allowManagedHooksOnly != true
 	TierMissingSandbox      = "sandbox"                  // sandbox.enabled/allowUnsandboxedCommands/failIfUnavailable not the T1 values
-	TierMissingDenyWrite    = "sandbox_deny_write"       // sandbox.filesystem.denyWrite does not cover every protected path
+	TierMissingDenyWrite    = "sandbox_deny_write"       // sandbox.filesystem.denyWrite does not cover every protected path; v1.5: also CLAUDE_CONFIG_DIR set and != <home>/.claude
 	TierMissingPermDeny     = "permissions_deny"         // permissions.deny / allowManagedPermissionRulesOnly incomplete
 	TierMissingManagedPerms = "managed_permissions_only" // allowManagedPermissionRulesOnly != true
 	TierMissingUnreadable   = "unreadable"               // an input could not be read/parsed (detection fails closed to T0)
@@ -128,8 +132,9 @@ type TierInfo struct {
 	// Network is the sandboxed test command's network policy (default
 	// NetworkDeny).
 	Network NetworkPolicy `json:"network,omitempty"`
-	// WeakenedProject is org.json "weakened_project" (default
-	// WeakenedProjectAudit; v1.4).
+	// WeakenedProject is the effective org.json "weakened_project"
+	// (tier.EffectiveWeakenedProject; v1.4, default per the v1.5
+	// conditional contract tier.DefaultWeakenedProject).
 	WeakenedProject WeakenedProjectPolicy `json:"weakened_project,omitempty"`
 	// ProtectedExtra are additional protected paths from org.json
 	// ("protected_extra"), already ~-expanded.

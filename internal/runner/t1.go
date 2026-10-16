@@ -19,7 +19,12 @@ import "github.com/libingtong/ballast/internal/model"
 // req.ProjectDir when non-empty and different (v1.4; the session's project
 // layer can live in a monorepo subdirectory or a parent of the repo); any
 // entry ⇒ record tier T0, tier_missing ["lower_sandbox_weakened"], audit diag
-// "tier_mismatch". Every git child it runs outside the sandbox (snapshots)
+// "tier_mismatch". v1.5: every job it starts runs in a private materialized
+// tree (Materialize, tree.go), never in the real work tree: S_start is
+// Tree.SStart, the sandbox Spec has Tree = Tree.Dir as its only repo root (W =
+// the copy ∪ TmpDir ∪ runner_allow_write; neither the real work tree nor its
+// git dir / common dir is writable), S_end is TreeSEnd, and the record carries
+// Workspace "copy" and InputsHash. Every git child it runs outside the sandbox (snapshots)
 // gets a sys.Env filtered by sandbox.HostEnv; the detached --run-job child
 // and the sandbox backend get every LD_* / DYLD_* variable removed (v1.4,
 // docs/p2-design.md §3.4 "沙箱外进程的环境"). On a config error it
