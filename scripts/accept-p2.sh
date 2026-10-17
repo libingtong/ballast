@@ -29,6 +29,12 @@
 #   BALLAST_ACCEPT_SKIP_FUZZ=1     item 2
 #   BALLAST_ACCEPT_SKIP_BENCH=1    item 7 (the caller runs scripts/bench.sh itself)
 #   BALLAST_ACCEPT_SKIP_DOCKER=1   item 5 (the caller runs the Docker scripts itself)
+#
+# Item 5 on a host that forbids unprivileged user namespaces (Ubuntu 24.04:
+# kernel.apparmor_restrict_unprivileged_userns=1): CI sets
+# BALLAST_EXPECT_USERNS_RESTRICTED=1 and item 5 then asserts fail-closed
+# (Probe unavailable, hook verify infra sandbox_unavailable, doctor T0) instead
+# of running the real-bwrap cases; unset, a missing bwrap stays a failure.
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 lib_init accept-p2
@@ -123,7 +129,32 @@ else
   else
     bad "sandbox-docker.sh as root: TestBwrapPathDirectoryMustBeTrusted ran and passed" "exit $rc; $(grep -E -- '--- (SKIP|FAIL)' "$out_root" | head -n 2 | tr '\n' ' ')"
   fi
-  run_child "boundary-t1.sh" boundary-t1.sh
+  if [ "${BALLAST_EXPECT_USERNS_RESTRICTED:-0}" = 1 ]; then
+    # The host forbids unprivileged user namespaces (Ubuntu 24.04 default
+    # kernel.apparmor_restrict_unprivileged_userns=1): bwrap cannot configure
+    # its network namespace, so the sandbox is unavailable by design. Prove
+    # that the product fails closed there: Probe reports unavailable, a
+    # hook-started verify job is infra sandbox_unavailable, doctor says T0.
+    # All three tests must actually run and pass (a SKIP fails this item).
+    # boundary-t1.sh asserts a working bwrap throughout; it runs in the
+    # dedicated ubuntu-22.04 CI job, never skipped there.
+    out_ns="$(mktmp sandbox-docker-userns)"
+    rc=0
+    bash "$LIB_DIR/sandbox-docker.sh" ./internal/sandbox ./internal/runner ./internal/cli -run 'TestUsernsRestricted' -v >"$out_ns" 2>&1 || rc=$?
+    tail -n 8 "$out_ns"
+    ns_missing=""
+    for t in TestUsernsRestrictedFailClosed TestUsernsRestrictedHookJobFailsClosed TestUsernsRestrictedDoctorIsT0; do
+      grep -q -- "--- PASS: $t " "$out_ns" || ns_missing="$ns_missing $t"
+    done
+    if [ "$rc" = 0 ] && [ -z "$ns_missing" ] && ! grep -q -- '--- SKIP: TestUsernsRestricted' "$out_ns"; then
+      ok "userns restricted host: sandbox unavailable, hook verify infra sandbox_unavailable, doctor T0 (fail-closed asserted)"
+    else
+      bad "userns restricted host: fail-closed assertions ran and passed" "exit $rc; not passed:${ns_missing:- none}"
+    fi
+    skip "boundary-t1.sh" "BALLAST_EXPECT_USERNS_RESTRICTED=1: needs a working bwrap, covered by the ubuntu-22.04 T1 job"
+  else
+    run_child "boundary-t1.sh" boundary-t1.sh
+  fi
 fi
 
 # ----------------------------------------------------- 6. M0b / Hermes cases ---

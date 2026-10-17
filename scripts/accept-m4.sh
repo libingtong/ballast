@@ -45,7 +45,16 @@ fi
 
 sandbox_new org
 section "org render"
-bl org render --binary /usr/local/libexec/ballast/ballast
+# --binary is validated with the target OS's rules (a drive-letter path on native
+# Windows, which is T0 only: no org.json and no POSIX "//" absolute form). Git
+# Bash would rewrite a POSIX-looking argument into C:/Program Files/Git/..., so
+# Windows gets a native path that is not subject to that conversion.
+if [ "$IS_WINDOWS" = 1 ]; then
+  ORG_BIN="C:/Program Files/ballast/ballast.exe"
+else
+  ORG_BIN=/usr/local/libexec/ballast/ballast
+fi
+bl org render --binary "$ORG_BIN"
 expect_rc "org render" 0
 check_true "the template is JSON" "$ACCUTIL" json valid "$BL_OUT_FILE"
 check_eq "allowManagedHooksOnly" "$("$ACCUTIL" json get "$BL_OUT_FILE" allowManagedHooksOnly)" "true"
@@ -53,18 +62,27 @@ check_eq "sandbox.enabled" "$("$ACCUTIL" json get "$BL_OUT_FILE" sandbox.enabled
 check_eq "sandbox.failIfUnavailable" "$("$ACCUTIL" json get "$BL_OUT_FILE" sandbox.failIfUnavailable)" "true"
 check_eq "allowManagedPermissionRulesOnly" "$("$ACCUTIL" json get "$BL_OUT_FILE" allowManagedPermissionRulesOnly)" "true"
 check_int_ge "one managed hook per Claude Code event" "$("$ACCUTIL" json len "$BL_OUT_FILE" hooks)" 9
-check_eq "permissions.deny uses the // absolute form" "$("$ACCUTIL" json get "$BL_OUT_FILE" permissions.deny.4)" "Edit(//usr/local/libexec/ballast/**)"
+if [ "$IS_WINDOWS" = 1 ]; then
+  skip "permissions.deny uses the // absolute form" "native Windows has no POSIX absolute form (T0 only)"
+else
+  check_eq "permissions.deny uses the // absolute form" "$("$ACCUTIL" json get "$BL_OUT_FILE" permissions.deny.4)" "Edit(//usr/local/libexec/ballast/**)"
+fi
 check_false "no Write(...) / NotebookEdit(...) permission entries" grep -Eq '"(Write|NotebookEdit)\(' "$BL_OUT_FILE"
 check_no_file "printing the template wrote no managed settings" "$SB_MANAGED/managed-settings.d"
 cp "$BL_OUT_FILE" "$TMP_ROOT/org-render-default.json"
-bl org render --binary /usr/local/libexec/ballast/ballast --part managed-settings
+bl org render --binary "$ORG_BIN" --part managed-settings
 expect_rc "org render --part managed-settings" 0
 check_eq "--part managed-settings is the default" "$(cat "$BL_OUT_FILE")" "$(cat "$TMP_ROOT/org-render-default.json")"
-bl org render --part org-json
-expect_rc "org render --part org-json" 0
-check_true "org.json is a single JSON document" "$ACCUTIL" json valid "$BL_OUT_FILE"
-check_eq "org.json tier" "$("$ACCUTIL" json get "$BL_OUT_FILE" tier)" "T1"
-check_eq "org.json runner_sandbox" "$("$ACCUTIL" json get "$BL_OUT_FILE" runner_sandbox)" "require"
+if [ "$IS_WINDOWS" = 1 ]; then
+  bl org render --binary "$ORG_BIN" --part org-json
+  expect_rc "org render --part org-json is a usage error on native Windows (T0 only, no org.json) (2)" 2
+else
+  bl org render --part org-json
+  expect_rc "org render --part org-json" 0
+  check_true "org.json is a single JSON document" "$ACCUTIL" json valid "$BL_OUT_FILE"
+  check_eq "org.json tier" "$("$ACCUTIL" json get "$BL_OUT_FILE" tier)" "T1"
+  check_eq "org.json runner_sandbox" "$("$ACCUTIL" json get "$BL_OUT_FILE" runner_sandbox)" "require"
+fi
 bl org render --part bogus
 expect_rc "an unknown --part is a usage error (2)" 2
 bl org render --write

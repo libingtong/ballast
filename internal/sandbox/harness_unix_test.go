@@ -36,6 +36,13 @@ func requireBackend(t *testing.T) Kind {
 		envName = "BALLAST_REQUIRE_SANDBOX_EXEC"
 	case "linux":
 		envName = "BALLAST_REQUIRE_BWRAP"
+		if usernsRestrictedExpected() {
+			// The host forbids unprivileged user namespaces (Ubuntu 24.04
+			// default): no real-backend case can run. This is not a silent
+			// skip: TestUsernsRestrictedFailClosed asserts the opposite
+			// (Probe reports the backend unavailable) and fails otherwise.
+			t.Skip("BALLAST_EXPECT_USERNS_RESTRICTED=1: the real backend is expected to be unusable; see TestUsernsRestrictedFailClosed")
+		}
 	default:
 		t.Skipf("no sandbox backend on %s", runtime.GOOS)
 	}

@@ -553,7 +553,12 @@ func TestDoctorTierBinaryHardening(t *testing.T) {
 
 	var golden strings.Builder
 	record := func(name string, c Check) {
-		fmt.Fprintf(&golden, "== %s\n%s", name, renderChecks([]Check{c}, e.sb.Root, "tier.binary_hardening"))
+		out := renderChecks([]Check{c}, e.sb.Root, "tier.binary_hardening")
+		// The golden is platform-neutral: native Windows spells paths with
+		// backslashes and phrases a missing file in its own words.
+		out = strings.ReplaceAll(out, "\\", "/")
+		out = strings.ReplaceAll(out, "The system cannot find the file specified.", "no such file or directory")
+		fmt.Fprintf(&golden, "== %s\n%s", name, out)
 	}
 	for _, c := range []struct {
 		name string

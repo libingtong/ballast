@@ -211,8 +211,8 @@ func TestPathContextHomeFollowsTheLockedEnv(t *testing.T) {
 	h.deps.Env = layout.WithHome(h.deps.Env, lockedHome)
 	mustExit0(t, h, h.claude("PreToolUse", preToolBash))
 	in := h.engine.lastInput()
-	if in == nil || in.Paths.Home != lockedHome {
-		t.Errorf("path context home = %+v, want %s", in, lockedHome)
+	if in == nil || in.Paths.Home != filepath.ToSlash(lockedHome) { // the path context is slash-normalised
+		t.Errorf("path context home = %+v, want %s", in, filepath.ToSlash(lockedHome))
 	}
 }
 

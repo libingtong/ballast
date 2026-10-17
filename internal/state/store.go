@@ -437,7 +437,7 @@ func (s *Store) GCFlush(ttl time.Duration, flush EvalFlush) (GCStats, error) {
 			if flush != nil {
 				residual = s.residualEvals(claimed, repo.Name(), sess.Name())
 			}
-			if err := s.opt.FS.RemoveAll(claimed); err != nil {
+			if err := retryWindows(func() error { return s.opt.FS.RemoveAll(claimed) }); err != nil {
 				// Not reported. Put what is left back so a later run retries
 				// (and reports once, after a successful removal); when that
 				// fails too, the claim is swept and discarded by a later run.
@@ -479,10 +479,36 @@ func (s *Store) claimSession(root, sessPath string) (string, error) {
 	}
 	name := fmt.Sprintf("%d-%d-%s", s.opt.Clock.Now().UnixNano(), os.Getpid(), s.opt.IDs.NewID(4))
 	dest := filepath.Join(dir, name)
-	if err := s.opt.FS.Rename(sessPath, dest); err != nil {
+	err := retryWindows(func() error { return s.opt.FS.Rename(sessPath, dest) })
+	if err != nil {
 		return "", err
 	}
 	return dest, nil
+}
+
+// retryWindows runs op, and on native Windows retries a failure for up to
+// about 50 ms. A directory cannot be renamed or removed on Windows while any
+// handle is open on it or inside it (Go opens files without FILE_SHARE_DELETE),
+// and another GC worker listing the same session (ReadDir, or reading its
+// counts) holds such a handle for a moment. Without the retry every worker
+// can lose the claim on the same session at once, and nobody reports it in
+// that run. A missing path (another worker claimed or removed it) is final
+// and never retried. Elsewhere op runs exactly once.
+func retryWindows(op func() error) error {
+	tries := 1
+	if runtime.GOOS == "windows" {
+		tries = 25
+	}
+	var err error
+	for i := 0; i < tries; i++ {
+		if err = op(); err == nil || errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		if i+1 < tries {
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+	return err
 }
 
 // sweepClaims deletes claims older than claimStale (a GC run that died

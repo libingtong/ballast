@@ -104,7 +104,7 @@ func TestWireHookLocked(t *testing.T) {
 			if want := filepath.Join("/home/real", ".ballast"); deps.Layout.Home != want {
 				t.Errorf("Layout.Home = %q, want %q (BALLAST_HOME must be ignored)", deps.Layout.Home, want)
 			}
-			if want := filepath.Join("/home/real"); deps.Layout.InstallRoot != want {
+			if want := "/home/real"; deps.Layout.InstallRoot != want { // the passwd home, used as written
 				t.Errorf("Layout.InstallRoot = %q, want %q", deps.Layout.InstallRoot, want)
 			}
 			// Only the variables that are set (non-empty), in the frozen order.

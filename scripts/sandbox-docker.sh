@@ -37,6 +37,11 @@
 #                                                              e.g. TestBwrapPathDirectoryMustBeTrusted)
 # Package signatures are still verified by apt, module hashes by go.sum.
 #
+# BALLAST_EXPECT_USERNS_RESTRICTED=1 (host forbids unprivileged user namespaces,
+# Ubuntu 24.04 default) switches the tests to the reverse assertion: Probe must
+# report the backend unavailable, hook-started verify jobs must be infra
+# sandbox_unavailable, doctor must say T0. Unset keeps "no bwrap => failure".
+#
 # Without Docker the script prints SKIP and exits 0, unless
 # BALLAST_REQUIRE_DOCKER=1, in which case it fails (exit 1). That variable alone
 # is enough (CI=true is not needed).
@@ -116,6 +121,16 @@ else
     -t "$tag" "$ctx" >/dev/null || die "docker build failed (BALLAST_DOCKER_VERBOSE=1 shows the build output)"
 fi
 
+# BALLAST_EXPECT_USERNS_RESTRICTED=1 (CI sets it on hosts whose
+# /proc/sys/kernel/apparmor_restrict_unprivileged_userns is 1, e.g. Ubuntu 24.04)
+# is forwarded to the tests, which then assert the sandbox is unavailable and
+# every consumer fails closed instead of running the real-backend cases. It only
+# changes which assertions run; no container option is relaxed.
+expect_args=()
+if [ "${BALLAST_EXPECT_USERNS_RESTRICTED:-}" = 1 ]; then
+  expect_args=(-e BALLAST_EXPECT_USERNS_RESTRICTED=1)
+fi
+
 echo "sandbox-docker: go test -count=1 $*"
 docker run --rm \
   --network none \
@@ -132,6 +147,7 @@ docker run --rm \
   -e GOPROXY=off \
   -e GOFLAGS=-mod=readonly \
   -e GOTOOLCHAIN=local \
+  ${expect_args[@]+"${expect_args[@]}"} \
   "$tag" \
   bash -c '
     set -euo pipefail

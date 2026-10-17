@@ -125,6 +125,12 @@ func TestProtectedPaths(t *testing.T) {
 	m.mkdirAll("/home/u/.claude", tUser, 0o755)
 	lay := layout.Layout{GOOS: "linux", Home: "/home/u/.ballast", InstallRoot: "/home/u", ClaudeDir: "/home/u/.claude", OrgRules: "/etc/claude-code/ballast/rules.json"}
 	got := ProtectedPaths(m, lay, "/usr/local/libexec/ballast/ballast", "/var/repo", []string{"/srv/policy", "~/.config/acme/ci-token"})
+	// The forms are built with the host's path rules (filepath); T1 exists on
+	// darwin/linux only, so the expectations are slash paths: compare in that form.
+	for i := range got {
+		got[i].Path = filepath.ToSlash(got[i].Path)
+		got[i].Resolved = filepath.ToSlash(got[i].Resolved)
+	}
 	type pp = ProtectedPath
 	want := []pp{
 		{Kind: ProtectedOrgDir, Path: "/etc/claude-code/ballast", Dir: true},
@@ -187,7 +193,7 @@ func TestProtectedPathsSymlinkedBinaryAddsRealDir(t *testing.T) {
 	var dirs []string
 	for _, p := range ProtectedPaths(m, lay, "/usr/local/bin/ballast", "", nil) {
 		if p.Kind == ProtectedBinaryDir {
-			dirs = append(dirs, p.Path)
+			dirs = append(dirs, filepath.ToSlash(p.Path))
 		}
 	}
 	if want := []string{"/usr/local/bin", "/usr/local/libexec/ballast"}; !reflect.DeepEqual(dirs, want) {

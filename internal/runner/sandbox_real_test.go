@@ -5,6 +5,7 @@ package runner
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -22,6 +23,9 @@ import (
 func realFx(t *testing.T) (*hookFx, sandbox.Kind) {
 	t.Helper()
 	h := newHookFx(t)
+	if usernsRestrictedExpected() {
+		t.Skip("BALLAST_EXPECT_USERNS_RESTRICTED=1: the real backend is expected to be unusable; see TestUsernsRestrictedHookJobFailsClosed")
+	}
 	kind, err := sandbox.Probe(sandbox.Options{FS: sys.OSFS{}, Env: sys.MapEnv{Vars: h.vars}, GOOS: runtime.GOOS})
 	if kind == sandbox.KindNone {
 		required := os.Getenv("CI") == "true" &&
@@ -246,4 +250,45 @@ func TestRealSandboxRunnerAllowWriteAndInvalidSpec(t *testing.T) {
 		t.Errorf("the command ran under an invalid spec")
 	}
 	noJobDir(t, h, rec.JobID)
+}
+
+// usernsRestrictedExpected: CI declared that this Linux host forbids
+// unprivileged user namespaces (BALLAST_EXPECT_USERNS_RESTRICTED=1).
+func usernsRestrictedExpected() bool {
+	return runtime.GOOS == "linux" && os.Getenv("BALLAST_EXPECT_USERNS_RESTRICTED") == "1"
+}
+
+// TestUsernsRestrictedHookJobFailsClosed: on a host that forbids unprivileged
+// user namespaces the real backend is unavailable, and a verify job started by
+// a hook (origin=hook, T1) must be recorded as infra "sandbox_unavailable",
+// never run unwrapped and never count as a pass.
+func TestUsernsRestrictedHookJobFailsClosed(t *testing.T) {
+	if !usernsRestrictedExpected() {
+		t.Skip("BALLAST_EXPECT_USERNS_RESTRICTED is not 1")
+	}
+	h := newHookFx(t)
+	if _, err := exec.LookPath("bwrap"); err != nil {
+		t.Fatalf("bwrap is not installed, so unavailability would prove nothing: %v", err)
+	}
+	kind, perr := sandbox.Probe(sandbox.Options{FS: sys.OSFS{}, Env: sys.MapEnv{Vars: h.vars}, GOOS: runtime.GOOS})
+	if kind != sandbox.KindNone || perr == nil {
+		t.Fatalf("Probe = (%q, %v) on a host declared as restricting user namespaces; want (none, error)", kind, perr)
+	}
+	h.opt.backend = nil // the real one
+	h.setProject(writeprobeSpec("inside.txt"))
+	rec, err := h.runHook("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Outcome != model.OutcomeInfra || rec.Error != "sandbox_unavailable" || rec.ValidPass() {
+		t.Errorf("record: outcome %s error %q validpass %v; want infra / sandbox_unavailable / false", rec.Outcome, rec.Error, rec.ValidPass())
+	}
+	if rec.Sandbox != "none" || rec.Tier != model.TierT0 {
+		t.Errorf("record: sandbox %q tier %q; want none / T0", rec.Sandbox, rec.Tier)
+	}
+	if rec.LogPath != "" {
+		if log, rerr := os.ReadFile(rec.LogPath); rerr == nil && len(probeResults(string(log))) != 0 {
+			t.Errorf("the test command ran although the sandbox was unavailable:\n%s", log)
+		}
+	}
 }

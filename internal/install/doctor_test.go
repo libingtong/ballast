@@ -362,6 +362,9 @@ func TestDoctorTierDetectsRenderedTemplate(t *testing.T) {
 
 // v1.5: CLAUDE_CONFIG_DIR pointing elsewhere is listed with its reason.
 func TestDoctorTierLevelClaudeConfigDirRedirect(t *testing.T) {
+	if !runtimeIsUnix() {
+		t.Skip("native Windows is T0 only: tier.level carries no per-component reasons, CLAUDE_CONFIG_DIR redirect included")
+	}
 	e := newTenv(t)
 	vars := map[string]string{}
 	for k, v := range e.sb.Vars {

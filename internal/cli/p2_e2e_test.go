@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -272,7 +273,14 @@ func TestDoctorTierChecks(t *testing.T) {
 	for _, c := range doc.Checks {
 		got[c.ID] = c.Status
 	}
-	if got["tier.repo_sandbox_weakened"] != "warn" {
+	if runtime.GOOS == "windows" {
+		// Native Windows is T0 only: no per-component tier checks, just the
+		// T0 notice (a warning).
+		if got["tier.windows_t0"] != "warn" || got["tier.repo_sandbox_weakened"] != "" {
+			t.Errorf("windows: tier.windows_t0 = %q, tier.repo_sandbox_weakened = %q, want warn and absent (checks: %v)",
+				got["tier.windows_t0"], got["tier.repo_sandbox_weakened"], got)
+		}
+	} else if got["tier.repo_sandbox_weakened"] != "warn" {
 		t.Errorf("tier.repo_sandbox_weakened = %q, want warn (checks: %v)", got["tier.repo_sandbox_weakened"], got)
 	}
 	if _, ok := got["tier.level"]; !ok {

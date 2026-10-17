@@ -384,9 +384,19 @@ func TestOrgRenderBinaryUsageNamesOrgRender(t *testing.T) {
 	}
 }
 
+// orgTestBinary is an absolute, clean --binary for the host OS: org render
+// validates it with the target OS's rules (a drive-letter path on Windows).
+func orgTestBinary() string {
+	if runtime.GOOS == "windows" {
+		return `C:\Program Files\ballast\ballast.exe`
+	}
+	return "/usr/local/libexec/ballast/ballast"
+}
+
 func TestOrgRender(t *testing.T) {
 	s := newSandbox(t)
-	r := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast")
+	orgBin := orgTestBinary()
+	r := s.mustExit(0, "", "", "org", "render", "--binary", orgBin)
 	// stdout is exactly one JSON document, the managed-settings fragment, so
 	// an administrator can redirect it to a file; the org.json risk notes are
 	// on stderr, never in stdout.
@@ -397,24 +407,28 @@ func TestOrgRender(t *testing.T) {
 	if strings.Contains(r.stdout, "//") && strings.Contains(r.stdout, "org.json") {
 		t.Errorf("org render stdout carries org.json commentary:\n%s", r.stdout)
 	}
-	if !strings.Contains(r.stderr, "runner_allow_write") || !strings.Contains(r.stderr, "home_root:未设置") {
+	if runtime.GOOS != "windows" && (!strings.Contains(r.stderr, "runner_allow_write") || !strings.Contains(r.stderr, "home_root:未设置")) {
 		t.Errorf("the org.json risk notes belong on stderr:\n%s", r.stderr)
 	}
 	// --part managed-settings is the default; --part org-json prints org.json
 	// alone, also as a single JSON document.
-	if r2 := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast", "--part", "managed-settings"); r2.stdout != r.stdout {
+	if r2 := s.mustExit(0, "", "", "org", "render", "--binary", orgBin, "--part", "managed-settings"); r2.stdout != r.stdout {
 		t.Error("--part managed-settings differs from the default output")
 	}
-	ro := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast", "--part", "org-json")
-	var orgDoc map[string]any
-	if err := json.Unmarshal([]byte(ro.stdout), &orgDoc); err != nil {
-		t.Fatalf("--part org-json stdout is not a single JSON document: %v\n%s", err, ro.stdout)
-	}
-	if orgDoc["tier"] != "T1" || orgDoc["runner_sandbox"] != "require" || orgDoc["runner_network"] != "deny" {
-		t.Errorf("org.json: %v", orgDoc)
-	}
-	if _, ok := orgDoc["hooks"]; ok {
-		t.Error("--part org-json printed the managed settings")
+	if runtime.GOOS == "windows" {
+		s.mustExit(2, "", "", "org", "render", "--binary", orgBin, "--part", "org-json") // T0 only: no org.json
+	} else {
+		ro := s.mustExit(0, "", "", "org", "render", "--binary", orgBin, "--part", "org-json")
+		var orgDoc map[string]any
+		if err := json.Unmarshal([]byte(ro.stdout), &orgDoc); err != nil {
+			t.Fatalf("--part org-json stdout is not a single JSON document: %v\n%s", err, ro.stdout)
+		}
+		if orgDoc["tier"] != "T1" || orgDoc["runner_sandbox"] != "require" || orgDoc["runner_network"] != "deny" {
+			t.Errorf("org.json: %v", orgDoc)
+		}
+		if _, ok := orgDoc["hooks"]; ok {
+			t.Error("--part org-json printed the managed settings")
+		}
 	}
 	s.mustExit(2, "", "", "org", "render", "--part", "bogus")
 	if doc["allowManagedHooksOnly"] != true || dig(doc, "sandbox", "enabled") != true || dig(doc, "sandbox", "failIfUnavailable") != true {
@@ -447,7 +461,22 @@ func TestOrgRender(t *testing.T) {
 // without --write.
 func TestOrgRenderHomeRoot(t *testing.T) {
 	s := newSandbox(t)
-	r := s.mustExit(0, "", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast",
+	orgBin := orgTestBinary()
+	if runtime.GOOS == "windows" {
+		// Native Windows is T0 only and has no org.json: --part org-json is a
+		// usage error, and the flag validation still applies.
+		r := s.mustExit(2, "", "", "org", "render", "--binary", orgBin, "--home-root", "/home", "--part", "org-json")
+		if !strings.Contains(r.stderr, "T0 only") {
+			t.Errorf("stderr should say the platform is T0 only: %q", r.stderr)
+		}
+		for _, bad := range []string{"relative/dir", "/", "~/x", "/home/*"} {
+			if r := s.run("", "", "org", "render", "--binary", orgBin, "--home-root", bad); r.code != 2 {
+				t.Errorf("--home-root %q: exit %d, want 2\n%s", bad, r.code, r.stderr)
+			}
+		}
+		return
+	}
+	r := s.mustExit(0, "", "", "org", "render", "--binary", orgBin,
 		"--home-root", "/home", "--home-root", "/home/corp.example", "--protect", "/opt/secret", "--part", "org-json")
 	org := r.stdout
 	var doc struct {
@@ -469,7 +498,7 @@ func TestOrgRenderHomeRoot(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"relative/dir", "/", "~/x", "/home/*"} {
-		if r := s.run("", "", "org", "render", "--binary", "/usr/local/libexec/ballast/ballast", "--home-root", bad); r.code != 2 {
+		if r := s.run("", "", "org", "render", "--binary", orgBin, "--home-root", bad); r.code != 2 {
 			t.Errorf("--home-root %q: exit %d, want 2\n%s", bad, r.code, r.stderr)
 		}
 	}
