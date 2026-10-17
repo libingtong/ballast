@@ -437,7 +437,7 @@ func (s *Store) GCFlush(ttl time.Duration, flush EvalFlush) (GCStats, error) {
 			if flush != nil {
 				residual = s.residualEvals(claimed, repo.Name(), sess.Name())
 			}
-			if err := retryWindows(func() error { return s.opt.FS.RemoveAll(claimed) }); err != nil {
+			if err := retryWindowsIf(isTransientWindowsRemove, func() error { return s.opt.FS.RemoveAll(claimed) }); err != nil {
 				// Not reported. Put what is left back so a later run retries
 				// (and reports once, after a successful removal); when that
 				// fails too, the claim is swept and discarded by a later run.
@@ -500,11 +500,16 @@ func (s *Store) claimSession(root, sessPath string) (string, error) {
 // path (another worker claimed or removed it), is final and returned at once.
 // Elsewhere op runs exactly once.
 func retryWindows(op func() error) error {
+	return retryWindowsIf(isTransientWindows, op)
+}
+
+// retryWindowsIf is retryWindows with a caller-chosen transient predicate.
+func retryWindowsIf(transient func(error) bool, op func() error) error {
 	tries := 1
 	if runtime.GOOS == "windows" {
 		tries = 400 // ~2s at 5ms: a loaded -race runner holds handles far longer than 50 ms
 	}
-	return retryTransient(tries, 5*time.Millisecond, isTransientWindows, op)
+	return retryTransient(tries, 5*time.Millisecond, transient, op)
 }
 
 // retryTransient runs op up to tries times, sleeping delay between attempts,
