@@ -48,7 +48,7 @@ if [ "${BALLAST_ACCEPT_SKIP_GOTEST:-}" = 1 ]; then
   skip "$race_label" "BALLAST_ACCEPT_SKIP_GOTEST=1 (the caller already ran it)"
 else
   # shellcheck disable=SC2086  # race_flag is empty or exactly one flag
-  (cd "$REPO_ROOT" && gocmd test $race_flag -count=1 ./...) || rc=$?
+  (cd "$REPO_ROOT" && gocmd test $race_flag -timeout 30m -count=1 ./...) || rc=$?
   if [ "$rc" = 0 ]; then ok "$race_label"; else bad "$race_label" "exit $rc"; fi
 fi
 

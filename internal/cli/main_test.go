@@ -58,7 +58,8 @@ func runMain(m *testing.M) int {
 	// loaded machine the production wall clock is not a stable assertion.
 	// Production builds ignore every switch (faults_off_test.go; scripts/
 	// fault.sh and accept-m*.sh exercise the production binary).
-	build := exec.Command(goTool, "build", "-tags", "ballast_fault", "-o", ballastBin, "./cmd/ballast")
+	buildArgs := append([]string{"build", "-tags", strings.Join(append([]string{"ballast_fault"}, childTagNames()...), ",")}, "-o", ballastBin, "./cmd/ballast")
+	build := exec.Command(goTool, buildArgs...)
 	build.Dir = repoRoot
 	// Never reach the network (the module has no dependencies to fetch).
 	build.Env = append(filterEnv(os.Environ(), "GOPROXY"), "GOPROXY=off")
@@ -109,7 +110,10 @@ func newSandbox(t *testing.T) *sandbox {
 	// Only what child processes need to run: PATH (git, the shell) and, on
 	// Windows, the system root. Everything else of the caller's environment
 	// is dropped so no real configuration can leak in.
-	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP"} {
+	// BALLAST_TEST_WATCHDOG_MS lets CI relax the hook's 150 ms watchdog, but
+	// only in a binary built with -tags ballast_test (see childTagNames);
+	// the production build ignores it.
+	for _, k := range []string{"PATH", "SYSTEMROOT", "SystemRoot", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP", "BALLAST_TEST_WATCHDOG_MS"} {
 		if v, ok := os.LookupEnv(k); ok {
 			s.env = append(s.env, k+"="+v)
 		}

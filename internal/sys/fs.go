@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 var goos = runtime.GOOS
@@ -42,7 +43,20 @@ type FS interface {
 type OSFS struct{}
 
 // ReadFile implements FS.
-func (OSFS) ReadFile(n string) ([]byte, error) { return os.ReadFile(n) }
+//
+// On Windows a read that collides with the instant in which MoveFileEx holds
+// the target of a rename-over (a sharing violation) is retried for a few
+// milliseconds (see retry.go). A reader's open handle in turn makes such a
+// rename fail with "access denied" for as long as the file is open, which is
+// why Rename retries too.
+func (OSFS) ReadFile(n string) ([]byte, error) {
+	var data []byte
+	err := retryTransient(readRetryBudget, isTransientRead, func() (err error) {
+		data, err = os.ReadFile(n)
+		return err
+	})
+	return data, err
+}
 
 // Stat implements FS.
 func (OSFS) Stat(n string) (fs.FileInfo, error) { return os.Stat(n) }
@@ -71,8 +85,26 @@ func (OSFS) OpenFile(n string, flag int, perm fs.FileMode) (File, error) {
 // MkdirAll implements FS.
 func (OSFS) MkdirAll(n string, perm fs.FileMode) error { return os.MkdirAll(n, perm) }
 
-// Rename implements FS. On Windows os.Rename uses MoveFileEx(MOVEFILE_REPLACE_EXISTING).
-func (OSFS) Rename(o, n string) error { return os.Rename(o, n) }
+// Rename implements FS. On Windows os.Rename uses MoveFileEx(MOVEFILE_REPLACE_EXISTING),
+// which fails with "access denied" or a sharing violation while another
+// handle (a reader, another renamer) has the destination open; those are
+// retried for a bounded time (see retry.go). Other errors return at once.
+func (OSFS) Rename(o, n string) error { return OSFS{}.RenameWithin(o, n, renameRetryBudget) }
+
+// RenameBudgeter is implemented by file systems whose Rename can be given a
+// bound on the transient-collision retry (see WriteFileAtomicWithin).
+type RenameBudgeter interface {
+	RenameWithin(oldpath, newpath string, budget time.Duration) error
+}
+
+// RenameWithin is Rename with the retry bounded by budget. On Windows
+// "access denied" is retried only while the destination still exists (a reader
+// holds it open, or it is delete-pending after a rename-over); when the
+// destination is absent the denial is a real permission problem and is
+// reported at once.
+func (OSFS) RenameWithin(o, n string, budget time.Duration) error {
+	return retryTransient(budget, func(err error) bool { return isTransientRename(n, err) }, func() error { return os.Rename(o, n) })
+}
 
 // Remove implements FS.
 func (OSFS) Remove(n string) error { return os.Remove(n) }
@@ -117,6 +149,17 @@ func (f FaultFS) OpenFile(n string, flag int, perm fs.FileMode) (File, error) {
 func (f FaultFS) Rename(o, n string) error {
 	if f.hit("Rename", n) {
 		return f.Err
+	}
+	return f.FS.Rename(o, n)
+}
+
+// RenameWithin implements RenameBudgeter.
+func (f FaultFS) RenameWithin(o, n string, budget time.Duration) error {
+	if f.hit("Rename", n) {
+		return f.Err
+	}
+	if rb, ok := f.FS.(RenameBudgeter); ok {
+		return rb.RenameWithin(o, n, budget)
 	}
 	return f.FS.Rename(o, n)
 }

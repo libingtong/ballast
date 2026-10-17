@@ -284,7 +284,8 @@ func wireHook(env sys.Env, sm wireSeams) (*hook.Deps, error) {
 		Tier:     c.tierProbe(self),
 		IDs:      c.ids,
 		Faults:   hook.FaultsFromEnv(env.Getenv),
-		Watchdog: testWatchdog(env),
+		Watchdog: watchdogOverride(env),            // 0 (the 150 ms default) unless a test-build override is set
+		Deadline: hook.DeadlineFromEnv(env.Getenv), // 0 (the 120 ms default) unless a CI test override is set
 		Self:     self,
 		Exit:     os.Exit,
 		Version:  version.Version,
@@ -295,6 +296,17 @@ func wireHook(env sys.Env, sm wireSeams) (*hook.Deps, error) {
 		deps.WeakenedProject = tier.EffectiveWeakenedProject(c.org)
 	}
 	return deps, nil
+}
+
+// watchdogOverride is the watchdog budget a test-built binary may request:
+// the ballast_fault switch BALLAST_TEST_WATCHDOG (e2e under -race), else the
+// ballast_test switch BALLAST_TEST_WATCHDOG_MS (CI). Production builds honour
+// neither and get 0 (= the 150 ms default).
+func watchdogOverride(env sys.Env) time.Duration {
+	if d := testWatchdog(env); d > 0 {
+		return d
+	}
+	return hook.WatchdogFromEnv(env.Getenv)
 }
 
 // selfPath returns the path of the running binary for detached children

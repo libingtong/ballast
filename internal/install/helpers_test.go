@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +21,17 @@ func fakeBinary() string {
 		return `C:\opt\ballast\bin\ballast.exe`
 	}
 	return "/opt/ballast/bin/ballast"
+}
+
+// fakeBinaryIn returns an absolute binary path under dir (given in slash form,
+// e.g. "/opt/ballast-v2"): "/opt/ballast-v2/ballast" on unix and
+// `C:\opt\ballast-v2\ballast.exe` on Windows, where a leading slash alone is
+// not an absolute path.
+func fakeBinaryIn(dir string) string {
+	if runtime.GOOS == "windows" {
+		return "C:" + strings.ReplaceAll(dir, "/", `\`) + `\ballast.exe`
+	}
+	return dir + "/ballast"
 }
 
 const testMDC = "---\nalwaysApply: true\n---\n<!-- ballast-managed: do not edit; regenerate with `ballast install --client cursor` -->\nrules v1\n"

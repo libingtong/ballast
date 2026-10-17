@@ -133,7 +133,7 @@ func settingsEnv(dir string, extra map[string]string) sys.MapEnv {
 	for k, v := range extra {
 		vars[k] = v
 	}
-	return sys.MapEnv{Vars: vars}
+	return sys.MapEnv{Vars: vars, OS: "linux"} // POSIX lookup rules on every host; Windows cases set OS themselves
 }
 
 func writeFile(t testing.TB, path, content string) {
@@ -314,26 +314,26 @@ func TestLoadSettings(t *testing.T) {
 }
 
 func TestSystemConfigPaths(t *testing.T) {
-	if got := systemConfigPaths(sys.MapEnv{Vars: map[string]string{"GIT_CONFIG_NOSYSTEM": "1"}}); got != nil {
+	if got := systemConfigPaths(sys.MapEnv{OS: "linux", Vars: map[string]string{"GIT_CONFIG_NOSYSTEM": "1"}}); got != nil {
 		t.Errorf("NOSYSTEM: %v", got)
 	}
-	if got := systemConfigPaths(sys.MapEnv{Vars: map[string]string{"GIT_CONFIG_SYSTEM": "/x/y"}}); len(got) != 1 || got[0] != "/x/y" {
+	if got := systemConfigPaths(sys.MapEnv{OS: "linux", Vars: map[string]string{"GIT_CONFIG_SYSTEM": "/x/y"}}); len(got) != 1 || got[0] != "/x/y" {
 		t.Errorf("SYSTEM: %v", got)
 	}
-	if got := systemConfigPaths(sys.MapEnv{Vars: map[string]string{"GIT_CONFIG_SYSTEM": ""}}); got != nil {
+	if got := systemConfigPaths(sys.MapEnv{OS: "linux", Vars: map[string]string{"GIT_CONFIG_SYSTEM": ""}}); got != nil {
 		t.Errorf("empty SYSTEM: %v", got)
 	}
-	if got := systemConfigPaths(sys.MapEnv{}); len(got) == 0 || got[0] != "/etc/gitconfig" {
+	if got := systemConfigPaths(sys.MapEnv{OS: "linux"}); len(got) == 0 || got[0] != "/etc/gitconfig" {
 		t.Errorf("default: %v", got)
 	}
 	win := sys.MapEnv{OS: "windows", Vars: map[string]string{"ProgramFiles": `C:\Program Files`, "ProgramData": `C:\ProgramData`}}
 	if got := systemConfigPaths(win); len(got) != 2 {
 		t.Errorf("windows: %v", got)
 	}
-	if got := globalConfigPaths(sys.MapEnv{Vars: map[string]string{"GIT_CONFIG_GLOBAL": ""}}); got != nil {
+	if got := globalConfigPaths(sys.MapEnv{OS: "linux", Vars: map[string]string{"GIT_CONFIG_GLOBAL": ""}}); got != nil {
 		t.Errorf("empty GLOBAL: %v", got)
 	}
-	got := globalConfigPaths(sys.MapEnv{Vars: map[string]string{"HOME": "/h"}})
+	got := globalConfigPaths(sys.MapEnv{OS: "linux", Vars: map[string]string{"HOME": "/h"}})
 	if len(got) != 2 || got[0] != filepath.Join("/h", ".config", "git", "config") || got[1] != filepath.Join("/h", ".gitconfig") {
 		t.Errorf("default global: %v", got)
 	}

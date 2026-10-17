@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 	"unicode/utf8"
 )
 
@@ -35,6 +36,17 @@ func tempBase(base string) string {
 // (evidence, manifest, backups); state and cache files do not fsync (plan
 // v0.4 §3). The temp file is removed on any failure.
 func WriteFileAtomic(fsys FS, ids IDGen, path string, data []byte, perm fs.FileMode, doFsync bool) error {
+	return WriteFileAtomicWithin(fsys, ids, path, data, perm, doFsync, 0)
+}
+
+// WriteFileAtomicWithin is WriteFileAtomic with a bound on how long the final
+// rename may retry a transient collision (Windows only in effect, see
+// retry.go). renameBudget <= 0 means the file system's default
+// (renameRetryBudget); callers that hold a lock others wait on with a short
+// budget (the state store) pass a small one so the lock is not held for longer
+// than its waiters would wait. A file system that cannot take a budget
+// (RenameBudgeter) uses its ordinary Rename.
+func WriteFileAtomicWithin(fsys FS, ids IDGen, path string, data []byte, perm fs.FileMode, doFsync bool, renameBudget time.Duration) error {
 	if err := fsys.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -55,7 +67,11 @@ func WriteFileAtomic(fsys FS, ids IDGen, path string, data []byte, perm fs.FileM
 		err = cerr
 	}
 	if err == nil {
-		err = fsys.Rename(tmp, path)
+		if rb, ok := fsys.(RenameBudgeter); ok && renameBudget > 0 {
+			err = rb.RenameWithin(tmp, path, renameBudget)
+		} else {
+			err = fsys.Rename(tmp, path)
+		}
 	}
 	if err != nil {
 		_ = fsys.Remove(tmp)

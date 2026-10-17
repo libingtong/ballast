@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,6 +158,28 @@ func TestProcessesAgreeWhileExemptFilesChange(t *testing.T) {
 	}
 }
 
+// gitAddRetrying is `git add path`, retried on Windows. Windows cannot replace
+// a file that is open (the classic delete semantics keep the name occupied
+// until the last handle closes), so while the readers of this test have the
+// index open, git's own rename of index.lock over it fails ("Unable to write
+// new index file", exit 128) after git's internal retries. A user would just
+// run the command again; what the test asserts is what the readers see.
+func (f *fixture) gitAddRetrying(path string) {
+	if runtime.GOOS != "windows" {
+		f.git("add", path)
+		return
+	}
+	var out string
+	var err error
+	for attempt := 0; attempt < 50; attempt++ {
+		if out, err = f.gitErr(f.dir, nil, "add", path); err == nil {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	f.t.Errorf("git add %s kept failing: %v\n%s", path, err, out)
+}
+
 // TestProcessesReadIndexWhileGitRewritesIt: git replaces the index (lock +
 // rename) in a loop; readers must always see one complete index.
 func TestProcessesReadIndexWhileGitRewritesIt(t *testing.T) {
@@ -182,7 +205,7 @@ func TestProcessesReadIndexWhileGitRewritesIt(t *testing.T) {
 			default:
 			}
 			f.write("src/a.go", contents[i%2])
-			f.git("add", "src/a.go")
+			f.gitAddRetrying("src/a.go")
 		}
 	}()
 	results := runWorkers(t, f, 6, 150, "plain")

@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"math/rand"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -58,6 +59,27 @@ func randomPatterns(n int, seed int64) []string {
 	return out
 }
 
+// gitCorpus is the corpus git is asked about. On Windows git cannot track
+// names with '*' or '?', and treats a backslash in a pathspec as a directory
+// separator, so those names and patterns have no POSIX behaviour to compare
+// with and are left out there.
+func gitCorpus() []string {
+	if runtime.GOOS != "windows" {
+		return corpus
+	}
+	var out []string
+	for _, name := range corpus {
+		if !strings.ContainsAny(name, "*?") {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func windowsPathspecUnsupported(pat string) bool {
+	return runtime.GOOS == "windows" && strings.Contains(pat, `\`)
+}
+
 func matchedBy(pat string, glob bool) ([]string, bool) {
 	n, err := normalizeSpec(pat)
 	if err != nil {
@@ -65,7 +87,7 @@ func matchedBy(pat string, glob bool) ([]string, bool) {
 	}
 	pp := newPathPattern(n, glob)
 	var out []string
-	for _, name := range corpus {
+	for _, name := range gitCorpus() {
 		if pp.match(name) {
 			out = append(out, name)
 		}
@@ -137,7 +159,7 @@ func TestMatcherAgainstGit(t *testing.T) {
 	f := newFixture(t)
 	empty := strings.TrimSpace(f.git("hash-object", "-w", "-t", "blob", "--stdin"))
 	var info strings.Builder
-	for _, p := range corpus {
+	for _, p := range gitCorpus() {
 		info.WriteString("100644 " + empty + "\t" + p + "\n")
 	}
 	if out, err := f.gitStdin(f.dir, nil, info.String(), "update-index", "--add", "--index-info"); err != nil {
@@ -150,6 +172,9 @@ func TestMatcherAgainstGit(t *testing.T) {
 	}
 	var jobs []job
 	for _, p := range all {
+		if windowsPathspecUnsupported(p) {
+			continue
+		}
 		jobs = append(jobs, job{p, true}, job{p, false})
 	}
 	var mu sync.Mutex

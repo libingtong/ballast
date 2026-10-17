@@ -151,7 +151,7 @@ func TestLocateNotRepo(t *testing.T) {
 		"inside .git":  filepath.Join(f.dir, ".git", "refs"),
 		"the .git dir": filepath.Join(f.dir, ".git"),
 		"hooks subdir": filepath.Join(f.dir, ".git", "hooks"),
-		"bare filesys": string(filepath.Separator),
+		"bare filesys": filepath.VolumeName(outside) + string(filepath.Separator), // "\\" alone is not absolute on Windows
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := locate(t, cwd)

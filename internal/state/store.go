@@ -213,22 +213,37 @@ func (s *Store) lockIsCurrent(lf sys.File, lp string) bool {
 	return os.SameFile(a, b)
 }
 
+// stateWriteBudget bounds how long the state write may keep retrying a
+// transient Windows collision (see sys/retry.go) while the state lock is held.
+// Waiters give up after LockBudget (20 ms); a holder that retries for much
+// longer than that only turns every waiter into a lock timeout (a dropped
+// state delta), so the retry is kept to about the waiters' own budget. A
+// collision that outlasts it is reported like any I/O error: the delta is
+// dropped, audited, and the hook fails open.
+const stateWriteBudget = 20 * time.Millisecond
+
 // writeAtomic replaces path via a temp file and rename, without fsync. On
 // Windows the rename can fail while a lock-free reader still has the file
-// open (Go opens without FILE_SHARE_DELETE), so it is retried briefly.
+// open (Go opens without FILE_SHARE_DELETE), so it is retried briefly, within
+// stateWriteBudget overall.
 func (s *Store) writeAtomic(path string, data []byte) error {
-	tries := 1
-	if runtime.GOOS == "windows" {
-		tries = 8
+	if runtime.GOOS != "windows" {
+		return sys.WriteFileAtomic(s.opt.FS, s.opt.IDs, path, data, 0o600, false)
 	}
+	deadline := time.Now().Add(stateWriteBudget)
 	var err error
-	for i := 0; i < tries; i++ {
-		if err = sys.WriteFileAtomic(s.opt.FS, s.opt.IDs, path, data, 0o600, false); err == nil {
+	for i := 0; i < 8; i++ {
+		remaining := time.Until(deadline)
+		if remaining < time.Millisecond {
+			remaining = time.Millisecond
+		}
+		if err = sys.WriteFileAtomicWithin(s.opt.FS, s.opt.IDs, path, data, 0o600, false, remaining); err == nil {
 			return nil
 		}
-		if i+1 < tries {
-			time.Sleep(time.Millisecond)
+		if !time.Now().Before(deadline) {
+			break
 		}
+		time.Sleep(time.Millisecond)
 	}
 	return err
 }

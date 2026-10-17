@@ -84,12 +84,26 @@ type auditFile struct {
 	n     int
 }
 
+// missingDir reports whether a ReadDir error means that dir does not exist.
+// On Windows, reading a regular file as a directory also fails with a
+// "path not found" error that matches fs.ErrNotExist, so a file standing in
+// for the directory is told apart by a Stat: it stays an error everywhere.
+func missingDir(fsys sys.FS, dir string, err error) bool {
+	if !errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+	if fi, serr := fsys.Stat(dir); serr == nil && !fi.IsDir() {
+		return false
+	}
+	return true
+}
+
 // files lists the audit files of Dir in chronological order; a missing
 // directory is an empty list.
 func (r *Reader) files() ([]auditFile, error) {
 	ents, err := r.fs().ReadDir(r.Dir)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if missingDir(r.fs(), r.Dir, err) {
 			return nil, nil
 		}
 		return nil, err
@@ -378,7 +392,7 @@ func GC(fsys sys.FS, dir string, now time.Time, retention time.Duration) (remove
 	}
 	ents, rerr := fsys.ReadDir(dir)
 	if rerr != nil {
-		if errors.Is(rerr, fs.ErrNotExist) {
+		if missingDir(fsys, dir, rerr) {
 			return nil, nil
 		}
 		return nil, rerr

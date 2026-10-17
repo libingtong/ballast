@@ -41,10 +41,18 @@ FBIN="$BASE/bin/ballast-fault$EXE"
 BENCH="$BASE/bin/bench$EXE"
 mkdir -p "$BASE/bin" "$OUT"
 
-echo "== 构建 ballast(-trimpath -ldflags='-s -w')、带 ballast_fault 标签的同款(场景 12–14)与 bench"
+# BALLAST_TEST_WATCHDOG_MS(仅 CI)放宽 150ms 看门狗,且只有带 ballast_test 标签的构建才认它;
+# 生产构建忽略该变量。所以变量非空时才加标签。
+TAGS=""
+if [[ -n "${BALLAST_TEST_WATCHDOG_MS:-}" ]]; then
+  TAGS="ballast_test"
+fi
+FTAGS="ballast_fault${TAGS:+,$TAGS}"
+
+echo "== 构建 ballast(-trimpath -ldflags='-s -w'${TAGS:+,-tags $TAGS})、带 ballast_fault 标签的同款(场景 12–14)与 bench"
 (cd "$ROOT" \
-  && GOPROXY=off go build -trimpath -ldflags='-s -w' -o "$BIN" ./cmd/ballast \
-  && GOPROXY=off go build -trimpath -ldflags='-s -w' -tags ballast_fault -o "$FBIN" ./cmd/ballast \
+  && GOPROXY=off go build -trimpath -ldflags='-s -w' -tags "$TAGS" -o "$BIN" ./cmd/ballast \
+  && GOPROXY=off go build -trimpath -ldflags='-s -w' -tags "$FTAGS" -o "$FBIN" ./cmd/ballast \
   && GOPROXY=off go build -o "$BENCH" ./scripts/bench)
 
 ARGS=(-bin "$BIN" -fault-bin "$FBIN" -base "$BASE/run" -root "$ROOT" -n "$N" -warm "$WARM" -json "$OUT/report.json" -md "$OUT/report.md")

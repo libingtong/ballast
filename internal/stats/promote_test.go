@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -179,7 +180,8 @@ func TestPromoteSucceedsWithReviewAndHits(t *testing.T) {
 	if !strings.Contains(out, "\n  \"rules\": [\n    {\n      \"id\": \"read-before-edit\",\n      \"action\": \"deny\"") {
 		t.Errorf("not 2-space indented with key order kept:\n%s", out)
 	}
-	if st, _ := os.Stat(e.userFile); st.Mode().Perm() != 0o600 {
+	// Windows has no permission bits to check (os reports 0666 for any file).
+	if st, _ := os.Stat(e.userFile); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
 		t.Errorf("mode = %v", st.Mode())
 	}
 

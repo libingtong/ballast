@@ -350,10 +350,19 @@ func (fakePaths) Normalize(p, base string, ctx model.PathContext) string {
 	if p == "~" || strings.HasPrefix(p, "~/") {
 		p = ctx.Home + p[1:]
 	}
-	if !path.IsAbs(p) {
+	if isDriveAbs(p) { // a native Windows path (sandbox homes): slash form
+		p = strings.ReplaceAll(p, `\`, "/")
+	}
+	if !path.IsAbs(p) && !isDriveAbs(p) {
 		p = path.Join(base, p)
 	}
 	return path.Clean(p)
+}
+
+// isDriveAbs reports "C:\..." and "C:/...".
+func isDriveAbs(p string) bool {
+	return len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/') &&
+		(p[0] >= 'a' && p[0] <= 'z' || p[0] >= 'A' && p[0] <= 'Z')
 }
 
 func (fakePaths) Candidates(raw string, ctx model.PathContext) []string { return []string{raw} }
