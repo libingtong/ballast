@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -55,12 +56,14 @@ func runChild(idStr string) int {
 	store := New(Options{Layout: lay})
 	if mode == "gc" {
 		var keys []string
-		if _, err := store.GCFlush(0, func(k model.ScopeKey, _ map[string]model.EvalCount) {
+		st, err := store.GCFlush(0, func(k model.ScopeKey, _ map[string]model.EvalCount) {
 			keys = append(keys, k.RepoInst+"/"+k.Session+"/"+k.Agent)
-		}); err != nil {
+		})
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 2
 		}
+		fmt.Fprintf(os.Stderr, "gc stats: %+v\n", st) // shown by the parent when the totals are off
 		if err := json.NewEncoder(os.Stdout).Encode(keys); err != nil {
 			return 2
 		}
@@ -261,6 +264,7 @@ func TestMultiProcessGCFlushExactlyOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	outs := make([][]string, procs)
+	errs := make([]string, procs)
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	for p := 0; p < procs; p++ {
@@ -272,7 +276,9 @@ func TestMultiProcessGCFlushExactlyOnce(t *testing.T) {
 			var out, errb bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &out, &errb
 			<-start
-			if err := cmd.Run(); err != nil {
+			err := cmd.Run()
+			errs[p] = strings.TrimSpace(errb.String())
+			if err != nil {
 				t.Errorf("gc worker %d: %v\n%s", p, err, errb.String())
 				return
 			}
@@ -296,7 +302,14 @@ func TestMultiProcessGCFlushExactlyOnce(t *testing.T) {
 				missing = append(missing, k)
 			}
 		}
-		t.Errorf("flushed %d distinct sessions, want %d (missing %v)", len(seen), sessions, missing)
+		var left []string
+		if ents, err := os.ReadDir(filepath.Join(lay.StateDir, "repo")); err == nil {
+			for _, e := range ents {
+				left = append(left, e.Name())
+			}
+		}
+		t.Errorf("flushed %d distinct sessions, want %d (missing %v; still on disk %v; worker stderr %q)",
+			len(seen), sessions, missing, left, errs)
 	}
 	for k, n := range seen {
 		if n != 1 {

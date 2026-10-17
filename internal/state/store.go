@@ -545,7 +545,8 @@ type residualEvals struct {
 // one session directory (best effort: unreadable or corrupt files are
 // skipped, files are visited in name order).
 func (s *Store) residualEvals(sessPath, repoName, sessName string) []residualEvals {
-	ents, err := s.opt.FS.ReadDir(sessPath)
+	var ents []fs.DirEntry
+	err := retryWindows(func() (e error) { ents, e = s.opt.FS.ReadDir(sessPath); return e })
 	if err != nil {
 		return nil
 	}
@@ -555,7 +556,8 @@ func (s *Store) residualEvals(sessPath, repoName, sessName string) []residualEva
 		if e.IsDir() || !strings.HasSuffix(name, ".json") {
 			continue
 		}
-		data, err := s.opt.FS.ReadFile(filepath.Join(sessPath, name))
+		var data []byte
+		err := retryWindows(func() (e error) { data, e = s.opt.FS.ReadFile(filepath.Join(sessPath, name)); return e })
 		if err != nil {
 			continue
 		}
@@ -574,7 +576,8 @@ func (s *Store) residualEvals(sessPath, repoName, sessName string) []residualEva
 // newestMTime returns the newest modification time of the files directly
 // inside dir, or of dir itself when it contains no file.
 func (s *Store) newestMTime(dir string, self fs.DirEntry) (time.Time, error) {
-	ents, err := s.opt.FS.ReadDir(dir)
+	var ents []fs.DirEntry
+	err := retryWindows(func() (e error) { ents, e = s.opt.FS.ReadDir(dir); return e })
 	if err != nil {
 		return time.Time{}, err
 	}
