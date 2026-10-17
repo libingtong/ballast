@@ -39,7 +39,7 @@
 | `BALLAST_REQUIRE_DOCKER=1` | `sandbox-docker.sh`、`boundary-t1.sh`(与经由它们的 `accept-p2.sh`)在没有 Docker 时失败而不是 SKIP |
 | `BALLAST_ACCEPT_SKIP_GOTEST` / `_FUZZ` / `_BENCH` / `_DOCKER` | `accept-p2.sh` 把对应步骤显式 SKIP(CI 在独立步骤里跑) |
 | `BALLAST_T1_BUILD_PROXY`、`BALLAST_DEBIAN_MIRROR`、`BALLAST_T1_IMAGE` | `boundary-t1.sh` 构建镜像时的代理 / apt 镜像(只用于 `docker build`);`BALLAST_T1_IMAGE` 直接使用一个已有镜像(需要 bwrap、git、python3、jq、util-linux 和 uid 1000 的 `agent`) |
-| `BALLAST_T1_EXTERNAL_URL` | `boundary-t1.sh` 的 bridge 变体用来检查"外部地址"的 URL(默认 Debian 镜像的 `InRelease`);容器连不上外网时该项显式 SKIP |
+| `BALLAST_T1_EXTERNAL_URL` | `boundary-t1.sh` 的 bridge 变体用来检查"外部地址"的 URL(默认 Debian 镜像的 `InRelease`);容器连不上外网时只在 stderr 记一行、不计 SKIP;deny/allow 的必过断言针对容器自身的桥接地址 |
 | `BALLAST_MATRIX_ALLOW_NET=1` | `matrix.sh --mode real` 允许需要联网下载依赖的栈在本地运行 |
 
 ## 需要你在本机完成的验收
@@ -57,4 +57,4 @@
 
 性能门槛由 U12c 的 `scripts/bench`(Go 程序)负责,真实接口是 `go run ./scripts/bench -bin <二进制> -base <临时目录> -root <仓库根> [-only <场景 id 正则>] [-n N] [-warm N]`(`-bin` 与 `-base` 必填,缺一退出 2;用 `-list` 列出场景 id)。`accept-m1.sh` 与 `accept-m2.sh` 通过 `lib.sh` 的 `run_bench` 调用它:`-bin` 是脚本已构建的共用二进制,`-base` 是 `$TMP_ROOT/bench`(临时目录内,不在任何 git 仓库里),其余参数原样透传。`accept-m1.sh` 不加参数,跑全部场景;`accept-m2.sh` 传 `-only '^6[abcd]$'`,只测 `git commit` 检查场景(6a/6b 为 1k/10k 文件的 `git commit`,6c/6d 为 `git commit -a`)。没有 `scripts/bench` 目录时显式 SKIP(`CI=true` 时失败)。也可以直接用 U12c 的 `scripts/bench.sh`(用 `ONLY` 环境变量缩小范围)。
 
-**P2 的场景 12–14**(假 T1 的规范 verify、强制重定向锁、`weakened_project:"deny"`)需要一个用 `-tags ballast_fault` 构建的第二个二进制(`-fault-bin`):`BALLAST_TEST_TIER`、`BALLAST_TEST_LOCKED`、`BALLAST_TEST_WEAKENED` 这三个开关只在那样的构建里生效,生产构建完全忽略。`scripts/bench.sh` 与 `lib.sh` 的 `run_bench` 都会构建并传入它;直接 `go run ./scripts/bench` 选中这些场景而不给 `-fault-bin` 时退出 2。
+**P2 的场景 12、13a/13b、14a/14b**(假 T1 的规范 verify、强制重定向锁——13a 是真实 passwd 查询、13b 是 passwd 无条目时真实执行 home_root 规则——和 `weakened_project:"deny"`)需要一个用 `-tags ballast_fault` 构建的第二个二进制(`-fault-bin`):`BALLAST_TEST_TIER`、`BALLAST_TEST_LOCKED`、`BALLAST_TEST_WEAKENED`、`BALLAST_TEST_PASSWD` 这四个开关只在那样的构建里生效,生产构建完全忽略。`scripts/bench.sh` 与 `lib.sh` 的 `run_bench` 都会构建并传入它;直接 `go run ./scripts/bench` 选中这些场景而不给 `-fault-bin` 时退出 2。

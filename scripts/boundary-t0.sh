@@ -96,6 +96,7 @@ fi
 check_int_ge "the fixture ran at least 60 rows" "$(grep -c '^ok ' "$cases_out" || true)" 60
 check_contains "gap class 1 (language runtimes) has rows" "$(cat "$cases_out")" "gap1-"
 check_contains "gap class 7 (MCP) has rows" "$(cat "$cases_out")" "gap7-"
+check_contains "redirected client config roots have detected rows" "$(cat "$cases_out")" "redir-"
 
 # ------------------------------------------------------- forged evidence ---
 

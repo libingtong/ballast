@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/libingtong/ballast/internal/audit"
 	"github.com/libingtong/ballast/internal/config"
 	"github.com/libingtong/ballast/internal/evidence"
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/runner"
+	"github.com/libingtong/ballast/internal/state"
 	"github.com/libingtong/ballast/internal/version"
 )
 
@@ -21,6 +24,29 @@ func runVersion(a *app, c *command, args []string) int {
 	return ExitOK
 }
 
+// tryGCLock takes the non-blocking exclusive lock on gc.lock. ok is false only
+// when another gc holds it; any other failure (no writable home, ...) proceeds
+// without the lock, since the state claim in state.GCFlush keeps the counts
+// exactly-once regardless.
+func (a *app) tryGCLock() (unlock func(), ok bool) {
+	if a.lay.GCLock == "" {
+		return nil, true
+	}
+	if err := a.fs.MkdirAll(filepath.Dir(a.lay.GCLock), 0o700); err != nil {
+		return nil, true
+	}
+	f, err := a.fs.OpenFile(a.lay.GCLock, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, true
+	}
+	release, _, err := state.TryLock(f, 0, a.clock)
+	if err != nil {
+		f.Close()
+		return nil, !errors.Is(err, model.ErrLockTimeout)
+	}
+	return func() { _ = release(); f.Close() }, true
+}
+
 // runGC removes expired session state, audit files, evidence, stale rules cache files and (P2) old hook-start request files, quarantine entries and work-tree leftovers.
 // It is internal (spawned detached by SessionStart), so failures only
 // go to stderr. It never touches gc.stamp: the hook alone claims the daily slot
@@ -28,6 +54,14 @@ func runVersion(a *app, c *command, args []string) int {
 func runGC(a *app, c *command, args []string) int {
 	if len(args) > 0 {
 		return a.usageErr(c, "unexpected argument %q", args[0])
+	}
+	// One gc at a time: a manual run overlapping a hook-spawned one (or two
+	// hook-spawned ones) would otherwise scan the same expired data twice.
+	// Losing the race is not an error.
+	if unlock, ok := a.tryGCLock(); !ok {
+		return ExitOK
+	} else if unlock != nil {
+		defer unlock()
 	}
 	var errs []error
 	// Expired state may still hold eval counts that no Stop/SessionEnd ever

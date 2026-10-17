@@ -256,6 +256,45 @@ func TestHygieneOnlyMode(t *testing.T) {
 	}
 }
 
+// hermes-cases.json belongs to payloads/hermes, not payloads/m0b: its evidence
+// tree must get the same path/secret scan (it used to be skipped entirely).
+func TestHygieneOnlyScansTheEvidenceTreeOfItsCasesFile(t *testing.T) {
+	dir := t.TempDir()
+	cases := filepath.Join(dir, "hermes-cases.json")
+	if err := os.WriteFile(cases, []byte(`[]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "payloads", "m0b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	// A missing hermes tree is a problem, not a silent pass over payloads/m0b.
+	if rc := run([]string{"--hygiene-only", cases}, &out, &errb); rc != 1 || !strings.Contains(errb.String(), filepath.Join("payloads", "hermes")) {
+		t.Fatalf("missing tree: rc=%d stderr=%s", rc, errb.String())
+	}
+	hdir := filepath.Join(dir, "payloads", "hermes", "case")
+	if err := os.MkdirAll(hdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Hermes evidence is not required to be a hook payload (no hook_event_name).
+	if err := os.WriteFile(filepath.Join(hdir, "ok.json"), []byte(`{"event":"pre_tool_call"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	errb.Reset()
+	if rc := run([]string{"--hygiene-only", cases}, &out, &errb); rc != 0 {
+		t.Fatalf("clean tree: rc=%d stderr=%s", rc, errb.String())
+	}
+	leak := `{"cwd":"/Users/` + `jdoe/NewCode/repo","token":"gh` + `p_` + strings.Repeat("A1b2C3d4E5", 3) + `"}`
+	if err := os.WriteFile(filepath.Join(hdir, "leak.json"), []byte(leak), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	errb.Reset()
+	rc := run([]string{"--hygiene-only", cases}, &out, &errb)
+	if rc != 1 || !strings.Contains(errb.String(), "local absolute path") || !strings.Contains(errb.String(), "looks like a secret") {
+		t.Fatalf("leak in the hermes tree must fail: rc=%d stderr=%s", rc, errb.String())
+	}
+}
+
 // sandbox-failifunavailable is judged by managed hook events, so it must
 // degrade with nocred-events (§6.4 last paragraph).
 func TestFailIfUnavailableDependsOnEvents(t *testing.T) {

@@ -99,7 +99,7 @@ func TestScenarioTable(t *testing.T) {
 // TestP2Scenarios: the P2 scenarios exist, only the BALLAST_TEST_* ones need
 // the fault binary, and no pre-P2 scenario was switched to it.
 func TestP2Scenarios(t *testing.T) {
-	want := map[string]bool{"12": true, "13": true, "14a": true, "14b": true, "C-configchange": false}
+	want := map[string]bool{"12": true, "13a": true, "13b": true, "14a": true, "14b": true, "C-configchange": false}
 	seen := map[string]bool{}
 	for _, sc := range scenarios() {
 		needsFault, isP2 := want[sc.id]

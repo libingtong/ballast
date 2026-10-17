@@ -106,6 +106,13 @@ func lockedHome(opt HomeOptions) (home, source string, err error) {
 	}
 	ch := make(chan result, 1)
 	go func() {
+		// A panic here would not reach any caller's recover and the Go runtime
+		// would exit 2, which blocks the tool call (hook protocol: 0 or 1 only).
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- result{err: fmt.Errorf("tier: passwd lookup panicked: %v", r)}
+			}
+		}()
 		h, e := lookup(opt.Euid)
 		ch <- result{h, e}
 	}()

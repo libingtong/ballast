@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -372,9 +374,10 @@ func (s *Store) GCFlush(ttl time.Duration, flush EvalFlush) (GCStats, error) {
 		}
 		return st, err
 	}
+	s.sweepClaims(root)
 	for _, repo := range repos {
-		if !repo.IsDir() {
-			continue
+		if !repo.IsDir() || strings.HasPrefix(repo.Name(), ".") {
+			continue // repo components are sanitized and never start with a dot
 		}
 		repoPath := filepath.Join(root, repo.Name())
 		sessions, err := s.opt.FS.ReadDir(repoPath)
@@ -400,13 +403,33 @@ func (s *Store) GCFlush(ttl time.Duration, flush EvalFlush) (GCStats, error) {
 				remaining++
 				continue
 			}
-			var residual []residualEvals
-			if flush != nil {
-				residual = s.residualEvals(sessPath, repo.Name(), sess.Name())
-			}
-			if err := s.opt.FS.RemoveAll(sessPath); err != nil {
+			// Claim the session directory atomically before reading its
+			// counts: concurrent `ballast gc` processes (a hook-spawned one
+			// overlapping a manual run) all list the same expired session, and
+			// only the rename winner may flush it. Reading first and deleting
+			// afterwards would let both flush (RemoveAll of an already removed
+			// path succeeds).
+			claimed, cerr := s.claimSession(root, sessPath)
+			if cerr != nil {
+				if errors.Is(cerr, fs.ErrNotExist) {
+					continue // another process claimed (or removed) it
+				}
 				st.Errors++
 				remaining++
+				continue
+			}
+			var residual []residualEvals
+			if flush != nil {
+				residual = s.residualEvals(claimed, repo.Name(), sess.Name())
+			}
+			if err := s.opt.FS.RemoveAll(claimed); err != nil {
+				// Not reported. Put what is left back so a later run retries
+				// (and reports once, after a successful removal); when that
+				// fails too, the claim is swept and discarded by a later run.
+				st.Errors++
+				if s.opt.FS.Rename(claimed, sessPath) == nil {
+					remaining++
+				}
 				continue
 			}
 			st.RemovedSessions++
@@ -420,6 +443,53 @@ func (s *Store) GCFlush(ttl time.Duration, flush EvalFlush) (GCStats, error) {
 		}
 	}
 	return st, nil
+}
+
+// claimDirName is the directory (under the state root, outside every repo
+// directory so a second GC never lists a claimed session as a session) that
+// holds session directories a GC run has claimed and not yet deleted.
+const claimDirName = ".gc"
+
+// claimStale is the age after which a claim left behind by a crashed GC run
+// is discarded without being reported.
+const claimStale = time.Hour
+
+// claimSession atomically moves sessPath to <root>/.gc/<unix-ns>-<pid>-<id>.
+// The error wraps fs.ErrNotExist when the directory is already gone, i.e.
+// another process claimed it first.
+func (s *Store) claimSession(root, sessPath string) (string, error) {
+	dir := filepath.Join(root, claimDirName)
+	if err := s.opt.FS.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	name := fmt.Sprintf("%d-%d-%s", s.opt.Clock.Now().UnixNano(), os.Getpid(), s.opt.IDs.NewID(4))
+	dest := filepath.Join(dir, name)
+	if err := s.opt.FS.Rename(sessPath, dest); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+// sweepClaims deletes claims older than claimStale (a GC run that died
+// between claim and removal). Their counts are dropped, not reported:
+// double counting is worse than a lost residual.
+func (s *Store) sweepClaims(root string) {
+	dir := filepath.Join(root, claimDirName)
+	ents, err := s.opt.FS.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	now := s.opt.Clock.Now()
+	for _, e := range ents {
+		ns, _, ok := strings.Cut(e.Name(), "-")
+		n, perr := strconv.ParseInt(ns, 10, 64)
+		if !ok || perr != nil {
+			continue
+		}
+		if now.Sub(time.Unix(0, n)) > claimStale {
+			_ = s.opt.FS.RemoveAll(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 type residualEvals struct {

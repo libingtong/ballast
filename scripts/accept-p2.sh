@@ -19,7 +19,7 @@
 #   6. go run ./scripts/probe-m0b/check docs/facts/m0b-cases.json; the Hermes
 #      cases (docs/facts/hermes-cases.json) through the checker's hygiene scan
 #      and the adapter's evidence test (the M0b checker's case list is M0b's)
-#   7. bench: scenario 12 (a faked-T1 canonical verify), 13/14 (forced redirect
+#   7. bench: scenario 12 (a faked-T1 canonical verify), 13a/13b/14 (forced redirect
 #      lock) and the ConfigChange scenario, p95 <= 30ms, plus every earlier scenario
 #   8. hygiene of the added artifacts: no local absolute paths, uids or secrets
 #      (the CI patterns), and docs/clients.md says "触发时机未核验"
@@ -134,9 +134,9 @@ run_go "Hermes cases: every Verified row is covered by a pass case" test -count=
 # -------------------------------------------------------------------- 7. bench ---
 section "bench"
 if [ "${BALLAST_ACCEPT_SKIP_BENCH:-0}" = 1 ]; then
-  skip "bench (scenarios 12, 13, 14a/b, ConfigChange and all earlier ones)" "BALLAST_ACCEPT_SKIP_BENCH=1 (the caller runs scripts/bench.sh itself)"
+  skip "bench (scenarios 12, 13a/b, 14a/b, ConfigChange and all earlier ones)" "BALLAST_ACCEPT_SKIP_BENCH=1 (the caller runs scripts/bench.sh itself)"
 else
-  run_bench "bench: P2 scenarios 12, 13, 14a, 14b and ConfigChange (p95 <= 30ms)" -only '^(12|13|14a|14b|C-configchange)$'
+  run_bench "bench: P2 scenarios 12, 13a, 13b, 14a, 14b and ConfigChange (p95 <= 30ms)" -only '^(12|13a|13b|14a|14b|C-configchange)$'
   run_bench "bench: every earlier scenario still meets the budget with Locked in place" -only '^([1-9]|1[01]|5b|6[a-d]|8[bc]|C-.*)$'
 fi
 
@@ -153,7 +153,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   # synthetic range 00000000-0000-4000-8000-0000000000xx (shaped like an id, belongs to nobody).
   sid_hit="$(git grep --untracked -nIE '"(session_id|prompt_id)" *: *"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"|/[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\.jsonl' -- . | grep -v '00000000-0000-4000-8000-0000000000' || true)"
   check_eq "no real client session ids anywhere in the repository (session_id / prompt_id are <session-N> / <prompt-N>; only the synthetic 00000000-0000-4000-8000-0000000000xx range is exempt)" "$sid_hit" ""
-  secret_hit="$(git grep --untracked -nIE 'sk-ant-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[abprs]-[A-Za-z0-9-]{10,}' -- . ':!internal/redact' ':!internal/audit' ':!internal/report' ':!internal/hook' ':!internal/*_test.go' ':!scripts/boundary-t0.sh' ':!scripts/accept-p2.sh' ':!scripts/probe-m0b' ':!docs/facts' ':!schema/examples' || true)"
+  secret_hit="$(git grep --untracked -nIE 'sk-ant-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[abprs]-[A-Za-z0-9-]{10,}' -- . ':!internal/redact' ':!internal/audit' ':!internal/report' ':!internal/hook' ':!internal/*_test.go' ':!scripts/boundary-t0.sh' ':!scripts/accept-p2.sh' ':!scripts/probe-m0b' ':!schema/examples' || true)"
   check_eq "no credentials or secrets outside the redaction fixtures" "$secret_hit" ""
 else
   skip "git grep hygiene" "not inside a git work tree"

@@ -53,7 +53,7 @@ Ballast 把保证强度分成两级(详见 [`docs/trust-model.md`](docs/trust-mo
 
 | 级别 | 客户端 | 支持程度 |
 |---|---|---|
-| 一级 | **Claude Code** | 完整支持。有真实 payload 取证的是各事件的 payload 字段、PreToolUse 的 deny / warn 与 Stop 的 deny / warn(Claude Code 2.1.300);ask、UserPromptSubmit 的 deny 与注入、PostToolUse 的注入、SubagentStop 的 deny 按文档实现、尚未单独取证(`ballast lint` 给 `action-unverified` 警告) |
+| 一级 | **Claude Code** | 完整支持。有真实 payload 取证的是各事件的 payload 字段、PreToolUse 的 deny / warn 与 Stop 的 deny / warn(Claude Code 2.1.300);ask、UserPromptSubmit 的 deny 与注入、PostToolUse 的注入、PostToolUseFailure 的注入、SubagentStop 的 deny 与 warn 按文档实现、尚未单独取证(`ballast lint` 给 `action-unverified` 警告) |
 | 二级 | **Codex** | 注入与 PreToolUse deny;**不支持 ask**;Stop 的 block 待验证;hook 仅在交互式 TUI 触发。全部行为**未经 Ballast 自己核验** |
 | 二级 | **Cursor** | 注入、PreToolUse deny / ask;Stop 只能"续跑"(`followup_message`);另生成托管的 `ballast.mdc` 规则文件兜底。全部行为**未经 Ballast 自己核验** |
 | 三级 | **Hermes** | 尽力支持:`pre_tool_call` deny、`pre_llm_call` 注入、`pre_verify` 的 Stop deny(语义是续跑),其余只能记 `log`。**离线核验(`hermes hooks test`),触发时机未核验** |
@@ -92,7 +92,7 @@ ballast doctor                                    # 自检:层级、各客户端
 | 客户端 | 写入的文件 | 说明 |
 |---|---|---|
 | Claude Code | `~/.claude/settings.json` | 遵循 `CLAUDE_CONFIG_DIR`。每个事件一组 `{type, command, args}`,命令与参数分开写,路径含空格也不需要拼接 |
-| Codex | `~/.codex/hooks.json`、`~/.codex/config.toml` | 遵循 `CODEX_HOME`。`config.toml` 里只确保 `[features]` 下 `hooks = true`:原本没有这个键时,卸载后保留 `hooks = true`(同一个 `hooks.json` 里别的工具的 hook 可能依赖它,是唯一登记的往返残留);原本显式写着 `false` 时,安装会先向 stderr 警告再改成 `true`,卸载时恢复成 `false`。**trust 哈希默认不写**,需要时显式加 `--codex-trust`;不加则要在 Codex TUI 里用 `/hooks` 批准 |
+| Codex | `~/.codex/hooks.json`、`~/.codex/config.toml` | 遵循 `CODEX_HOME`。`config.toml` 里只确保 `[features]` 下 `hooks = true`:原本没有这个键时,卸载后保留 `hooks = true`(同一个 `hooks.json` 里别的工具的 hook 可能依赖它,是唯一登记的往返残留);原本显式写着 `false` 时,安装会先向 stderr 警告再改成 `true`,卸载时恢复成 `false`。**trust 哈希默认不写**,需要时显式加 `--codex-trust`;不加则要在 Codex TUI 里用 `/hooks` 批准。Codex 先对 `CODEX_HOME` 做规范化(解析符号链接)再计算信任 key,`--codex-trust` 因此写入解析符号链接后的 `hooks.json` 路径;`ballast doctor` 的 `codex.trust` 会提示仍用字面路径的旧条目(重新运行 `ballast install --client codex --codex-trust` 即可修复);Windows 上的规范化形式未核验 |
 | Cursor | `~/.cursor/hooks.json`、`~/.cursor/rules/ballast.mdc` | `ballast.mdc` 是整文件托管的 `alwaysApply` 规则,作为注入的可靠通道;安装后需要 Reload Window。它是安装时按当时规则生成的快照:放入或修改规则后重新运行 `ballast install --client cursor` 刷新;没有任何规则时安装会给出警告 |
 | Hermes | `~/.hermes/config.yaml` | 遵循 `HERMES_HOME`。只改顶层 `hooks:` 段,段外字节不变(0 字节文件仍是 0 字节、没有末尾换行的文件仍没有);`hooks:` 用 flow 风格或锚点时拒绝写入。启动 Hermes 时需要 `--accept-hooks` |
 
@@ -168,7 +168,7 @@ ballast verify --foreground test  # 前台同步运行,供 CI 和人工调试
 ballast verify --check          # 当前待提交内容有没有一致且通过的记录
 ```
 
-`verify` 总是后台运行。任务结束后,Ballast 会在下一次注入里附上一行结果。`evidence-before-commit` 规则据此判断"提交的内容是否真的被验证过"。完整退出码见 [`docs/architecture.md` §7](docs/architecture.md)。
+不带 `--foreground` 的 `verify` 在后台运行。任务结束后,Ballast 会在下一次注入里附上一行结果。`evidence-before-commit` 规则据此判断"提交的内容是否真的被验证过"。完整退出码见 [`docs/architecture.md` §7](docs/architecture.md)。
 
 ### 5. 编写自己的规则
 
@@ -213,7 +213,7 @@ ballast test-rules ~/.ballast/rules.json
 | `no-long-sleep` | PreToolUse | 不在前台 `sleep` 60 秒以上;等待请用后台运行或有界的短轮询 |
 | `evidence-before-commit` | PreToolUse | `git commit` 之前要有与待提交内容一致、已通过的 `ballast verify` 记录 |
 | `no-skip-verify` | PreToolUse | 不得用 `--no-verify` / `-n` 跳过 git hooks |
-| `no-tamper` | PreToolUse | 不得改写 Ballast 的规则、状态、证据(含各平台托管目录下的 org 规则目录 `ballast/`),或客户端的 hook 配置(文件工具和 shell 写入都覆盖) |
+| `no-tamper` | PreToolUse | 不得改写 Ballast 的规则、状态、证据(含各平台托管目录下的 org 规则目录 `ballast/`),或客户端的 hook 配置(文件工具和 shell 写入都覆盖,含经 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`HERMES_HOME` 重定向后的配置根,限制见"已知局限") |
 
 默认包需要你把它**复制**到自己的规则文件(`~/.ballast/rules.json` 或 `<repo>/.ballast/rules.json`)后才生效。它的 `message`、`inject` 文案是中文——这是面向中文使用者的有意取舍,只会影响 Agent 看到的提示语言,不参与匹配;如果你的团队用其他语言,直接改自己副本里的这两个字段即可(改完用 `ballast lint` 和 `ballast test-rules` 复查)。个人偏好类规则(如 `chinese_plain`)不在默认包里。
 
@@ -330,11 +330,12 @@ git 在提交阶段会把 `GIT_INDEX_FILE` 指向真正要提交的索引,`commi
 - **新鲜度只看已跟踪文件**。新建的文件要先 `git add` 再 `verify`;测试依赖未跟踪文件的情况交给 CI。
 - **shell 的读写目标只覆盖列出的常见命令**,`no-tamper` 因此只能检测、不能保证。会被识别的写入:重定向、`tee`、`cp`/`mv`/`install`/`rsync` 的目标、`sed -i`、`perl -i`/`ruby -i`、`git checkout [<rev>] -- <path>`、`git restore <path>`、`rm`、`truncate`、`dd of=`、`touch`、`ln`。**未覆盖**(尽力列举,完整清单见 [`docs/trust-model.md`](docs/trust-model.md) §2.1):语言运行时内部的写入(`python -c "open(...).write()"`、`node -e`、`php -r`、不带 `-i` 的 `perl -e`/`ruby -e`、`gawk -i inplace`、`yq -i`);先写脚本再执行或经管道交给解释器;`patch`、`git apply`、`ed`/`vim -es`、`curl -o`/`wget -O`、`tar -x`/`unzip`、`find -delete`/`-exec`、`xargs` 间接调用;`git reset --hard`、`git stash`、`git switch`/`git checkout <分支>`、`git merge`/`pull`、不带 `--` 的 `git checkout <path>`;命令词是变量或 `eval`。`find … | xargs cat` 之类的读取不计入"已读",只会让 `read-before-edit` 更严,不会更松。
 - **`git -c core.hooksPath=<路径> commit` 能绕过 git hooks**(包括 `hooks/pre-commit` 模板),默认的 `no-skip-verify` 只匹配 `--no-verify` / `-n`,不拦它:DSL 里 `flags` 与 `args_regex` 是 AND,无法在不误报提交说明的前提下并入同一条规则,理由见 [`docs/pinrule-mapping.md`](docs/pinrule-mapping.md) §2.6。`evidence-before-commit` 不受影响:提交前仍要有一致的 `ballast verify` 记录,与 hooks 是否运行无关。
+- **`no-tamper` 对重定向的客户端配置根:只认 hook 进程环境里的绝对路径值**:引擎在编译 `~/.claude/…`、`~/.codex/…`、`~/.hermes/…` 这三类路径模式时,会同时按 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`HERMES_HOME`(及其符号链接解析后的形式)展开,与字面形式并存,所以重定向后的 `settings*.json`、`hooks.json`、`config.toml`、`config.yaml` 同样受检测。覆盖不到的:变量值是相对路径(客户端相对它自己的 cwd 解析,hook 无从得知)、hook 进程环境里没有该变量而客户端加载时有、`ballast replay` 离线重放(不带这些变量)。T1 下 `CLAUDE_CONFIG_DIR` 重定向仍直接判 T0;见 [`docs/trust-model.md`](docs/trust-model.md) §2.1 与 [`docs/dsl-semantics.md`](docs/dsl-semantics.md) 的路径宏一节。
 - **`no-tamper` 不拦"搬走"**:`mv ~/.ballast/rules.json /tmp/x` 的源路径不算写入目标(只有目标算),所以不命中;这是 T0 只检测不防止的一个具体表现,见 [`docs/trust-model.md`](docs/trust-model.md)。
 - `flags` 匹配不知道哪些选项带值(`git commit -m -n` 会把 `-n` 当作标志)。
 - Codex 上字符串形式的 `apply_patch <<EOF` 仍被当作 shell 命令而不是文件编辑。
 - 磁盘写满会使强制失效;审计与 `doctor` 会告警。
-- 规则缓存(`~/.ballast/cache/rules-*.json`)由每天一次的 `ballast gc`(SessionStart 派生的后台进程)回收超过 7 天且不再被引用的文件,也可以手动删除,下次加载会自动重建。`gc.stamp` 只由 hook 在派生 gc 前更新,`ballast gc` 自己不写它。
+- 规则缓存(`~/.ballast/cache/rules-*.json`)由每天一次的 `ballast gc`(SessionStart 派生的后台进程)回收超过 7 天且不再被引用的文件,也可以手动删除,下次加载会自动重建。`gc.stamp` 只由 hook 在派生 gc 前更新,`ballast gc` 自己不写它。同时运行的多个 `ballast gc` 由 `~/.ballast/gc.lock` 串行(抢不到锁的直接退出 0),每个过期会话的残余计数只上报一次。
 
 ## 开发与测试
 

@@ -3,8 +3,13 @@ package hook
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/libingtong/ballast/internal/layout"
 	"github.com/libingtong/ballast/internal/model"
 	"github.com/libingtong/ballast/internal/sys"
 )
@@ -349,6 +354,18 @@ func (inv *invocation) pathContext(ev *model.Event, repo *model.RepoInfo) (model
 	if home, err := d.Env.HomeDir(); err == nil && home != "" {
 		pc.Home = d.Paths.Normalize(home, "", pc)
 	}
+	for _, r := range []struct {
+		env string
+		dst *string
+	}{{layout.EnvClaudeDir, &pc.ClientRoots.Claude}, {layout.EnvCodexHome, &pc.ClientRoots.Codex}, {layout.EnvHermesHome, &pc.ClientRoots.Hermes}} {
+		if v, ok := d.Env.Getenv(r.env); ok && v != "" {
+			// Only absolute values: the client resolves a relative one against
+			// its own cwd, which the hook cannot know.
+			if n := d.Paths.Normalize(v, "", pc); n != "" && (strings.HasPrefix(n, "/") || (len(n) > 2 && n[1] == ':')) {
+				*r.dst = n
+			}
+		}
+	}
 	cwd := ""
 	if ev.Cwd != "" {
 		cwd = d.Paths.Normalize(ev.Cwd, "", pc)
@@ -513,21 +530,51 @@ func (inv *invocation) post(ev *model.Event, key model.ScopeKey, ab *auditBuilde
 }
 
 // maybeSpawnGC starts a detached `ballast gc` when gc.stamp is missing or
-// older than GCInterval. The stamp is touched first so concurrent session
-// starts do not spawn a storm. A failure is reported (stage "stamp" or
-// "spawn") for the caller to audit; after a failed spawn the stamp is
-// removed again so a later SessionStart retries. The child inherits the
-// hook's environment and gets no log file (logPath ""): `ballast gc` writes
-// its own diagnostics to stderr, which the detached child discards
-// (contract v1.3, ports.Spawner).
+// older than GCInterval. The check-and-touch is serialized by an exclusive
+// claim file (gc.stamp.claim, O_EXCL): of several concurrent session starts
+// that all saw a stale stamp, only the one that created the claim re-checks
+// the stamp, touches it and spawns; the others return without spawning (a
+// plain Stat-then-touch let all of them spawn). A claim left behind by a
+// crash is removed once it is older than gcClaimStale. A failure is reported
+// (stage "stamp" or "spawn") for the caller to audit; after a failed spawn the
+// stamp is removed again so a later SessionStart retries. The child inherits
+// the hook's environment and gets no log file (logPath ""): `ballast gc`
+// writes its own diagnostics to stderr, which the detached child discards
+// (contract v1.3, ports.Spawner). `ballast gc` itself also holds gc.lock, so
+// overlapping runs are harmless.
 func (inv *invocation) maybeSpawnGC() (stage string, err error) {
 	d := inv.deps
 	if d.Spawner == nil || d.Self == "" || d.Layout.GCStamp == "" {
 		return "", nil
 	}
 	now := d.Clock.Now()
-	if fi, err := d.FS.Stat(d.Layout.GCStamp); err == nil && now.Sub(fi.ModTime()) < GCInterval {
+	fresh := func() bool {
+		fi, err := d.FS.Stat(d.Layout.GCStamp)
+		return err == nil && now.Sub(fi.ModTime()) < GCInterval
+	}
+	if fresh() {
 		return "", nil
+	}
+	claim := d.Layout.GCStamp + ".claim"
+	if err := d.FS.MkdirAll(filepath.Dir(claim), 0o700); err != nil {
+		return "stamp", err
+	}
+	f, err := d.FS.OpenFile(claim, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			// Another session start holds the claim; clear it only when it is
+			// a crash leftover, and let that holder (or the next start) spawn.
+			if fi, serr := d.FS.Stat(claim); serr == nil && now.Sub(fi.ModTime()) > gcClaimStale {
+				_ = d.FS.Remove(claim)
+			}
+			return "", nil
+		}
+		return "stamp", err
+	}
+	_ = f.Close()
+	defer func() { _ = d.FS.Remove(claim) }()
+	if fresh() {
+		return "", nil // the previous claim holder finished between our Stat and our claim
 	}
 	if err := touchFile(d, d.Layout.GCStamp); err != nil {
 		return "stamp", err
@@ -538,6 +585,10 @@ func (inv *invocation) maybeSpawnGC() (stage string, err error) {
 	}
 	return "", nil
 }
+
+// gcClaimStale is the age after which a gc.stamp.claim is treated as the
+// leftover of a crashed session start.
+const gcClaimStale = time.Minute
 
 func touchFile(d *Deps, path string) error {
 	return sys.WriteFileAtomic(d.FS, sys.RandomID{}, path, nil, 0o600, false)

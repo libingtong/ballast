@@ -6,6 +6,9 @@
   "evidence": "{{BALLAST_HOME}}/evidence/0123456789abcdef/test/20261016T000000-aaaaaa.json",
   "project": "{{REPO}}/.ballast/project.json",
   "settings": "{{CLAUDE_DIR}}/settings.json",
+ "claude_redirected": "{{TMP}}/redirected-claude-root/settings.json",
+ "codex_redirected": "{{TMP}}/redirected-codex-root/hooks.json",
+ "hermes_redirected": "{{TMP}}/redirected-hermes-root/config.yaml",
   "org": "{{ORG_MANAGED}}/ballast/rules.json"
  },
  "cases": [
@@ -1154,5 +1157,12 @@
     "org"
    ]
   }
- ]
+  ,
+  {"id": "redir-claude-write", "client": "claude-code", "tool": "Write", "input": {"file_path": "{{T}}", "content": "{}"}, "expect": "detected", "via": "Write into the settings of a CLAUDE_CONFIG_DIR that points elsewhere", "targets": ["claude_redirected"], "env": {"CLAUDE_CONFIG_DIR": "{{TMP}}/redirected-claude-root"}},
+  {"id": "redir-claude-shell", "client": "claude-code", "tool": "Bash", "input": {"command": "echo '{}' > {{T}}"}, "expect": "detected", "via": "shell redirect into the settings of a redirected CLAUDE_CONFIG_DIR", "targets": ["claude_redirected"], "env": {"CLAUDE_CONFIG_DIR": "{{TMP}}/redirected-claude-root"}},
+  {"id": "redir-codex-patch", "client": "codex", "tool": "apply_patch", "input": {"input": "*** Begin Patch\n*** Update File: {{T}}\n@@\n-x\n+y\n*** End Patch\n"}, "expect": "detected", "via": "patch of the hooks.json of a CODEX_HOME that points elsewhere", "targets": ["codex_redirected"], "env": {"CODEX_HOME": "{{TMP}}/redirected-codex-root"}},
+  {"id": "redir-codex-config-shell", "client": "codex", "tool": "Bash", "input": {"command": "echo 'x' >> {{TMP}}/redirected-codex-root/config.toml"}, "expect": "detected", "via": "shell append to the config.toml of a redirected CODEX_HOME", "targets": ["codex_redirected"], "env": {"CODEX_HOME": "{{TMP}}/redirected-codex-root"}},
+  {"id": "redir-hermes-write", "client": "hermes", "tool": "write_file", "input": {"path": "{{T}}", "content": "x"}, "expect": "detected", "via": "write_file into the config.yaml of a HERMES_HOME that points elsewhere", "targets": ["hermes_redirected"], "env": {"HERMES_HOME": "{{TMP}}/redirected-hermes-root"}},
+  {"id": "redir-claude-sibling-is-not-config", "client": "claude-code", "tool": "Write", "input": {"file_path": "{{TMP}}/redirected-claude-root/notes.txt", "content": "x"}, "expect": "gap", "via": "an unrelated file under the redirected root is not a hook configuration (control: the expansion is not a blanket match)", "targets": ["claude_redirected"], "env": {"CLAUDE_CONFIG_DIR": "{{TMP}}/redirected-claude-root"}}
+]
 }

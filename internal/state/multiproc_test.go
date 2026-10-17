@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/libingtong/ballast/internal/layout"
 	"github.com/libingtong/ballast/internal/model"
@@ -51,6 +53,19 @@ func runChild(idStr string) int {
 		return 2
 	}
 	store := New(Options{Layout: lay})
+	if mode == "gc" {
+		var keys []string
+		if _, err := store.GCFlush(0, func(k model.ScopeKey, _ map[string]model.EvalCount) {
+			keys = append(keys, k.RepoInst+"/"+k.Session+"/"+k.Agent)
+		}); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+		if err := json.NewEncoder(os.Stdout).Encode(keys); err != nil {
+			return 2
+		}
+		return 0
+	}
 	res := childResult{ID: id}
 	for i := 0; i < n; i++ {
 		d := model.StateDelta{
@@ -207,5 +222,82 @@ func TestMultiProcessDuplicateDelivery(t *testing.T) {
 	// An event whose every delivery timed out is simply missing; all others once.
 	if int(rec.Seq) != len(appliedPer) || rec.Tools != len(appliedPer) {
 		t.Errorf("event_seq=%d tools=%d, distinct applied events=%d", rec.Seq, rec.Tools, len(appliedPer))
+	}
+}
+
+// TestMultiProcessGCFlushExactlyOnce: several `ballast gc`-like processes
+// expire the same sessions at once; every session's residual counts must be
+// reported by exactly one of them (audit finding: overlapping gc runs used to
+// duplicate eval_summary(cause=gc) and inflate the stats denominators).
+func TestMultiProcessGCFlushExactlyOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("multi-process test")
+	}
+	const sessions, procs = 40, 4
+	sb := testenv.New(t)
+	lay := layout.Layout{}
+	{
+		t.Setenv(layout.EnvHome, sb.BallastHome)
+		t.Setenv("HOME", sb.Home)
+		t.Setenv("USERPROFILE", sb.Home)
+		var err error
+		if lay, err = layout.Resolve(sys.OSEnv{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store := New(Options{Layout: lay})
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	for i := 0; i < sessions; i++ {
+		k := model.ScopeKey{RepoInst: "repo", Session: fmt.Sprintf("s%d", i), Agent: "main"}
+		mustCommit(t, store, k, model.StateDelta{ToolCall: true, Evals: map[string]model.EvalCount{"r": {Evals: 1}}})
+		for _, p := range []string{store.Path(k), store.Path(k) + ".lock"} {
+			if err := os.Chtimes(p, old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outs := make([][]string, procs)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for p := 0; p < procs; p++ {
+		wg.Add(1)
+		go func(p int) {
+			defer wg.Done()
+			cmd := exec.Command(exe)
+			cmd.Env = append(os.Environ(), childEnv+"="+strconv.Itoa(p), modeEnv+"=gc")
+			var out, errb bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &out, &errb
+			<-start
+			if err := cmd.Run(); err != nil {
+				t.Errorf("gc worker %d: %v\n%s", p, err, errb.String())
+				return
+			}
+			if err := json.Unmarshal(out.Bytes(), &outs[p]); err != nil {
+				t.Errorf("gc worker %d output %q: %v", p, out.String(), err)
+			}
+		}(p)
+	}
+	close(start)
+	wg.Wait()
+	seen := map[string]int{}
+	for _, o := range outs {
+		for _, k := range o {
+			seen[k]++
+		}
+	}
+	if len(seen) != sessions {
+		t.Errorf("flushed %d distinct sessions, want %d", len(seen), sessions)
+	}
+	for k, n := range seen {
+		if n != 1 {
+			t.Errorf("%s flushed %d times", k, n)
+		}
+	}
+	if ents, _ := os.ReadDir(filepath.Join(lay.StateDir, claimDirName)); len(ents) != 0 {
+		t.Errorf("%d claims left behind", len(ents))
 	}
 }

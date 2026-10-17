@@ -35,6 +35,17 @@ type PathContext struct {
 	ProjectRoot string // normalized git toplevel, or Cwd when not in a repo
 	Home        string // normalized home directory
 	GOOS        string // "windows" ⇒ case-insensitive; "darwin" ⇒ case-insensitive; others sensitive
+	// ClientRoots are the client configuration roots redirected by
+	// CLAUDE_CONFIG_DIR / CODEX_HOME / HERMES_HOME (normalized, absolute; ""
+	// when the variable is unset, relative or empty). CompileGlobs expands the
+	// literal "~/.claude/", "~/.codex/" and "~/.hermes/" prefixes against them
+	// too (docs/dsl-semantics.md, path macros).
+	ClientRoots ClientRoots
+}
+
+// ClientRoots holds the redirected client configuration roots.
+type ClientRoots struct {
+	Claude, Codex, Hermes string
 }
 
 // EvalInput is everything the evaluator may look at for one event. The hook

@@ -37,6 +37,9 @@ type caseRow struct {
 	Targets []string       `json:"targets"`
 	Expect  string         `json:"expect"`
 	Via     string         `json:"via"`
+	// Env overrides environment variables of the hook process for this row
+	// (placeholders allowed); used to redirect the client config roots.
+	Env map[string]string `json:"env,omitempty"`
 	// Class is the trust-model §2.1 "未覆盖的写法" class (1-7) of a gap row.
 	Class int `json:"class,omitempty"`
 }
@@ -278,6 +281,9 @@ func (d *driver) run(c caseRow) {
 		cmd := exec.Command(d.bin, "hook", "--client", c.Client, "--event", event)
 		cmd.Dir = d.repo
 		cmd.Env = os.Environ()
+		for k, v := range c.Env {
+			cmd.Env = append(cmd.Env, k+"="+d.sub(v, target))
+		}
 		cmd.Stdin = bytes.NewReader(stdin)
 		var so, se bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &so, &se

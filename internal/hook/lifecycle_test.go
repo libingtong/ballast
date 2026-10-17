@@ -240,6 +240,39 @@ func TestGCSpawn(t *testing.T) {
 			t.Errorf("spawned = %v", h.spawner.spawned())
 		}
 	})
+	t.Run("a held claim serializes concurrent session starts", func(t *testing.T) {
+		h := newHarness(t)
+		h.clock.Set(time.Now())
+		setStamp(t, h, 25*time.Hour)
+		claim := stamp(h) + ".claim"
+		if err := os.WriteFile(claim, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		mustExit0(t, h, h.claude("SessionStart", start))
+		if len(h.spawner.spawned()) != 0 {
+			t.Errorf("spawned despite a held claim: %v", h.spawner.spawned())
+		}
+		if _, err := os.Stat(claim); err != nil {
+			t.Errorf("a fresh claim of another process was removed: %v", err)
+		}
+		// A crash leftover is cleared; the start after it spawns once.
+		old := h.clock.Now().Add(-2 * gcClaimStale)
+		if err := os.Chtimes(claim, old, old); err != nil {
+			t.Fatal(err)
+		}
+		mustExit0(t, h, h.claude("SessionStart", start))
+		if _, err := os.Stat(claim); !os.IsNotExist(err) {
+			t.Errorf("stale claim kept: %v", err)
+		}
+		mustExit0(t, h, h.claude("SessionStart", start))
+		mustExit0(t, h, h.claude("SessionStart", start))
+		if len(h.spawner.spawned()) != 1 {
+			t.Errorf("spawned = %v, want exactly one", h.spawner.spawned())
+		}
+		if _, err := os.Stat(claim); !os.IsNotExist(err) {
+			t.Errorf("claim not released after the spawn: %v", err)
+		}
+	})
 	t.Run("fresh stamp", func(t *testing.T) {
 		h := newHarness(t)
 		setStamp(t, h, 23*time.Hour)

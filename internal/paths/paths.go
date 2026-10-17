@@ -833,10 +833,62 @@ func (s *Service) CompileGlobs(patterns []string, ctx model.PathContext) (ports.
 			}
 		}
 	}
+	list = s.expandClientRoots(list, home, ctx)
 	g, err := CompileGlobs(list, opt)
 	if err != nil {
 		return nil, err // never return a typed-nil *GlobSet inside the interface
 	}
 	g.patterns = append([]string(nil), patterns...)
 	return g, nil
+}
+
+// clientRootMacros pairs the literal home-relative client config directories
+// with the redirected root the client really loads (CLAUDE_CONFIG_DIR,
+// CODEX_HOME, HERMES_HOME).
+func clientRootMacros(r model.ClientRoots) [3]struct{ prefix, root string } {
+	return [3]struct{ prefix, root string }{
+		{"~/.claude", r.Claude}, {"~/.codex", r.Codex}, {"~/.hermes", r.Hermes},
+	}
+}
+
+// expandClientRoots appends, for every "~/.claude…", "~/.codex…" or
+// "~/.hermes…" pattern, the same pattern rooted at the redirected client config
+// root (and at its symlink-resolved form), so the literal and the redirected
+// location are both protected. A root equal to the default adds nothing.
+func (s *Service) expandClientRoots(list []string, home string, ctx model.PathContext) []string {
+	out := list
+	for _, m := range clientRootMacros(ctx.ClientRoots) {
+		if m.root == "" {
+			continue
+		}
+		root := normalize(m.root, "", "", ctx.GOOS)
+		if !isAbs(root, ctx.GOOS == "windows") {
+			continue
+		}
+		roots := []string{root}
+		if s.FS != nil {
+			if rr, ok := s.realRoot(root, ctx.GOOS); ok && rr != root {
+				roots = append(roots, rr)
+			}
+		}
+		for _, p := range list {
+			neg := strings.HasPrefix(p, "!")
+			body := strings.TrimPrefix(p, "!")
+			if body != m.prefix && !strings.HasPrefix(body, m.prefix+"/") && !strings.HasPrefix(body, m.prefix+"*") {
+				continue
+			}
+			rest := body[len(m.prefix):]
+			for _, r := range roots {
+				if home != "" && strings.TrimSuffix(r, "/") == strings.TrimSuffix(home, "/")+m.prefix[1:] {
+					continue
+				}
+				alt := escapeGlob(strings.TrimSuffix(r, "/")) + rest
+				if neg {
+					alt = "!" + alt
+				}
+				out = append(out, alt)
+			}
+		}
+	}
+	return out
 }

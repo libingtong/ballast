@@ -709,6 +709,106 @@ func TestGCFlushResidualEvals(t *testing.T) {
 	}
 }
 
+// TestGCFlushConcurrentGoroutines: GCFlush callers racing on the same expired
+// sessions report each of them exactly once.
+func TestGCFlushConcurrentGoroutines(t *testing.T) {
+	e := newEnv(t)
+	now := e.clk.Now()
+	const sessions, workers = 30, 6
+	for i := 0; i < sessions; i++ {
+		k := model.ScopeKey{RepoInst: "repoA", Session: fmt.Sprintf("s%d", i), Agent: "main"}
+		mustCommit(t, e.store, k, model.StateDelta{ToolCall: true, Evals: map[string]model.EvalCount{"r": {Evals: 1}}})
+		setAge(t, e.store.Path(k), now, 10*24*time.Hour)
+		setAge(t, e.store.Path(k)+".lock", now, 10*24*time.Hour)
+	}
+	var mu sync.Mutex
+	seen := map[string]int{}
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := e.store.GCFlush(TTL, func(k model.ScopeKey, _ map[string]model.EvalCount) {
+				mu.Lock()
+				seen[k.Session]++
+				mu.Unlock()
+			}); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if len(seen) != sessions {
+		t.Fatalf("flushed %d sessions, want %d", len(seen), sessions)
+	}
+	for s, n := range seen {
+		if n != 1 {
+			t.Errorf("%s flushed %d times", s, n)
+		}
+	}
+}
+
+type removeAllFails struct {
+	sys.FS
+	err error
+}
+
+func (r removeAllFails) RemoveAll(string) error { return r.err }
+
+// TestGCFlushFailedRemovalIsRetriedNotDoubled: a removal failure reports
+// nothing and leaves the session for the next run, which reports it once.
+func TestGCFlushFailedRemovalIsRetriedNotDoubled(t *testing.T) {
+	e := newEnv(t)
+	now := e.clk.Now()
+	k := model.ScopeKey{RepoInst: "repoA", Session: "stale", Agent: "main"}
+	mustCommit(t, e.store, k, model.StateDelta{ToolCall: true, Evals: map[string]model.EvalCount{"r": {Evals: 3}}})
+	setAge(t, e.store.Path(k), now, 10*24*time.Hour)
+	setAge(t, e.store.Path(k)+".lock", now, 10*24*time.Hour)
+
+	boom := errors.New("boom")
+	failing := New(Options{Layout: e.lay, Clock: e.clk, IDs: &sys.SeqID{}, FS: removeAllFails{FS: sys.OSFS{}, err: boom}})
+	n := 0
+	st, _ := failing.GCFlush(TTL, func(model.ScopeKey, map[string]model.EvalCount) { n++ })
+	if n != 0 || st.Errors != 1 || st.RemovedSessions != 0 {
+		t.Fatalf("failed run: n=%d stats=%+v", n, st)
+	}
+	st, _ = e.store.GCFlush(TTL, func(model.ScopeKey, map[string]model.EvalCount) { n++ })
+	if n != 1 || st.RemovedSessions != 1 {
+		t.Fatalf("retry: n=%d stats=%+v", n, st)
+	}
+	st, _ = e.store.GCFlush(TTL, func(model.ScopeKey, map[string]model.EvalCount) { n++ })
+	if n != 1 || st.RemovedSessions != 0 {
+		t.Fatalf("third run: n=%d stats=%+v", n, st)
+	}
+}
+
+// TestGCFlushSweepsStaleClaims: a claim left by a crashed run is discarded
+// without being reported once it is older than claimStale.
+func TestGCFlushSweepsStaleClaims(t *testing.T) {
+	e := newEnv(t)
+	claims := filepath.Join(e.lay.StateDir, claimDirName)
+	stale := filepath.Join(claims, fmt.Sprintf("%d-1-aa", e.clk.Now().Add(-2*claimStale).UnixNano()))
+	fresh := filepath.Join(claims, fmt.Sprintf("%d-1-bb", e.clk.Now().UnixNano()))
+	for _, d := range []string{stale, fresh} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n := 0
+	if _, err := e.store.GCFlush(TTL, func(model.ScopeKey, map[string]model.EvalCount) { n++ }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("stale claim kept: %v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("fresh claim removed: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("claims were reported: %d", n)
+	}
+}
+
 func setAge(t *testing.T, path string, now time.Time, age time.Duration) {
 	t.Helper()
 	ts := now.Add(-age)

@@ -333,7 +333,7 @@ var ErrLockedHomeTimeout = errors.New("tier: locked home lookup timed out")
 // Cost: one passwd lookup, plus (rule 3 only) ≤ depth+1 Lstat calls.
 // BenchmarkLockedHome covers both paths with the real sys.LookupHome for
 // the current user (results discarded); the cold per-process cost is
-// covered by bench scenario 13 (§3.6).
+// covered by bench scenarios 13a/13b (§3.6).
 func LockedHome(opt HomeOptions) (home, source string, err error) {
 	return lockedHome(opt)
 }

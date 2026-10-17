@@ -2,6 +2,7 @@ package install
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -176,6 +177,18 @@ func parseTrustFlagKey(key string) (string, bool) {
 	return key[len(trustKeyPrefix)+1 : len(key)-1], true
 }
 
+// trustKeyPath is the hooks.json path of a trust key "<path>:<event>:<g>:<h>".
+func trustKeyPath(k string) string {
+	for i := 0; i < 3; i++ {
+		j := strings.LastIndexByte(k, ':')
+		if j < 0 {
+			return k
+		}
+		k = k[:j]
+	}
+	return k
+}
+
 func trustTablePath(k string) []string { return []string{"hooks", "state", k} }
 
 // trustConflict reports layouts in which appending a [hooks.state.'k'] header
@@ -321,7 +334,14 @@ func (t *codexConfigTarget) desiredTrust(spec EntrySpec, goos string, peer *Plan
 		if !present {
 			continue
 		}
-		k := fmt.Sprintf("%s:%s:%d:%d", t.hooks.path, snakeEvent(e.Native), g, h)
+		// Codex canonicalizes CODEX_HOME before it computes the key, so the key
+		// carries the symlink-free directory; the manifest entry keeps the
+		// literal hooks.json path.
+		keyPath := t.hooks.path
+		if spec.CodexHomeReal != "" {
+			keyPath = filepath.Join(spec.CodexHomeReal, filepath.Base(t.hooks.path))
+		}
+		k := fmt.Sprintf("%s:%s:%d:%d", keyPath, snakeEvent(e.Native), g, h)
 		out[k] = CodexTrustHash(snakeEvent(e.Native), e.Command, codexHookTimeout)
 	}
 	return out

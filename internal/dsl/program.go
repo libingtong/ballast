@@ -75,7 +75,7 @@ func newPathProg(list []string) *pathProg {
 }
 
 func (p *pathProg) matcher(ps ports.PathService, ctx model.PathContext) (ports.GlobMatcher, error) {
-	key := ctx.Home + "\x00" + ctx.GOOS
+	key := ctx.Home + "\x00" + ctx.GOOS + "\x00" + ctx.ClientRoots.Claude + "\x00" + ctx.ClientRoots.Codex + "\x00" + ctx.ClientRoots.Hermes
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if ent, ok := p.cache[key]; ok {

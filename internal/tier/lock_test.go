@@ -256,6 +256,18 @@ func TestLockedHomeTimeoutIsTight(t *testing.T) {
 	}
 }
 
+// A panicking lookup runs in its own goroutine, out of reach of every caller's
+// recover; it must come back as an error, not crash the process with exit 2.
+func TestLockedHomeLookupPanicIsAnError(t *testing.T) {
+	_, _, err := LockedHome(HomeOptions{
+		FS: newMemFS(), Env: sys.MapEnv{}, Owner: memOwner, Euid: 1,
+		Lookup: func(int) (string, error) { panic("nss exploded") },
+	})
+	if err == nil || !strings.Contains(err.Error(), "panicked") {
+		t.Fatalf("err = %v, want a panicked error", err)
+	}
+}
+
 func TestLockedHomeTimeoutSkipsHomeRootRule(t *testing.T) {
 	// A slow directory is not "no entry": the home_root rule must not be tried
 	// (the FS must see no I/O at all).

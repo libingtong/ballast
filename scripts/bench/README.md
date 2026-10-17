@@ -28,7 +28,7 @@ go run ./scripts/bench -list             # 列出场景 id
 
 ## 隔离
 
-场景 12–14 用 `-tags ballast_fault` 构建的第二个二进制(`-fault-bin`,`scripts/bench.sh` 自动构建):`BALLAST_TEST_TIER=T1`(探针报告健康的 T1)、`BALLAST_TEST_LOCKED=1`(强制已锁定)、`BALLAST_TEST_WEAKENED=audit|deny` 三个开关只在那样的构建里生效,生产构建完全忽略;其余场景用生产二进制。
+场景 12–14 用 `-tags ballast_fault` 构建的第二个二进制(`-fault-bin`,`scripts/bench.sh` 自动构建):`BALLAST_TEST_TIER=T1`(探针报告健康的 T1)、`BALLAST_TEST_LOCKED=1`(强制已锁定)、`BALLAST_TEST_WEAKENED=audit|deny`、`BALLAST_TEST_PASSWD=missing`(passwd 无条目,让场景 13b 里的 home_root 规则真实执行)四个开关只在那样的构建里生效,生产构建完全忽略;其余场景用生产二进制。
 
 每个场景有独立的 `BALLAST_HOME`(含 12 条规则的用户层 `rules.json`、新鲜的 `gc.stamp`);子进程环境从零构造,
 只继承 PATH(Windows 另加系统变量),`HOME`、`BALLAST_HOME`、`BALLAST_INSTALL_ROOT`、`BALLAST_MANAGED_DIR`、

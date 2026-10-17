@@ -87,7 +87,7 @@
 | `sandbox.network.allowedDomains:["example.com"]` | **生效**(沙箱代理对该域名不再返回 403) | 无效果 | 无效果 |
 | `permissions.additionalDirectories:["<home>"]` | **生效**(Write 工具可写会话目录外) | 无效果 | **生效** |
 | `sandbox.excludedCommands:["npm"]` | 无效果(裸名 `npm` 只匹配精确命令 `npm`,不匹配 `npm run x`) | 无效果 | 无效果 |
-| `sandbox.excludedCommands:["npm:*"]` | **命令未执行(被拒)**:T1 的 `allowUnsandboxedCommands:false` 下,被排除的命令既不在沙箱内也不在沙箱外运行 | 无效果(仍在沙箱内) | 无效果 |
+| `sandbox.excludedCommands:["npm:*"]` | **命令未执行(被拒)**;托管层 `allowUnsandboxedCommands:true` 的对照(用户层与项目层的 `npm:*`)同样是命令未执行(被拒),所以被拒的原因没有区分(payload 里的 `npm_protected`/`npm_outside` 都是 `?`),不据此归因于 `allowUnsandboxedCommands:false` | 无效果(仍在沙箱内) | 无效果 |
 | `sandbox.network.allowUnixSockets:["/var/run/docker.sock"]` | 无效果(该路径经 `/var/run` → `/run` 符号链接,是否因此未生效没有区分) | 无效果 | 无效果 |
 | `sandbox.enableWeakerNestedSandbox:true` | **未观测**:本容器里沙箱内可见的 `/proc` 进程数不随该键变化,指示器没有区分度 | 未观测 | 未观测 |
 

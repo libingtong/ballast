@@ -284,6 +284,22 @@ func TestWireHookPasswdBlocks(t *testing.T) {
 	}
 }
 
+// TestRunHookWirePanicExitsOne: a panic while wiring (before hook.Main's own
+// recover and watchdog) must not reach the Go runtime, which would exit 2 and
+// block the tool call; the hook protocol allows only 0 and 1.
+func TestRunHookWirePanicExitsOne(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runHookWith([]string{"--client", "claude-code", "--event", "PreToolUse"},
+		strings.NewReader(`{"session_id":"s","hook_event_name":"PreToolUse"}`), &stdout, &stderr,
+		func(sys.Env) (*hook.Deps, error) { panic("wiring blew up") })
+	if code != ExitHookError || stdout.Len() != 0 {
+		t.Fatalf("exit %d stdout %q, want exit 1 and empty stdout", code, stdout.String())
+	}
+	if !strings.HasPrefix(stderr.String(), "ballast: hook: panic: wiring blew up") {
+		t.Errorf("stderr = %q", stderr.String())
+	}
+}
+
 // TestLockedHomeRootRule: the home_root rule is wired from org.json.
 func TestLockedHomeRootRule(t *testing.T) {
 	m := lockedFS(`{"v":1,"tier":"T1","home_root":["/home"]}`)

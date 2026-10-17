@@ -24,6 +24,12 @@ type EntrySpec struct {
 	GOOS       string              // quoting rules for single-string commands
 	MDC        []byte              // Cursor: rendered ballast.mdc (inject.RenderMDC)
 	CodexTrust bool                // --codex-trust: also write trust entries
+	// CodexHomeReal is CODEX_HOME with every symbolic link resolved. Codex
+	// canonicalizes CODEX_HOME before it builds the hooks.state trust keys
+	// (docs/facts/codex-static.md §1 row 6), so the keys written by
+	// --codex-trust must use this form; "" (unresolvable, or not Codex) means
+	// the literal path. Plan stays pure: the caller resolves it.
+	CodexHomeReal string
 }
 
 // PlanResult is the pure outcome of planning one target.

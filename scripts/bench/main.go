@@ -19,8 +19,9 @@
 // missing. The exit code is 0 only then (1 gate failed, 2 usage/setup error).
 //
 // P2 scenarios (docs/p2-design.md §3.6, §5.1): 12 (a canonical `ballast verify`
-// denied under a faked T1), 13 (forced redirect lock with the real passwd
-// lookup), 14a/14b (forced lock, weakened_project:"deny", project directory
+// denied under a faked T1), 13a (forced redirect lock with the real passwd
+// lookup), 13b (the same with a passwd "no entry", so the org.json home_root
+// rule runs), 14a/14b (forced lock, weakened_project:"deny", project directory
 // without / with a clean .claude/settings.json) and C-configchange (the
 // ConfigChange audit). 12–14 need a binary built with `-tags ballast_fault`
 // (-fault-bin): the BALLAST_TEST_* switches exist only there, production
@@ -382,10 +383,21 @@ func scenarios() []scenario {
 			payload: func(rc *runCtx, it, proc int) []byte {
 				return claudeBash(rc.work, "bench-sess", uid("t1verify", it, proc), "ballast verify test")
 			}, post: hookStartCheck},
-		{id: "13", name: "强制已锁定(真实 passwd 查询与 home_root 判定,结果丢弃)", group: "p2", client: "claude-code", event: "PreToolUse",
+		{id: "13a", name: "强制已锁定(真实 passwd 查询,结果丢弃)", group: "p2", client: "claude-code", event: "PreToolUse",
 			expect: "empty", preTool: true, fault: true,
 			env:     []string{"BALLAST_TEST_LOCKED=1", "BALLAST_TEST_WEAKENED=audit"},
 			payload: bashShort("locked"), post: lockedCheck(false)},
+		// 13b: the passwd lookup answers "no entry" (sssd/LDAP), so the
+		// org.json home_root rule runs in the cold process: Lstat chain and
+		// ownership/permission checks on the real directories, outcome
+		// discarded (the walk ends at the first symlink or group/other-writable
+		// component of the scratch path, as in any real deployment it would at
+		// the first untrusted one). internal/cli's TestFaultBuildForcedHomeRoot
+		// pins that the rule really executes.
+		{id: "13b", name: "强制已锁定 + passwd 无条目(home_root 规则真实执行,结果丢弃)", group: "p2", client: "claude-code", event: "PreToolUse",
+			expect: "empty", preTool: true, fault: true,
+			env:     []string{"BALLAST_TEST_LOCKED=1", "BALLAST_TEST_WEAKENED=audit", "BALLAST_TEST_PASSWD=missing"},
+			payload: bashShort("lockedhomeroot"), post: lockedCheck(false)},
 		{id: "14a", name: "已锁定 + weakened_project:deny,项目目录无 .claude", group: "p2", client: "claude-code", event: "PreToolUse",
 			expect: "empty", preTool: true, fault: true, workSub: "work14a",
 			env:     []string{"BALLAST_TEST_LOCKED=1", "BALLAST_TEST_WEAKENED=deny"},
@@ -541,7 +553,7 @@ func hookStartCheck(rc *runCtx, runs int) ([]string, []string) {
 	return notes, problems
 }
 
-// lockedCheck (scenarios 13/14): the forced lock must really have been
+// lockedCheck (scenarios 13a/13b/14): the forced lock must really have been
 // active - the session's first event audits env_redirect_ignored (the
 // bench sets all three redirection variables) - and, for the deny policy,
 // a clean or absent project layer must never produce lower_sandbox_deny.
@@ -1295,7 +1307,7 @@ func coverage(all []scenario, got []result, partial bool) []string {
 			}
 		}
 		// P2 (docs/p2-design.md §3.6, §5.1).
-		for _, id := range []string{"12", "13", "14a", "14b", "C-configchange"} {
+		for _, id := range []string{"12", "13a", "13b", "14a", "14b", "C-configchange"} {
 			if !have[id] {
 				problems = append(problems, "缺少 P2 场景 "+id)
 			}

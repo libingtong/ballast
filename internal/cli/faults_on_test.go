@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libingtong/ballast/internal/hook"
 	"github.com/libingtong/ballast/internal/model"
 )
 
-// TestFaultBuildForcedLock (bench scenarios 13/14): BALLAST_TEST_LOCKED=1
+// TestFaultBuildForcedLock (bench scenarios 13a/14): BALLAST_TEST_LOCKED=1
 // forces the locked wiring, performs the real passwd lookup and home_root
 // judgement (here: a counting fake, whose failure is discarded), and keeps the
 // redirected layout so a real ~/.ballast is never touched.
@@ -69,5 +70,41 @@ func TestFaultBuildWatchdogOverride(t *testing.T) {
 		if deps.Watchdog != want {
 			t.Errorf("BALLAST_TEST_WATCHDOG=%q: Watchdog = %v, want %v", v, deps.Watchdog, want)
 		}
+	}
+}
+
+// TestFaultBuildForcedHomeRoot (bench scenario 13b): with
+// BALLAST_TEST_PASSWD=missing the forced lock's passwd lookup answers "no
+// entry", so the org.json home_root rule really runs (its last step Lstats
+// $HOME); without the switch (13a) the passwd answer ends it before any
+// file-system access. The outcome is discarded either way and the redirected
+// layout is kept.
+func TestFaultBuildForcedHomeRoot(t *testing.T) {
+	run := func(passwd string) (homeStats int64, deps *hook.Deps) {
+		m := lockedFS("")
+		m.mkdirAll("/home", 0, 0o755)
+		m.mkdirAll("/home/agent", 1000, 0o755)
+		var n atomic.Int64
+		m.hook = func(op, name string) {
+			if op == "Lstat" && name == "/home/agent" {
+				n.Add(1)
+			}
+		}
+		vars := map[string]string{"BALLAST_TEST_LOCKED": "1", "BALLAST_HOME": "/redirected/home"}
+		if passwd != "" {
+			vars["BALLAST_TEST_PASSWD"] = passwd
+		}
+		d, err := wireHook(agentEnv(vars), wireSeams{FS: m, Owner: wireOwner, Euid: func() int { return 1000 },
+			Lookup: func(int) (string, error) { return "/home/real", nil }})
+		if err != nil {
+			t.Fatalf("passwd=%q: the forced lock must discard the outcome: %v", passwd, err)
+		}
+		return n.Load(), d
+	}
+	if n, d := run(""); n != 0 || d.Layout.Home != "/redirected/home" {
+		t.Errorf("13a: $HOME Lstats = %d (want 0: the passwd answer ends the lookup), home %q", n, d.Layout.Home)
+	}
+	if n, d := run("missing"); n == 0 || d.Layout.Home != "/redirected/home" {
+		t.Errorf("13b: $HOME Lstats = %d (want >0: the home_root rule must run), home %q", n, d.Layout.Home)
 	}
 }

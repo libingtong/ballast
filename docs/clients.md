@@ -90,17 +90,19 @@ Claude Code 一列里只有 PreToolUse deny/warn(`exit1-json-deny`、`warn-addit
 
 ### 4.2 Codex(二级,全部未核验)
 
-**原生事件**(6 个,均未核验):SessionStart、UserPromptSubmit、PreToolUse、**PermissionRequest→PreToolUse**、PostToolUse、Stop。没有 PostToolUseFailure、SubagentStop、compact 事件。
+**原生事件**(Ballast 安装的 6 个,均未核验):SessionStart、UserPromptSubmit、PreToolUse、**PermissionRequest→PreToolUse**、PostToolUse、Stop。【静态依据】(`docs/facts/codex-static.md` §1 第 2 行,读 Codex 0.130 与 0.163 源码,**没有观察到一次真实 hook 调用**):0.130 另有 PreCompact、PostCompact(只有通用输出,不能阻止);0.163 再增加 SessionEnd、SubagentStart、SubagentStop、Interrupt;PostToolUseFailure 在两个版本中都没有。所以"没有 compact、SubagentStop 事件"的旧说法不成立;Ballast 不安装这些事件。
 
 **条目格式**:`{"hooks":[{"type":"command","command":"<带引号的整条命令>","timeout":30}]}`,不带 matcher;写入 `hooks.json`,并在 `config.toml` 确保 `[features]` 下 `hooks = true`。manifest 记下该开关的原值(`absent` / `false` / `true`):原本没有这个键时,卸载后保留 `hooks = true`(登记的例外);原值为显式 `false` 时,安装改成 `true` 之前先向 stderr 警告,卸载恢复成 `false`。
 
-**需要的额外步骤**:hook 默认处于未受信状态,要在 Codex TUI 里用 `/hooks` 批准;或显式 `ballast install --client codex --codex-trust` 由 Ballast 写入 trust 哈希(算法照搬 pinrule 引用的 Codex 0.130 源码,**未核验于其他版本**;key 含条目下标,所以每次写入后都会按最终位置重算)。
+**需要的额外步骤**:hook 默认处于未受信状态,要在 Codex TUI 里用 `/hooks` 批准;或显式 `ballast install --client codex --codex-trust` 由 Ballast 写入 trust 哈希(算法照搬 pinrule 引用的 Codex 0.130 源码,**未核验于其他版本**;key 含条目下标,所以每次写入后都会按最终位置重算)。【静态依据】Codex 先对 `CODEX_HOME` 调用 `canonicalize()`(解析全部符号链接)再计算 key,所以 `--codex-trust` 写 key 时用 `EvalSymlinks` 后的 `hooks.json` 路径(manifest 里的条目仍记字面路径),`ballast doctor` 的 `codex.trust` 对旧版本写下的字面路径 key 给出警告,重新运行 `ballast install --client codex --codex-trust` 即可修复(Windows 上规范化形式未核验)。
+
+【静态依据】其他与本节相关、尚未写进上文的源码事实:`hooks` 特性默认开启(`default_enabled: true`),`features.hooks` 只有被显式设成 `false` 时才需要改;0.163 起 `hooks.json` 顶层只允许 `description` 与 `hooks` 两个键(往里加别的键会被整体拒绝);退出码 1 时 Codex **不解析 stdout**(只有 0 才解析),退出码 2 加非空 stderr 才阻止。
 
 **payload / 协议假设**(均来自 pinrule,未核验):
 
 | 项 | 假设 |
 |---|---|
-| 工具名 | `apply_patch` → Edit(解析 envelope,`Update / Add / Delete / Move to` 的全部目标都进入目标列表);`exec_command`、`shell` → Bash(命令在 `cmd` 字段,字符串或 argv 数组);argv 形如 `["apply_patch", …, "<envelope>"]` 时按 `apply_patch` 处理 |
+| 工具名 | `apply_patch` → Edit(解析 envelope,`Update / Add / Delete / Move to` 的全部目标都进入目标列表);`exec_command`、`shell` → Bash(命令在 `cmd` 字段,字符串或 argv 数组);argv 形如 `["apply_patch", …, "<envelope>"]` 时按 `apply_patch` 处理。【静态依据】(Codex 0.130/0.163 源码,未观察到真实调用)对 hook 而言所有 shell 类工具一律报 `tool_name:"Bash"`、`tool_input.command` 是**字符串**(`exec_command` 的 `cmd` 在 hook 载荷里改名为 `command`,argv 用 `shlex_join` 拼成一条),**hook 载荷里不会出现 argv 数组**;`apply_patch` 报 `tool_name:"apply_patch"`、`tool_input.command` 为补丁全文。`internal/adapter/codex` 同时接受 `cmd`/`command` 与多种工具名,所以实现不受影响 |
 | 读文件 | Codex 没有 Read 工具,读取只能经 shell(`sed -n`、`cat` 等);Ballast 把 Bash PostToolUse 解析出的只读目标并入"已读集合" |
 | Stop | payload 直接带 `last_assistant_message` |
 | allow | 必须是 `{}` 或空;`permissionDecision:"allow"` 会报错——所以 Ballast 从不输出 allow |

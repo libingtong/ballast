@@ -36,6 +36,7 @@ type Layout struct {
 	LabelsDir     string // ~/.ballast/labels/<rule_id>.jsonl (replay annotations)
 	Manifest      string // ~/.ballast/install-manifest.json
 	GCStamp       string // ~/.ballast/gc.stamp (daily GC marker)
+	GCLock        string // ~/.ballast/gc.lock (held for the duration of `ballast gc`; overlapping runs exit 0)
 	ReplaySet     string // ~/.ballast/replay-set.txt (local, never committed)
 
 	InstallRoot string // parent of client config roots (normally the home dir)
@@ -81,6 +82,7 @@ func Resolve(env sys.Env) (Layout, error) {
 	l.LabelsDir = filepath.Join(l.Home, "labels")
 	l.Manifest = filepath.Join(l.Home, "install-manifest.json")
 	l.GCStamp = filepath.Join(l.Home, "gc.stamp")
+	l.GCLock = filepath.Join(l.Home, "gc.lock")
 	l.ReplaySet = filepath.Join(l.Home, "replay-set.txt")
 
 	l.InstallRoot = get(EnvInstallRoot)

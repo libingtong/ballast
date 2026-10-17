@@ -61,7 +61,18 @@ func runHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 // runHookWith is runHook with the wiring function injected (tests).
-func runHookWith(args []string, stdin io.Reader, stdout, stderr io.Writer, wire func(sys.Env) (*hook.Deps, error)) int {
+//
+// The wiring runs before hook.Main's own recover and watchdog exist, so it gets
+// its own recover: an unrecovered panic makes the Go runtime exit 2, and exit 2
+// blocks the tool call in Claude Code (hook protocol: only 0 or 1). Nothing has
+// been written to stdout at that point, so it stays empty.
+func runHookWith(args []string, stdin io.Reader, stdout, stderr io.Writer, wire func(sys.Env) (*hook.Deps, error)) (code int) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(stderr, "ballast: hook: panic: %s\n", oneLine(fmt.Sprint(r)))
+			code = ExitHookError
+		}
+	}()
 	if wantsHelp(args) {
 		fmt.Fprint(stdout, hookUsage)
 		return ExitOK

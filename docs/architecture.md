@@ -1,6 +1,6 @@
-# Ballast 架构与接口契约(冻结版 v2.0.9)
+# Ballast 架构与接口契约(冻结版 v2.0.10)
 
-> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4、v2.0.5、v2.0.6、v2.0.7 为 P2 设计第 1、2、3、4、5、6、7 轮独立审核修订,v2.0.8 为 P2 集成阶段按项目负责人裁决处理 M0b 与 P2-CLI 报告的契约问题,v2.0.9 为集成后第 1 轮系统审计修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
+> 状态:**已冻结**(2026-10-16;v1.1 为独立审核后的修订,v1.2 为第二轮审核 minor,v1.3 为 U1–U11 实现后的契约跟进,v1.4 为第 1 轮系统审计修复,v1.5 为第 2 轮系统审计修复,v1.6 为第 3 轮系统审计修复,v1.7 为第 4 轮系统审计修复,v1.8 为第 5 轮系统审计 minor 修复,**v2.0 为 P2 设计与契约增补**(配套 `docs/p2-design.md`),v2.0.1、v2.0.2、v2.0.3、v2.0.4、v2.0.5、v2.0.6、v2.0.7 为 P2 设计第 1、2、3、4、5、6、7 轮独立审核修订,v2.0.8 为 P2 集成阶段按项目负责人裁决处理 M0b 与 P2-CLI 报告的契约问题,v2.0.9 为集成后第 1 轮系统审计修订,v2.0.10 为集成后第 3 轮系统审计修订;变更清单见 §14)。依据 `docs/ballast-plan.md` v0.4(末尾"v0.4 变更"优先于正文)、`docs/facts/M0a-CONCLUSIONS.md`、`docs/facts/cases.json`、`docs/facts/M0c-PERF.md`、`docs/research/pinrule-install-and-clients.md`。
 >
 > 本文与 `docs/dsl-semantics.md`、`schema/rules.v1.json` 以及 `internal/model`、`internal/ports`、`internal/sys`、`internal/layout`、`internal/testenv`、`internal/version` 六个契约包一起构成**冻结契约**。12 个开发单元(U1–U12)各自在独立 worktree 中开发,彼此只能依赖本契约。契约变更流程见 §12。
 >
@@ -140,7 +140,8 @@ L5  cli(接线,依赖全部)  →  cmd/ballast
 | `requests/<repo_inst>/<request_id>.json`(v2.0) | P2-RUNNER | `model.VerifyRequestFile`(hook 代起 verify 的请求 → job 映射);同目录 `<request_id>.spawn.log` 为子进程输出 | 原子;`ballast gc` 删除 30 天前的文件(`runner.GCRequests`,P2-CLI 接线)。`StartRequest` 即使配置错误也先写请求文件(带 `error`),所以 `verify --status <request_id>` 总能解释失败原因 |
 | `work/<job_id>/{index,index.tree,tree/}`(v2.0.5) | P2-RUNNER(`runner.Materialize`) | origin=hook 的 job 私有树:`S_start` 的树经临时索引 `read-tree` + `checkout-index --prefix` 检出到 `tree/`(无 `.git`),加上 project.json `verify[].inputs_untracked` 命中的未跟踪输入(v2.0.6:runner 在沙箱外写这里,检出前做路径布局预检,白名单复制只经副本根上的 `os.Root`、逐级只接受真实目录、叶子 `O_EXCL` 不跟随,写不出副本;v2.0.7:检出前要求 `S_start` 中的 `.ballast/project.json` 与 job sidecar 钉选的条目哈希相等、逐字相等,否则 infra `project_json_changed`/`project_json_untracked`;读真实索引与白名单源文件不跟随、只接受普通文件);沙箱内的测试只能写这里(`sandbox.Spec.Tree`,`layout.WorkDir`),见 `docs/p2-design.md` §3.4 | 目录 0700;job 收尾后删除;`ballast gc` 删除 job 已结束且超过 24 小时的残留 |
 | `quarantine/<job_id>/…`(v2.0.3) | P2-RUNNER(经 `sandbox.Quarantine`) | 沙箱内测试新建的受保护路径(任意深度的 `.git`、`.claude/`、`.vscode/`、`.mcp.json` 等)被移出仓库后的副本,保留相对路径(`layout.QuarantineDir`) | 只由 runner 写;`ballast gc` 删除 30 天前的条目(`runner.GCRequests`,P2-CLI 接线) |
-| `gc.stamp` | U7 | 空文件,mtime 即上次 GC 时间 | 只由 hook 在派生 `ballast gc` 之前 touch;派生失败时删除以便下次重试;`ballast gc` 本身不写(v1.3;v1.5 删除了 `runGC` 里残留的 touch,hook 与 gc 不再双写) |
+| `gc.lock` | U7 | 空文件,仅作 flock 目标(v2.0.10) | `ballast gc` 持非阻塞排他锁运行,抢不到即退出 0;不删除 |
+| `gc.stamp` | U7 | 空文件,mtime 即上次 GC 时间 | 只由 hook 在派生 `ballast gc` 之前 touch(v2.0.10:先以 `gc.stamp.claim` 的 `O_EXCL` 认领再检查并 touch,认领文件随后删除);派生失败时删除以便下次重试;`ballast gc` 本身不写(v1.3;v1.5 删除了 `runGC` 里残留的 touch,hook 与 gc 不再双写) |
 | `replay-set.txt` | 用户 | 每行一个 transcript 路径(不入库) | — |
 
 目录权限 0700,文件 0600。所有路径经 `layout.Layout` 解析,任何单元不得手拼 `~/.ballast`。
@@ -326,16 +327,18 @@ hooks:
   "sandbox": {
     "enabled": true, "allowUnsandboxedCommands": false, "failIfUnavailable": true,
     "excludedCommands": [],
-    "filesystem": {"denyWrite": ["<org 规则目录>", "~/.ballast", "<repo>/.ballast", "<二进制目录>", "~/.claude/settings*.json"]}
+    "filesystem": {"denyWrite": ["<org 规则目录>", "~/.ballast", "./.ballast", "**/.ballast", "<二进制目录>",
+                                 "~/.claude/settings*.json", "./.claude/settings*.json", "**/.claude/settings*.json"]}
   },
-  "permissions": {"deny": ["Edit(//<绝对受保护路径>/**)", "Edit(~/<受保护路径>/**)", "Edit(./<受保护路径>/**)"]},
+  "permissions": {"deny": ["Edit(//<org 规则目录>/**)", "Edit(~/.ballast/**)", "Edit(./.ballast/**)", "Edit(**/.ballast/**)",
+                           "Edit(//<二进制目录>/**)", "Edit(~/.claude/settings*.json)", "Edit(./.claude/settings*.json)", "Edit(**/.claude/settings*.json)"]},
   "allowManagedPermissionRulesOnly": true
 }
 ```
 
 MCP 白名单键名已由 M0b `mcp-allowlist-nocred` 核对:`allowedMcpServers`(条目 `{"serverName":"…"}`)、`deniedMcpServers`、`allowManagedMcpServersOnly`;`org render` 没有对应命令行参数(`install.OrgRenderOptions.MCPAllow` 只供库调用),管理员手工补充;`tier.Detect` 与 doctor 不检查白名单。
 
-v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.ManagedForms`(新增 `./.claude/settings*.json`;v2.0.5 再增任意深度形式 `**/.ballast`、`**/.claude/settings*.json`;`--protect` 的条目同时写 `T(e)` 与 `T(e/**)` 并写进 org.json `protected_extra`),共享 golden `internal/tier/testdata/managed_forms.json`;输出增加 `org.json` 段,`--write --i-am-admin` 同时写 `<托管目录>/ballast/org.json`;各键在真实托管环境中的效果由 M0b 取证,见 `docs/p2-design.md` §3.5、§6。
+v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.ManagedForms`(新增 `./.claude/settings*.json`;v2.0.5 再增任意深度形式 `**/.ballast`、`**/.claude/settings*.json`;`--protect` 的条目同时写 `T(e)` 与 `T(e/**)` 并写进 org.json `protected_extra`),共享 golden `internal/tier/testdata/managed_forms.json`;**v2.0.8 起 stdout 恒为单个纯 JSON(没有 `org.json` 段,没有注释)**:缺省 `--part managed-settings` 输出托管设置片段,`--part org-json` 输出 org.json,风险提示(`install.OrgRendered.OrgNotes`)写 stderr,见 §7;`--write --i-am-admin` 两个文件各写各的(`managed-settings.d/ballast.json` 与 `<托管目录>/ballast/org.json`)。上面的示例只是托管设置片段;各键在真实托管环境中的效果由 M0b 取证,见 `docs/p2-design.md` §3.5、§6。
 
 ---
 
@@ -539,6 +542,19 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 ---
 
 ## 14. 修订记录
+
+### v2.0.10(2026-10-16,集成后第 3 轮系统审计)
+
+配套 `docs/p2-design.md` v1.5.7(其 §13 有逐条处置)。**没有契约变更**,只有追加与文档更正。
+
+| 项 | 处理 | 涉及文件 |
+|---|---|---|
+| 并发 `ballast gc` 重复上报同一过期会话的残余 eval 计数(§3.1 的"不重复计数"原意) | `layout.Layout.GCLock`(`~/.ballast/gc.lock`,追加);`ballast gc` 持非阻塞 flock,抢不到退出 0;`state.GCFlush` 先原子 rename 认领会话目录(`state/.gc/`,崩溃遗留 1 小时后丢弃);hook 的 `gc.stamp` 检查改为 `gc.stamp.claim` 的 `O_EXCL` 认领。`gc.stamp` 仍只由 hook 写 | `internal/layout`、`internal/state`、`internal/cli/cmd_misc.go`、`internal/hook/pipeline.go` |
+| hook 接线阶段的 panic 不经 `hook.Main` 的 recover,运行时以退出码 2 结束(违反 §1、§7、§10) | `cli.runHookWith` 与 `tier.LockedHome` 的查询 goroutine 各加 recover:退出 1、stdout 空 | `internal/cli/cli.go`、`internal/tier/lock.go` |
+| `EntrySpec.CodexHomeReal`(追加) | `--codex-trust` 的 key 使用解析符号链接后的 `CODEX_HOME`(Codex 的行为,codex-static §1 第 6 行);doctor 对字面路径旧 key 警告 | `internal/install` |
+| 路径宏:`~/.claude`、`~/.codex`、`~/.hermes` 前缀按 `CLAUDE_CONFIG_DIR`/`CODEX_HOME`/`HERMES_HOME` 展开 | 引擎侧在 `PathService.CompileGlobs` 编译时展开(`model.PathContext.ClientRoots`),与字面形式并存;规则格式与 schema 不变,向后兼容 | `internal/paths/paths.go`、`internal/hook/pipeline.go` |
+| §5.5 `org render` 示例与 v2.0.8 的纯 JSON 契约不符 | 示例改为现行输出,删去"输出增加 `org.json` 段" | 本文 §5.5 |
+| bench 场景 `13` 拆为 `13a`/`13b`;`ballast_fault` 构建新增 `BALLAST_TEST_PASSWD=missing` | 仅测试开关,生产构建忽略 | `internal/cli/faults_*.go`、`scripts/bench` |
 
 ### v2.0.9(2026-10-16,集成后第 1 轮系统审计)
 

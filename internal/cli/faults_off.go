@@ -16,6 +16,8 @@ import (
 // from the real root-owned inputs only.
 func testLock(sys.Env) (tier.OrgConfig, bool) { return tier.OrgConfig{}, false }
 
+func testSeams(_ sys.Env, sm wireSeams) wireSeams { return sm }
+
 func testTier(sys.Env) ports.TierProbe { return nil }
 
 // testWatchdog: production builds always use hook.DefaultWatchdog.

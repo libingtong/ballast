@@ -96,7 +96,7 @@ func newCoreWith(env sys.Env, sm wireSeams) (*core, error) {
 	forced := false
 	if !locked {
 		// Only a ballast_fault build can force the lock (bench scenarios
-		// 13/14); production builds return forced=false.
+		// 13a/13b/14); production builds return forced=false.
 		org, forced = testLock(env)
 	}
 	passwdHome := func() (string, error) {
@@ -119,9 +119,11 @@ func newCoreWith(env sys.Env, sm wireSeams) (*core, error) {
 			lay, err = layout.ResolveWith(env, layout.Options{IgnoreRedirects: true})
 		}
 	case forced:
-		// Timing aid of bench scenario 13: perform the real passwd lookup
-		// and home_root judgement, discard the outcome and keep using the
-		// redirected home so a real ~/.ballast is never touched.
+		// Timing aid of bench scenarios 13a/13b: perform the real passwd
+		// lookup (13a) or, with BALLAST_TEST_PASSWD=missing, the home_root
+		// judgement (13b), discard the outcome and keep using the redirected
+		// home so a real ~/.ballast is never touched.
+		sm = testSeams(env, sm)
 		_, _ = passwdHome()
 		lay, err = layout.ResolveWith(env, layout.Options{})
 	default:

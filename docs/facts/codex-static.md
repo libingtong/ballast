@@ -49,7 +49,7 @@
 
 ## 3. 契约问题与建议(不修改契约,实现按字面)
 
-1. **【契约问题】Codex 信任 key 必须使用规范化后的路径。** `internal/install` 的 `codexConfigTarget.desiredTrust` 用 `jsonHooksTarget.path`(来自 `layout.CodexDir`,即 `CODEX_HOME` 的字面值)拼 `hooks.state` 的 key,而 Codex 对 `CODEX_HOME` 做 `canonicalize()` 再计算同一个 key。最小建议:`--codex-trust` 写 key 时对 hooks.json 路径做 `filepath.EvalSymlinks`(找不到时回退字面值),manifest 里仍记录字面路径;`doctor` 的信任检查用同一个规范化路径;补一个"CODEX_HOME 经符号链接"的测试(macOS 上 `t.TempDir()` 本身就是 `/var/folders/...`,很容易复现)。归属 P2-INSTALL(`internal/install/**`)。在此之前,`codex.sh` 把规范化后的 `CODEX_HOME` 传给 `ballast install`,避开这个问题。
+1. **【契约问题】Codex 信任 key 必须使用规范化后的路径。(已处理:集成后第 3 轮系统审计,`EntrySpec.CodexHomeReal`,见 `docs/p2-design.md` §13 v1.5.7;下文保留原始描述。)** `internal/install` 的 `codexConfigTarget.desiredTrust` 用 `jsonHooksTarget.path`(来自 `layout.CodexDir`,即 `CODEX_HOME` 的字面值)拼 `hooks.state` 的 key,而 Codex 对 `CODEX_HOME` 做 `canonicalize()` 再计算同一个 key。最小建议:`--codex-trust` 写 key 时对 hooks.json 路径做 `filepath.EvalSymlinks`(找不到时回退字面值),manifest 里仍记录字面路径;`doctor` 的信任检查用同一个规范化路径;补一个"CODEX_HOME 经符号链接"的测试(macOS 上 `t.TempDir()` 本身就是 `/var/folders/...`,很容易复现)。归属 P2-INSTALL(`internal/install/**`)。在此之前,`codex.sh` 把规范化后的 `CODEX_HOME` 传给 `ballast install`,避开这个问题。
 2. **文档同步(交 P2-CLI,`docs/clients.md` §4.2 与 `docs/trust-model.md`)**:工具名统一为 `Bash`、命令键为 `command`;argv 数组形态不会出现在 hook 载荷里;事件集合比表中多(`PreCompact`/`PostCompact`,0.163 起还有 `SessionEnd`/`SubagentStart`/`SubagentStop`/`Interrupt`);`hooks` 特性默认开启;hooks.json 顶层 0.163 起只允许 `description` 与 `hooks`;exit 1 不解析 stdout。
 3. **实现提示(不改契约)**:Codex 的 deny reason 必须非空,否则整条输出作废并放行。`internal/adapter/codex` 渲染 deny 时应保证 `Reason` 非空(目前由 `[id] message` 拼成,实际非空);P2-HOOK/P2-CC 如有机会补一个"空 reason 的 deny 在 Codex 上回退为非空占位"的单测。
 

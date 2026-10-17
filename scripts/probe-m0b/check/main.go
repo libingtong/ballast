@@ -127,8 +127,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// Hygiene runs only the local-path/secret scan and the payload-format rule
-// over the evidence tree next to casesPath and over casesPath itself.
+// evidenceDir returns the evidence tree that belongs to a cases file:
+// <dir>/payloads/<name> for <dir>/<name>-cases.json (m0b-cases.json ->
+// payloads/m0b, hermes-cases.json -> payloads/hermes). Other file names fall
+// back to payloads/m0b, the tree this checker was written for.
+func evidenceDir(casesPath string) string {
+	name := strings.TrimSuffix(filepath.Base(casesPath), "-cases.json")
+	if name == filepath.Base(casesPath) || name == "" {
+		name = "m0b"
+	}
+	return filepath.Join(filepath.Dir(casesPath), "payloads", name)
+}
+
+// Hygiene runs only the local-path/secret scan (and, for the m0b tree, the
+// payload-format rule) over the evidence tree that belongs to casesPath and
+// over casesPath itself.
 func Hygiene(casesPath string) (problems []string, summary string) {
 	bad := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
 	raw, err := os.ReadFile(casesPath)
@@ -136,7 +149,7 @@ func Hygiene(casesPath string) (problems []string, summary string) {
 		bad("read %s: %v", casesPath, err)
 		return
 	}
-	scanTree(filepath.Join(filepath.Dir(casesPath), "payloads", "m0b"), bad)
+	scanTree(evidenceDir(casesPath), bad)
 	scanText(casesPath, string(raw), bad)
 	return problems, "m0b-check: hygiene ok"
 }
@@ -338,7 +351,9 @@ func scanTree(root string, bad func(string, ...any)) {
 			return nil
 		}
 		scanText(p, string(b), bad)
-		checkPayloadFormat(p, b, bad)
+		if filepath.Base(root) == "m0b" {
+			checkPayloadFormat(p, b, bad) // the format rule is the m0b tree's own
+		}
 		return nil
 	})
 }

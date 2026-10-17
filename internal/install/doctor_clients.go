@@ -190,7 +190,15 @@ func (codexClient) Doctor(lay layout.Layout, fsys sys.FS, m *model.InstallManife
 			Message: "hooks are not pre-trusted; Codex asks for approval before running them (unverified)",
 			Fix:     "approve them with /hooks in the Codex TUI, or reinstall with: ballast install --client codex --codex-trust"})
 	} else {
-		stale := 0
+		stale, noncanon := 0, 0
+		// Codex canonicalizes CODEX_HOME before it builds a trust key
+		// (docs/facts/codex-static.md §1 row 6): a key that names the literal
+		// path of a CODEX_HOME that goes through a symbolic link never matches
+		// and the hook stays untrusted, silently.
+		canonHooks := ""
+		if real, rerr := fsys.EvalSymlinks(lay.CodexDir); rerr == nil {
+			canonHooks = filepath.Join(real, "hooks.json")
+		}
 		for _, fl := range trust {
 			k, ok := parseTrustFlagKey(fl.Key)
 			if !ok || doc == nil {
@@ -199,12 +207,21 @@ func (codexClient) Doctor(lay layout.Layout, fsys sys.FS, m *model.InstallManife
 			}
 			if _, h, found := doc.trustHashOf(k); !found || h != fl.Value {
 				stale++
+				continue
+			}
+			if canonHooks != "" && trustKeyPath(k) != canonHooks {
+				noncanon++
 			}
 		}
-		if stale == 0 {
+		switch {
+		case stale == 0 && noncanon > 0:
+			out = append(out, Check{ID: "codex.trust", Client: model.ClientCodex, Status: CheckWarn,
+				Message: fmt.Sprintf("%d trust entries name a hooks.json path that is not the canonical (symlink-free) form %s; Codex computes its keys from the canonical CODEX_HOME, so these entries never match and the hooks stay untrusted", noncanon, canonHooks),
+				Fix:     "reinstall with: ballast install --client codex --codex-trust"})
+		case stale == 0:
 			out = append(out, Check{ID: "codex.trust", Client: model.ClientCodex, Status: CheckOK,
 				Message: fmt.Sprintf("%d trust entries match (hash algorithm unverified for Codex versions other than 0.130)", len(trust))})
-		} else {
+		default:
 			out = append(out, Check{ID: "codex.trust", Client: model.ClientCodex, Status: CheckWarn,
 				Message: fmt.Sprintf("%d of %d trust entries are missing or changed", stale, len(trust)),
 				Fix:     "reinstall with: ballast install --client codex --codex-trust"})

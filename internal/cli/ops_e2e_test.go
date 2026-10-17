@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/libingtong/ballast/internal/model"
+	"github.com/libingtong/ballast/internal/state"
 )
 
 // shadowHits fires the log-only e2e-shadow rule n times in separate tool calls.
@@ -238,6 +239,39 @@ func TestGC(t *testing.T) {
 		t.Error("`ballast gc` must not write gc.stamp")
 	}
 	s.mustExit(2, "", "", "gc", "now")
+}
+
+// TestGCSkippedWhileAnotherGCRuns: gc.lock is held non-blocking, so a gc that
+// loses the race exits 0 without touching anything (overlapping runs used to
+// double-report the residual evals of the same expired sessions).
+func TestGCSkippedWhileAnotherGCRuns(t *testing.T) {
+	s := newSandbox(t)
+	longAgo := time.Now().Add(-30 * 24 * time.Hour)
+	stale := filepath.Join(s.sb.BallastHome, "state", "repo1", "sess1", "main.json")
+	writeFile(t, stale, `{"v":1,"started_at":"2000-01-01T00:00:00Z","event_seq":1,"seen":[],"read":{},"tool_count":0,"tool_count_since_inject":0,"prompt_count":0,"last_job_report_at":"0001-01-01T00:00:00Z","last_tool_failure_at":"0001-01-01T00:00:00Z","evals":{"r1":{"evals":3,"hits":0,"would":2,"unknown":0}}}`)
+	for _, p := range []string{stale, filepath.Dir(stale)} {
+		if err := os.Chtimes(p, longAgo, longAgo); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lf, err := os.OpenFile(filepath.Join(s.sb.BallastHome, "gc.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock, _, err := state.TryLock(lf, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.mustExit(0, "", "", "gc")
+	if _, err := os.Stat(stale); err != nil {
+		t.Errorf("a gc that lost the lock race must not touch state: %v", err)
+	}
+	_ = unlock()
+	lf.Close()
+	s.mustExit(0, "", "", "gc")
+	if _, err := os.Stat(stale); err == nil {
+		t.Error("gc should run once the lock is free")
+	}
 }
 
 // TestSessionStartTouchesGCStamp: the first SessionStart claims the daily GC

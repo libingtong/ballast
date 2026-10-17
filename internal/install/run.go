@@ -187,6 +187,11 @@ func planInstall(opt Options, clients []Client) (*installPlan, error) {
 			Client: c.ID(), Binary: binary, Events: defaultEvents(c.ID()), GOOS: goos,
 			MDC: opt.MDC, CodexTrust: opt.CodexTrust,
 		}
+		if c.ID() == model.ClientCodex && lay.CodexDir != "" {
+			if real, rerr := opt.FS.EvalSymlinks(lay.CodexDir); rerr == nil {
+				spec.CodexHomeReal = real
+			}
+		}
 		var done []*PlanResult
 		for _, t := range c.Targets(lay, spec) {
 			cur, err := readOrNil(opt.FS, t.Path())
