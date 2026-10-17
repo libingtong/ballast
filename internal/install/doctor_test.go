@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -34,6 +33,12 @@ func doctorEnv(t *testing.T, trust bool) (*tenv, Options) {
 func (e *tenv) doctor(bin string, mdc []byte, lint func() []model.Diagnostic) []Check {
 	// TierManagedDir keeps tier.Detect away from the real managed directory.
 	return Doctor(DoctorOptions{Layout: e.lay, FS: e.fs, Env: e.sb.Env(), Binary: bin, MDC: mdc, LintRules: lint, TierManagedDir: e.lay.ManagedDir,
+		TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false }})
+}
+
+// doctorT1 is doctor with the experimental T1 detail (`doctor --t1`).
+func (e *tenv) doctorT1(bin string, mdc []byte, lint func() []model.Diagnostic) []Check {
+	return Doctor(DoctorOptions{Layout: e.lay, FS: e.fs, Env: e.sb.Env(), Binary: bin, MDC: mdc, LintRules: lint, TierManagedDir: e.lay.ManagedDir, T1: true,
 		TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false }})
 }
 
@@ -102,17 +107,14 @@ func TestDoctorHealthyInstall(t *testing.T) {
 	if c := by["claude.entry.PreToolUse"]; c.Client != model.ClientClaude {
 		t.Errorf("client not set: %+v", c)
 	}
-	// Native Windows is T0 by design and reports it as ok (TestDoctorWindowsTier);
-	// elsewhere an install without the managed template warns.
-	wantTier := CheckWarn
-	if runtime.GOOS == "windows" {
-		wantTier = CheckOK
-	}
-	if c := by["tier.level"]; c.Status != wantTier || !strings.Contains(c.Message, "T0") {
+	// v0.6: T0 is the default guarantee, so a host that has not opted into the
+	// experimental T1 reports ok "T0(默认模式)" on every platform and emits no
+	// other tier.* row (TestDoctorTierT0DefaultMode).
+	if c := by["tier.level"]; c.Status != CheckOK || c.Message != "T0(默认模式)" || c.Fix != "" {
 		t.Errorf("tier.level = %+v", c)
 	}
-	if _, ok := by["tier.windows_t0"]; ok && runtimeIsUnix() {
-		t.Error("tier.windows_t0 is Windows-only")
+	if _, ok := by["tier.windows_t0"]; ok {
+		t.Error("tier.windows_t0 no longer exists")
 	}
 	if c, ok := by["disk.space"]; !ok || c.Status == "" {
 		t.Error("disk.space missing")
@@ -298,7 +300,12 @@ func TestDoctorTierLevel(t *testing.T) {
 	// always T0, see TestDoctorWindowsTier); pin the layout to linux so the
 	// test exercises it on every host.
 	e.lay.GOOS = "linux"
-	c := byID(e.doctor("", nil, nil))["tier.level"]
+	// v0.6: the default is ok "T0(默认模式)" with nothing listed ...
+	if c := byID(e.doctor("", nil, nil))["tier.level"]; c.Status != CheckOK || c.Message != "T0(默认模式)" || c.Fix != "" {
+		t.Errorf("default tier.level = %+v", c)
+	}
+	// ... the missing T1 components appear only on `doctor --t1`.
+	c := byID(e.doctorT1("", nil, nil))["tier.level"]
 	for _, missing := range []string{"binary_root_owned", "org_config", "managed_settings"} {
 		if !strings.Contains(c.Message, missing) {
 			t.Errorf("T0 message must list %q: %s", missing, c.Message)
@@ -309,7 +316,7 @@ func TestDoctorTierLevel(t *testing.T) {
 	}
 
 	// a probe that says T1 makes the check pass
-	opt := DoctorOptions{Layout: e.lay, FS: e.fs, Env: e.sb.Env(), Tier: fakeProbe{model.TierInfo{Tier: model.TierT1, Declared: model.TierT1}},
+	opt := DoctorOptions{Layout: e.lay, FS: e.fs, Env: e.sb.Env(), T1: true, Tier: fakeProbe{model.TierInfo{Tier: model.TierT1, Declared: model.TierT1}},
 		TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false }}
 	c = byID(Doctor(opt))["tier.level"]
 	if c.Status != CheckOK || !strings.HasPrefix(c.Message, "T1") {
@@ -348,6 +355,7 @@ func TestDoctorTierDetectsRenderedTemplate(t *testing.T) {
 		Layout: lay, FS: e.fs, Env: e.sb.Env(), Self: self, TierManagedDir: lay.ManagedDir,
 		TierOwner: func(fs.FileInfo) (uint32, bool) { return 0, true },
 		TierLock:  func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false },
+		T1:        true,
 	}))
 	c := cs["tier.level"]
 	for _, id := range []string{
@@ -374,7 +382,7 @@ func TestDoctorTierLevelClaudeConfigDirRedirect(t *testing.T) {
 	mk := func(vars map[string]string) Check {
 		return byID(Doctor(DoctorOptions{
 			Layout: e.lay, FS: e.fs, Env: sys.MapEnv{Vars: vars},
-			Tier:     fakeProbe{model.TierInfo{Tier: model.TierT0, Missing: []string{model.TierMissingDenyWrite}}},
+			Tier: fakeProbe{model.TierInfo{Tier: model.TierT0, Missing: []string{model.TierMissingDenyWrite}}}, T1: true,
 			TierLock: func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false },
 		}))["tier.level"]
 	}
@@ -415,6 +423,7 @@ func TestDoctorTierDetectRedirectedClaudeConfigDir(t *testing.T) {
 		Layout: lay, FS: e.fs, Env: sys.MapEnv{Vars: vars}, Self: self, TierManagedDir: lay.ManagedDir,
 		TierOwner: func(fs.FileInfo) (uint32, bool) { return 0, true },
 		TierLock:  func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false },
+		T1:        true,
 	}))
 	c := cs["tier.level"]
 	if !strings.Contains(c.Message, model.TierMissingDenyWrite+"(") || !strings.Contains(c.Message, "CLAUDE_CONFIG_DIR") {
@@ -427,11 +436,10 @@ func TestDoctorWindowsTier(t *testing.T) {
 	lay := e.lay
 	lay.GOOS = "windows"
 	cs := byID(Doctor(DoctorOptions{Layout: lay, FS: e.fs, Env: e.sb.Env()}))
-	c, ok := cs["tier.windows_t0"]
-	if !ok || !strings.Contains(c.Message, "如需 T1 请使用 WSL2") {
-		t.Fatalf("tier.windows_t0 = %+v", c)
+	if c, ok := cs["tier.windows_t0"]; ok {
+		t.Fatalf("tier.windows_t0 must be gone (v0.6): %+v", c)
 	}
-	if cs["tier.level"].Status != CheckOK || !strings.Contains(cs["tier.level"].Message, "T0") {
+	if cs["tier.level"].Status != CheckOK || cs["tier.level"].Message != "T0(默认模式)" || cs["tier.level"].Fix != "" {
 		t.Errorf("tier.level = %+v", cs["tier.level"])
 	}
 }
@@ -481,7 +489,7 @@ func TestDoctorFrozenCheckIDsAreCovered(t *testing.T) {
 			t.Errorf("frozen check id %s is never emitted", id)
 		}
 	}
-	if _, ok := win["tier.windows_t0"]; !ok {
-		t.Error("tier.windows_t0 is never emitted")
+	if _, ok := win["tier.windows_t0"]; ok {
+		t.Error("tier.windows_t0 must not be emitted (v0.6)")
 	}
 }

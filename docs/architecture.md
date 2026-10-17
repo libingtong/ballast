@@ -6,6 +6,8 @@
 >
 > 凡标注【未核验】的条目,表示 Ballast 自己没有取证(M0a 只覆盖 Claude Code);实现按本文执行,`ballast doctor` 与 lint 会把它们列为警告。
 
+> **v0.6 定位调整(2026-10-17 项目负责人裁决,"A 方案")**:**T0(篡改可检测、不可防)是产品主线与默认保证**,目标用户是个人开发者,agent 不会故意改自己的 hook,对抗型 agent 不是目标威胁。**T1(托管设置、沙箱 runner、hook 代起 verify、重定向锁、job 私有副本)降为实验特性**:代码保留、默认不启用,面向团队合规场景,个人用户无需配置,说明见 `docs/advanced-t1.md`。本文中 T1 相关章节均按"实验特性"阅读;`ballast doctor` 默认不再列缺失的 T1 组件(T0 主机上 `tier.level` 为 ok"T0(默认模式)"),`doctor --t1`、已声明 T1 或主机已锁定时才输出全部 `tier.*`;原生 Windows 的"请使用 WSL2"警告(`tier.windows_t0`)已去掉。详见 `docs/ballast-plan.md` 末尾"v0.6 定位调整"。
+
 ---
 
 ## 1. 总体数据流
@@ -383,7 +385,7 @@ v2.0(v2.0.1 修订):denyWrite 与 permissions.deny 改为直接输出 `tier.Mana
 | `audit lint [--json]` | 0 格式全部合规;1 有问题;5 I/O |
 | `install --client … [--dry-run] [--codex-trust] [--binary] [--force]` | 0 成功或无变化;1 托管层已部署而拒绝;2 用法/客户端未检测到且无 `--force`/二进制路径不稳定;3 配置解析失败(未写入);5 I/O |
 | `uninstall [--client\|--all] [--dry-run]` | 0;1 部分条目被用户改过而保留(已警告);3 解析失败;5 I/O |
-| `doctor [--json]` | 0 无 fail(可有 warn);1 有 fail。P2:`tier.*` 检查(`tier.level` 逐条列出 Missing,`tier.declared_mismatch`、`tier.runner_sandbox`(沙箱探测由 CLI 注入)、`tier.redirect_ignored`、`tier.locked_home`、`tier.repo_sandbox_weakened`(当前目录与仓库顶层)、`tier.binary_hardening`)。已锁定主机的家目录取不到时 doctor 仍运行到 `tier.locked_home`(此时用 `$HOME` 作诊断回退,重定向变量仍被忽略,不读写状态),其余命令与 hook 则失败(hook 按 B7 放行) |
+| `doctor [--json] [--t1]` | 0 无 fail(可有 warn);1 有 fail。v0.6:T0 是默认模式,T0 主机(未声明 T1、未锁定)上只输出 ok 的 `tier.level`("T0(默认模式)",无缺失组件、无 Fix);`--t1` [实验] 或已声明 T1、主机已锁定时输出以下全部 `tier.*`,原生 Windows 恒只有 `tier.level`(`tier.windows_t0` 已删除)。P2:`tier.*` 检查(`tier.level` 逐条列出 Missing,`tier.declared_mismatch`、`tier.runner_sandbox`(沙箱探测由 CLI 注入)、`tier.redirect_ignored`、`tier.locked_home`、`tier.repo_sandbox_weakened`(当前目录与仓库顶层)、`tier.binary_hardening`)。已锁定主机的家目录取不到时 doctor 仍运行到 `tier.locked_home`(此时用 `$HOME` 作诊断回退,重定向变量仍被忽略,不读写状态),其余命令与 hook 则失败(hook 按 B7 放行) |
 | `org render [--client claude-code] [--binary <绝对路径>] [--home-root <dir>]... [--protect <path>]... [--part managed-settings\|org-json] [--write --i-am-admin]` | 0;2 用法(含 `--binary` 不是干净的绝对路径(相对路径与裸名会让托管 hook 经 `PATH` 解析、denyWrite 出现 `.`;Windows 要求盘符路径)、`--home-root` 不合规,以及 `--write` 的家目录预检失败:`SUDO_UID` 的用户在 passwd 里没有条目又没有 `home_root`,此时什么都不写);4 `--write` 但非 root 或缺 `--i-am-admin`;5 I/O。stdout 恒为**单个合法 JSON 文档**,可直接重定向成文件:`--part managed-settings`(缺省)是托管设置片段,`--part org-json` 是 org.json(无效取值与 Windows 上的 `org-json` 退出 2);org.json 各字段的风险提示写 stderr;`--write` 不受 `--part` 影响,先写 `managed-settings.d/ballast.json` 再写 `<托管目录>/ballast/org.json`(写入即锁定本机),写入的文件是纯 JSON |
 | `gc`(内部) | 0;5(写 stderr,不影响任何人)。P2 起另清理 `requests/` 与 `quarantine/` 下超过 30 天的条目、`work/<job_id>/` 中 job 已结束且超过 24 小时的残留(`runner.GCRequests`) |
 | `version` | 0 |
@@ -556,6 +558,10 @@ P2 单元(P2-M0B、P2-REDACT、P2-TIER、P2-SANDBOX、P2-PS、P2-HERMES、P2-CLI
 ---
 
 ## 14. 修订记录
+
+### v0.6 定位调整(2026-10-17,文档层,未改契约版本号)
+
+T0 为产品主线与默认保证,T1 为实验特性。契约面的变化只有 `doctor`:新增 `--t1` 参数;T0 主机上 `tier.level` 恒为 ok"T0(默认模式)"且其余 `tier.*` 行按需输出;`tier.windows_t0` 检查 id 删除。其余契约(hook 协议、退出码、磁盘布局、`org render`)不变,`org render` 与 `verify --hook-start` 在帮助里标 [实验]。
 
 ### v2.0.10(2026-10-16,集成后第 3 轮系统审计)
 

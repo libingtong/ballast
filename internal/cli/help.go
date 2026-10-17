@@ -20,8 +20,8 @@ const topUsage = `ballast(压舱石):AI 编码客户端的行为策略引擎
   audit lint    检查审计日志格式
   install       把 hook 安装到客户端配置
   uninstall     按 manifest 卸载
-  doctor        自检(层级 T0/T1、各客户端状态)
-  org render    输出组织托管设置模板;--part org-json 输出 org.json
+  doctor        自检(层级、各客户端状态;--t1 [实验] 输出 T1 明细)
+  org render    [实验] 输出组织托管设置模板(T1);--part org-json 输出 org.json
   report        把审计日志脱敏聚合成一个本地文件(--out <文件>),不联网
   gc            清理过期状态(内部)
   version       显示版本
@@ -66,7 +66,7 @@ const verifyUsage = `用法:
   ballast verify --foreground <名称>          前台运行并流式输出
   ballast verify --run-job <job_id>           内部:分离的 runner
   ballast verify --hook-start --request <id> --cwd <目录> --client <id> [--session <id>] [--agent <id>]
-                 [--project-dir <目录>] -- [名称...]        内部:T1 下由 hook 代起(参数格式冻结)
+                 [--project-dir <目录>] -- [名称...]        内部:[实验] T1 下由 hook 代起(参数格式冻结;T0 不使用)
 
 --status 的参数可以是 hook 代起时给出的 request id:请求有多个 job 时先按请求文件(~/.ballast/requests)聚合,
 多个 job 取最差结果(fail > timeout > signal > infra > 运行中 > pass);只有一个 job,或参数不是请求 id 时按 job 查找;
@@ -125,13 +125,17 @@ const uninstallUsage = `用法:ballast uninstall [--client <id>|--all] [--dry-ru
 退出码:0;1 部分条目被用户改过而保留(已警告);3 解析失败;5 I/O。
 `
 
-const doctorUsage = `用法:ballast doctor [--json]
+const doctorUsage = `用法:ballast doctor [--json] [--t1]
 
-检查二进制、目录权限、manifest、规则 lint、层级(T0/T1)与各客户端安装状态。
+检查二进制、目录权限、manifest、规则 lint、层级与各客户端安装状态。T0 是默认模式,层级行为 ok "T0(默认模式)"。
+  --json  以 JSON 输出
+  --t1    [实验] 额外输出 T1(托管强制)的全部 tier.* 检查与缺失组件;
+          已在 org.json 声明 T1 或主机已锁定时自动输出,见 docs/advanced-t1.md
 退出码:0 无 fail(可有 warn);1 有 fail。CI 是最终裁判:会话内规则只负责引导 agent。
 `
 
-const orgUsage = `用法:ballast org render [--client claude-code] [--binary <绝对路径>] [--home-root <目录>]... [--protect <路径>]...
+const orgUsage = `[实验] T1 托管强制专用命令,面向团队合规场景;个人用户无需使用(见 docs/advanced-t1.md)。
+用法:ballast org render [--client claude-code] [--binary <绝对路径>] [--home-root <目录>]... [--protect <路径>]...
                         [--part managed-settings|org-json] [--write --i-am-admin]
 
 stdout 只输出一个合法 JSON,可直接重定向到文件:默认 --part managed-settings 为 Claude 托管设置片段(T1 模板),

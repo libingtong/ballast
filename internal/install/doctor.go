@@ -38,7 +38,9 @@ type Check struct {
 //	tier.Detect, every Missing id listed), tier.declared_mismatch,
 //	tier.runner_sandbox, tier.redirect_ignored, tier.locked_home,
 //	tier.repo_sandbox_weakened, tier.binary_hardening (P2),
-//	tier.windows_t0 ("如需 T1 请使用 WSL2"),
+//	(v0.6: on a host that has not opted into the experimental T1 only
+//	tier.level is emitted, as ok "T0(默认模式)"; the other tier.* rows need a
+//	declared T1, a locked host or DoctorOptions.T1 = `doctor --t1`),
 //	ci.final_arbiter (always info: server-side CI is the final arbiter),
 //	claude.managed_duplicate, claude.entry.<Event>, codex.features_hooks,
 //	codex.trust, codex.tui_only, cursor.entry.<event>, cursor.mdc_current,
@@ -48,6 +50,10 @@ type DoctorOptions struct {
 	FS     sys.FS
 	Env    sys.Env
 	Binary string
+	// T1 (`doctor --t1`) asks for the experimental T1 detail: every tier.*
+	// row and the missing-component list, even on a host that has neither
+	// declared T1 nor been locked.
+	T1 bool
 	// LintRules returns lint diagnostics of the current 3-layer stack (injected, U3/U4).
 	LintRules func() []model.Diagnostic
 	// MDC is the expected ~/.cursor/rules/ballast.mdc content rendered from

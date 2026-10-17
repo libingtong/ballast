@@ -188,7 +188,7 @@ func planInstall(opt Options, clients []Client) (*installPlan, error) {
 			MDC: opt.MDC, CodexTrust: opt.CodexTrust,
 		}
 		if c.ID() == model.ClientCodex && lay.CodexDir != "" {
-			if real, rerr := opt.FS.EvalSymlinks(lay.CodexDir); rerr == nil {
+			if real, rerr := evalSymlinksDeepest(opt.FS, lay.CodexDir); rerr == nil {
 				spec.CodexHomeReal = real
 			}
 		}
@@ -469,4 +469,30 @@ func pruneEmptyDirs(opt Options, file, kept string) {
 		}
 		dir = filepath.Dir(dir)
 	}
+}
+
+// evalSymlinksDeepest resolves every symbolic link of p. When p does not exist
+// yet (a CODEX_HOME that the install is about to create), it resolves the
+// deepest existing ancestor and appends the remaining, not yet existing
+// elements, so a symlinked HOME still yields the canonical path that Codex
+// will compute once the directory exists. Errors other than "does not exist"
+// are returned unchanged.
+func evalSymlinksDeepest(fsys sys.FS, p string) (string, error) {
+	p = filepath.Clean(p)
+	real, err := fsys.EvalSymlinks(p)
+	if err == nil {
+		return real, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return "", err
+	}
+	parent := filepath.Dir(p)
+	if parent == p {
+		return "", err
+	}
+	base, perr := evalSymlinksDeepest(fsys, parent)
+	if perr != nil {
+		return "", perr
+	}
+	return filepath.Join(base, filepath.Base(p)), nil
 }

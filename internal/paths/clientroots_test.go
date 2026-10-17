@@ -45,3 +45,26 @@ func TestCompileGlobsExpandsRedirectedClientRoots(t *testing.T) {
 		t.Error("an unset root must not widen the match")
 	}
 }
+
+// expandClientRoots must not write into the caller's backing array: a list
+// with spare capacity keeps the bytes beyond its length untouched.
+func TestExpandClientRootsDoesNotWriteTheCallersArray(t *testing.T) {
+	backing := make([]string, 3, 16)
+	backing[0], backing[1] = "~/.claude/settings*.json", "~/.codex/hooks.json"
+	backing = backing[:2]
+	spare := backing[:3]
+	spare[2] = "SENTINEL"
+	ctx := model.PathContext{GOOS: "linux", Home: "/home/u",
+		ClientRoots: model.ClientRoots{Claude: "/srv/c", Codex: "/srv/x"}}
+	s := &Service{}
+	out := s.expandClientRoots(backing, "/home/u", ctx)
+	if len(out) <= len(backing) {
+		t.Fatalf("expected appended redirected forms, got %v", out)
+	}
+	if spare[2] != "SENTINEL" {
+		t.Errorf("the caller's backing array was overwritten: %q", spare[2])
+	}
+	if len(backing) != 2 || backing[0] != "~/.claude/settings*.json" || backing[1] != "~/.codex/hooks.json" {
+		t.Errorf("input list changed: %v", backing)
+	}
+}

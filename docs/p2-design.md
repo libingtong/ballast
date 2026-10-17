@@ -6,6 +6,8 @@
 >
 > 本次只冻结设计与 Go 签名骨架(函数体 `panic("unimplemented: …")`),不含实现。骨架已通过 `go build ./...`、`go vet ./...`、`GOOS=windows go vet ./...`、`go test ./internal/archtest`,且全量 `go test ./...` 仍为绿。
 
+> **v0.6 定位调整(2026-10-17 项目负责人裁决,"A 方案")**:**T0(篡改可检测、不可防)是产品主线与默认保证**,目标用户是个人开发者,agent 不会故意改自己的 hook,对抗型 agent 不是目标威胁。**T1(托管设置、沙箱 runner、hook 代起 verify、重定向锁、job 私有副本)降为实验特性**:代码保留、默认不启用,面向团队合规场景,个人用户无需配置,说明见 `docs/advanced-t1.md`。本文中 T1 相关章节均按"实验特性"阅读;`ballast doctor` 默认不再列缺失的 T1 组件(T0 主机上 `tier.level` 为 ok"T0(默认模式)"),`doctor --t1`、已声明 T1 或主机已锁定时才输出全部 `tier.*`;原生 Windows 的"请使用 WSL2"警告(`tier.windows_t0`)已去掉。详见 `docs/ballast-plan.md` 末尾"v0.6 定位调整"。
+
 ## 0. 标注约定
 
 | 标注 | 含义 |
@@ -108,7 +110,7 @@ archtest 的变化(`internal/archtest/archtest_test.go`):
 
 ---
 
-## 3. T1:层级判定、hook 代起 verify、沙箱化 runner(计划 B0)
+## 3. T1(实验特性):层级判定、hook 代起 verify、沙箱化 runner(计划 B0)
 
 ### 3.1 威胁模型回顾
 
@@ -522,10 +524,10 @@ origin=cli 时 git 的索引、对象与引用仍可写(测试里的 `git add`/`
 - 沙箱化环境(`lib.sh` 的重定向与 `guard_sandbox`);构建 ballast;`ballast install --client claude-code`(临时 `CLAUDE_CONFIG_DIR`);默认规则复制到用户规则文件;建一个临时 git 仓库(带 `.ballast/project.json`)。
 - 夹具 `scripts/boundary/t0-cases.json`:每行 `{id, client, tool, input, target, expect: "detected"|"gap", via}`。
   - **detected**:覆盖面与 `docs/trust-model.md` §2.1 "识别的写入"逐项一致——重定向 `> >> &> >|`;`tee`;`cp`/`mv`/`install`/`rsync` 的目标;`sed -i`;`perl -i`/`ruby -i`(含 `-pi`、`-pi.bak`);`git checkout [<rev>] -- <path>`、`git restore <path>`;`rm`、`truncate`、`dd of=`、`touch`、`ln`;PowerShell `Set-Content`/`Add-Content`/`Out-File`/`Remove-Item`/`Copy-Item -Destination`/`Move-Item -Destination`/`New-Item` 与 `>`;文件工具 Edit/MultiEdit/Write/NotebookEdit;Codex `apply_patch`(Update/Add/Delete/Move)、Cursor `Write`、Hermes `write_file`。目标覆盖 `~/.ballast/rules.json`、`~/.ballast/evidence/…`、`<repo>/.ballast/project.json`、`~/.claude/settings.json`,以及(v1.5.3)org 规则目录——默认 `no-tamper` 的路径表含三个平台默认托管目录下的 `ballast/**`,夹具用该平台的字面默认托管目录(`{{ORG_MANAGED}}`,只出现在合成 payload 里,hook 不写盘;沙箱里的 `BALLAST_MANAGED_DIR` 重定向到临时目录,任何静态规则路径都命名不了它)。
-  - **gap**:§2.1 "未覆盖的写法" 1–7 类每类至少 2 例(`python -c`、`node -e`、`./fix.sh`、`curl … | sh`、`patch`、`git apply`、`git reset --hard`、`mv <受保护文件> /tmp/x` 的源、`rm -rf ~/.claude`、`cp -r <目录> ~/` 覆盖父目录、`eval "$CMD"`(`rm -r ~/.ballast` 例外:`**/.ballast/**` 连目录本身一起匹配,会被检测,见 trust-model §2.1 第 5 类)、MCP 工具)。另有 `redir-*` 行(带 `env` 字段,hook 进程的 `CLAUDE_CONFIG_DIR`/`CODEX_HOME`/`HERMES_HOME` 指向别处):对重定向后配置根的写入必须被检测,同根下无关文件不被检测(对照)。
+  - **gap**:§2.1 "未覆盖的写法" 1–8 类每类至少 2 例(`python -c`、`node -e`、`./fix.sh`、`curl … | sh`、`patch`、`git apply`、`git reset --hard`、`mv <受保护文件> /tmp/x` 的源、`rm -rf ~/.claude`、`cp -r <目录> ~/` 覆盖父目录、`eval "$CMD"`(`rm -r ~/.ballast` 例外:`**/.ballast/**` 连目录本身一起匹配,会被检测,见 trust-model §2.1 第 5 类)、MCP 工具)。另有 `redir-*` 行(带 `env` 字段,hook 进程的 `CLAUDE_CONFIG_DIR`/`CODEX_HOME`/`HERMES_HOME` 指向别处):对重定向后配置根的写入必须被检测,同根下无关文件不被检测(对照)。
 - 每行把合成 payload 喂给真实 `ballast hook`,断言:detected ⇒ 审计中有 `rule_id:"no-tamper"` 的 hit 或 `would_*` 行,且 hook 退出码 0;gap ⇒ 没有该行。**gap 行若被检测到,脚本以非 0 退出并提示"覆盖面变了,请同步更新 trust-model §2.1"**,使脚本同时是缺口登记表。
 - 额外两项:手写一条伪造的 pass 记录(`S_end` 随意填)后 `ballast verify --check` 仍判过期(返回 10),因为新鲜要求 `S_end == C`;伪造者若先算出真实 `C` 再填进去则能骗过,这正是 T0"可检测、不可防"的边界,脚本把它记为 gap 行;ConfigChange 安装后,喂合成 ConfigChange payload(字段取自 M0b 样本)⇒ 审计有 `config_change` 行且 `protected:true`。
-- `accept-p2.sh` 调用它;计划三平台 CI 执行(CI 步骤待 `impl/ci-fix` 合入后接入,见 §11)。
+- `accept-p2.sh` 调用它;P2 步骤已接入三平台 CI(见 §10、§11)。
 
 ### 5.3 `scripts/boundary-t1.sh`(Linux 容器)
 
@@ -794,7 +796,7 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 
 ## 10. 集成验收:`scripts/accept-p2.sh`
 
-由 P2-CLI 编写,参数固定,任何断言失败即非 0;**计划**三平台 CI 执行(**v1.5.5 更正:`.github/workflows/ci.yml` 目前不含 `accept-p2.sh`、`sandbox-docker.sh`、`boundary-t0/t1.sh`,也没有任何 `BALLAST_REQUIRE_*`;接入归 `impl/ci-fix` 合入之后,见 §11 最后几行**)。容器与真实客户端部分在缺少前提时显式 SKIP,`CI=true` 加对应 `BALLAST_REQUIRE_*` 时失败:
+由 P2-CLI 编写,参数固定,任何断言失败即非 0;**P2 步骤已接入三平台 CI**(v0.6 合并 CI 修复分支后更正:`.github/workflows/ci.yml` 在 Linux 要求 Docker 运行 `accept-p2.sh`,另有 `Linux T1 沙箱(ubuntu-22.04)` job 运行完整 `boundary-t1.sh`;限制用户命名空间的主机上改为断言 fail-closed;历史口径见 §13 v1.5.5)。容器与真实客户端部分在缺少前提时显式 SKIP,`CI=true` 加对应 `BALLAST_REQUIRE_*` 时失败:
 
 1. `go build ./...`、`go vet ./...`、`GOOS=windows go vet ./...`、`go test ./internal/archtest`、`go test ./...`。
 2. `go test ./internal/redact -run '^$' -fuzz FuzzString -fuzztime 60s`。
@@ -883,7 +885,7 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 | `ballast replay` 曾对 `project.json` 用宽松解码 | **已处理(v1.5.5)** | `cmd_replay.go` 注入 `project.Loader`,未知字段等 ⇒ `project_invalid`,与真实 hook 一致(`TestReplayProjectJSONIsStrict`) |
 | 层级与锁的耗时门槛只在 `-bench` 的 guard 里 | **已处理(v1.5.5)** | `TestProbeBudget`、`TestLockedBudget`(多轮取最好值,`-race`/`-short` 跳过,不放宽门槛;v1.5.6:口径为挂钟时间,见 §10 第 9 条);仅 root 可跑的 `TestBwrapPathDirectoryMustBeTrusted` 由 `accept-p2.sh` 在 `BALLAST_DOCKER_USER=0:0` 下另跑一次并要求 PASS |
 | boundary-t1 的外网对照在无外网的容器里降为 SKIP | **已处理(v1.5.5)** | `runner_network` 的 deny/allow 改为对容器自己桥接地址(非回环)上的 HTTP 监听断言,不依赖外网;真实外网探测只作为有连通性时的额外项(stderr 记一行,不计 SKIP) |
-| P2 的 CI 步骤(`BALLAST_REQUIRE_DOCKER=1` 的 sandbox-docker/boundary-t1、macOS 上 `CI=true` 的 sandbox-exec IPC 用例、bench 12–14)尚未接入 CI | **待办**(`.github/workflows/**` 归 `impl/ci-fix`) | `impl/ci-fix` 合入后在其结果上追加这些步骤(`accept-p2.sh` 的 SKIP 开关已备好);P2-SANDBOX 的 macOS 取证条件(§11 IPC 行)在此之前仍算未通过 |
+| P2 的 CI 步骤(`BALLAST_REQUIRE_DOCKER=1` 的 sandbox-docker/boundary-t1、macOS 上 `CI=true` 的 sandbox-exec IPC 用例、bench 12–14) | **已接入 CI(v0.6 更正)** | Linux 的 `accept-p2` 要求 Docker,`Linux T1 沙箱(ubuntu-22.04)` job 运行完整 `boundary-t1.sh`;macOS 的 sandbox-exec 用例以 `CI=true` 运行。macOS IPC 用例的【未核验】标注保持原样,等待 CI 证据(§11 IPC 行) |
 | 高负载机器上 `accept-p2.sh` 第 1 项偶发 `watchdog expired after 150ms`(`TestAuditLint` 的 `shadow hit`),以及 `psparse` 对抗预算用例(19–22ms 对 20ms)偶发超时 | 已知抖动,**门槛不放宽**。v1.5.5:`internal/cli` 的 e2e(真实二进制子进程)不再依赖 150ms 墙钟 | e2e 测试用 `-tags ballast_fault` 构建二进制,经只在该构建里生效的 `BALLAST_TEST_WATCHDOG`(Go duration,e2e 用 `5s`)放宽看门狗;生产默认 `hook.DefaultWatchdog=150ms` 与 30ms 谓词余量不变,生产构建忽略该变量(`TestProductionIgnoresTestSwitches`)。150ms 与 `psparse` 的预算都是有意的;`scripts/fault.sh`、`accept-m*.sh`、bench 仍跑生产二进制。`psparse` 失败时先单独重跑,不要靠放宽预算过关 |
 | job 临时目录的基目录:origin=hook 的 `Spec.TmpDir` 曾建在继承来的 `$TMPDIR` 之下(macOS),该变量来自 Claude Code 进程,runner 没有选择它;若其目录在 agent 自己的 Claude Bash 沙箱里可写,agent 能在测试运行期间改动 `TMPDIR`/缓存里的中间产物,私有副本的保护被绕开(minor) | **已处理(v1.5.6)**;前提"agent 自己的沙箱可写继承的 `$TMPDIR`"是否成立【需凭据】,仍未核验,但设计不再依赖它 | origin=hook 的临时目录改为 `~/.ballast/work/<job>/tmp`(私有副本的同级;`sandbox.TreeTmp`、`ValidateSpec` 把它作为 `~/.ballast` 之内第二个可写例外,darwin profile 在 `~/.ballast` 拒绝之后单独放行);`runner` 测试断言 hook 来源的 `TmpDir` 不在继承的 `$TMPDIR` 之下,`sandbox` 集成用例(darwin)断言该目录可写而同一 job 目录的其余部分与别的 job 目录不可写。origin=cli(人在终端手动运行)仍取 `$TMPDIR`,它在真实工作树上执行、不受私有副本保护(trust-model §2.3 ③)。Linux 不受影响(bwrap 私有 tmpfs `/tmp`) |
 | 托管层 `allowUnsandboxedCommands:false` 压制项目层与本地层 `sandbox.*` 键(含 `excludedCommands`) | **M0b mock 观测,credentials 模式未确认**(v1.5.6 起 trust-model §2.2、§2.3、§4.4 按此陈述;此前写成"能写入") | 条件 6 与 `weakened_project:"deny"` 的保守判定**不变**;boundary-t1 `--with-credentials` 的 `npm run` 用例改用 `npm:*` 并断言未写入,以"托管层缺该键"的同一仓库能写入作正向对照(对照不成立 ⇒ SKIP,不记通过) |
@@ -914,9 +916,13 @@ P2-PS、P2-HERMES、P2-CLIENTS ─────────────┘
 
 ## 13. 修订记录
 
+### v0.6 定位调整(2026-10-17,文档层,未改契约版本号)
+
+项目负责人裁决 T0 为产品主线与默认保证,T1 降为实验特性(代码保留、默认不启用)。本文 §3 的设计不变,按"实验特性"阅读。随之的行为变更:`doctor` 在 T0 主机上只输出 ok 的 `tier.level`("T0(默认模式)",无缺失组件、无 Fix),其余 `tier.*` 行仅在已声明 T1、主机已锁定或 `doctor --t1` 时输出;`tier.windows_t0` 删除;`org render` 与仅服务 T1 的参数在帮助里标 [实验]。T0 主机上 PreToolUse 不拦截规范 `ballast verify <name>`(测试锁定)。新增 trust-model §2.1 第 8 类缺口(客户端配置根重定向的残余)。逐项见 `docs/ballast-plan.md` "v0.6 定位调整"。
+
 ### v1.5.7(2026-10-16,集成后第 3 轮系统审计)
 
-逐条核实后处理(15 条全部成立,没有"不成立"项;其中一条 major 以设计取舍登记并标【未闭合】)。未改动已实现的导出签名:追加了 `layout.Layout.GCLock`、`install.EntrySpec.CodexHomeReal`,`scripts/bench` 的场景 `13` 拆为 `13a`/`13b`。
+逐条核实后处理(15 条全部成立,没有"不成立"项;两条 major 均已修复)。未改动已实现的导出签名:追加了 `layout.Layout.GCLock`、`install.EntrySpec.CodexHomeReal`,`scripts/bench` 的场景 `13` 拆为 `13a`/`13b`。
 
 | 项 | 级别 | 处理 | 涉及 |
 |---|---|---|---|

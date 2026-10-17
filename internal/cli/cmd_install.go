@@ -211,8 +211,9 @@ func clientOfCheck(ck install.Check) model.ClientID {
 
 func runDoctor(a *app, c *command, args []string) int {
 	fs := newFlagSet("doctor")
-	var asJSON bool
+	var asJSON, withT1 bool
 	fs.BoolVar(&asJSON, "json", false, "")
+	fs.BoolVar(&withT1, "t1", false, "")
 	pos, err := parseArgs(fs, args)
 	if err != nil {
 		return a.usageErr(c, "%v", err)
@@ -237,7 +238,7 @@ func runDoctor(a *app, c *command, args []string) int {
 	}
 	dopt := install.DoctorOptions{
 		Layout: a.lay, FS: a.fs, Env: a.env,
-		Self: self, Cwd: a.cwd,
+		Self: self, Cwd: a.cwd, T1: withT1,
 		SandboxAvailable: a.sandboxAvailable,
 		LintRules: func() []model.Diagnostic {
 			inputs, err := a.stackInputs()

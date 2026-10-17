@@ -247,44 +247,61 @@ func TestReportNoAudit(t *testing.T) {
 	}
 }
 
-// TestDoctorChecksRepoSandbox: doctor is wired with the working directory,
-// so a project layer that weakens the sandbox is reported (warn on a T0
-// host) and the redirect-lock / tier checks are present.
+// TestDoctorTierChecks: v0.6 positioning. On a T0 host that has not opted into
+// the experimental T1, doctor reports exactly one tier row (tier.level, ok,
+// "T0(默认模式)", no fix) even when a project layer weakens the sandbox; with
+// --t1 it is wired with the working directory, so the weakened project layer
+// is reported (warn on a T0 host). Native Windows has no T1 rows either way.
 func TestDoctorTierChecks(t *testing.T) {
 	s := newSandbox(t)
 	repo := s.newRepo("proj")
 	writeFile(t, filepath.Join(repo, ".claude", "settings.json"), `{"sandbox":{"excludedCommands":["npm"]}}`)
-	r := s.mustExit(0, repo, "", "doctor", "--json")
-	var doc struct {
-		Tier   string `json:"tier"`
-		Checks []struct {
-			ID      string `json:"id"`
-			Status  string `json:"status"`
-			Message string `json:"message"`
-		} `json:"checks"`
+	type check struct {
+		ID      string `json:"id"`
+		Status  string `json:"status"`
+		Message string `json:"message"`
+		Fix     string `json:"fix"`
 	}
-	if err := json.Unmarshal([]byte(r.stdout), &doc); err != nil {
-		t.Fatal(err)
+	run := func(args ...string) (string, map[string]check) {
+		r := s.mustExit(0, repo, "", append([]string{"doctor", "--json"}, args...)...)
+		var doc struct {
+			Tier   string  `json:"tier"`
+			Checks []check `json:"checks"`
+		}
+		if err := json.Unmarshal([]byte(r.stdout), &doc); err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]check{}
+		for _, c := range doc.Checks {
+			got[c.ID] = c
+		}
+		return doc.Tier, got
 	}
-	if doc.Tier != "T0" {
-		t.Errorf("tier = %q, want T0 in the test sandbox", doc.Tier)
+
+	tierName, got := run()
+	if tierName != "T0" {
+		t.Errorf("tier = %q, want T0 in the test sandbox", tierName)
 	}
-	got := map[string]string{}
-	for _, c := range doc.Checks {
-		got[c.ID] = c.Status
+	if c := got["tier.level"]; c.Status != "ok" || c.Message != "T0(默认模式)" || c.Fix != "" {
+		t.Errorf("default tier.level = %+v", c)
+	}
+	for id := range got {
+		if strings.HasPrefix(id, "tier.") && id != "tier.level" {
+			t.Errorf("T0 default emitted %s", id)
+		}
+	}
+
+	_, got = run("--t1")
+	if _, ok := got["tier.level"]; !ok {
+		t.Errorf("--t1: no tier.level check: %v", got)
 	}
 	if runtime.GOOS == "windows" {
-		// Native Windows is T0 only: no per-component tier checks, just the
-		// T0 notice (a warning).
-		if got["tier.windows_t0"] != "warn" || got["tier.repo_sandbox_weakened"] != "" {
-			t.Errorf("windows: tier.windows_t0 = %q, tier.repo_sandbox_weakened = %q, want warn and absent (checks: %v)",
-				got["tier.windows_t0"], got["tier.repo_sandbox_weakened"], got)
+		// Native Windows is T0 only: no per-component tier checks.
+		if _, ok := got["tier.windows_t0"]; ok || got["tier.repo_sandbox_weakened"].ID != "" {
+			t.Errorf("windows --t1: tier.windows_t0 / tier.repo_sandbox_weakened must be absent (checks: %v)", got)
 		}
-	} else if got["tier.repo_sandbox_weakened"] != "warn" {
-		t.Errorf("tier.repo_sandbox_weakened = %q, want warn (checks: %v)", got["tier.repo_sandbox_weakened"], got)
-	}
-	if _, ok := got["tier.level"]; !ok {
-		t.Errorf("no tier.level check: %v", got)
+	} else if got["tier.repo_sandbox_weakened"].Status != "warn" {
+		t.Errorf("--t1: tier.repo_sandbox_weakened = %q, want warn (checks: %v)", got["tier.repo_sandbox_weakened"].Status, got)
 	}
 }
 

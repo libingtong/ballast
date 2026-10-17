@@ -79,7 +79,7 @@ set_org() {
 doctor_json() {
   local dir=$1
   shift
-  (cd "$dir" && as_agent "$@" "$BL" doctor --json 2>/dev/null)
+  (cd "$dir" && as_agent "$@" "$BL" doctor --json --t1 2>/dev/null)
 }
 doctor_tier() { printf '%s' "$1" | jq -r '.tier'; }
 doctor_check() { printf '%s' "$1" | jq -r --arg id "$2" '[.checks[]|select(.id==$id)][0]|"\(.status)|\(.message)"'; }
@@ -762,7 +762,7 @@ t_passwd_missing() {
   local j before after
   install -d -o 4242 -g 4242 -m 0755 /home/ghost
   cp -a "$ORG" /tmp/org.nohome
-  j=$(cd /home/ghost && as_uid 4242 /home/ghost "$BL" doctor --json 2>/dev/null)
+  j=$(cd /home/ghost && as_uid 4242 /home/ghost "$BL" doctor --json --t1 2>/dev/null)
   has "t1-passwd-missing 1: doctor tier.locked_home is fail" "$(doctor_check "$j" tier.locked_home)" "fail|"
   has "t1-passwd-missing 1: and the hint names home_root" "$(doctor_check "$j" tier.locked_home)" "home_root"
   SEQ=$((SEQ + 1))
@@ -773,14 +773,14 @@ t_passwd_missing() {
   eq "t1-passwd-missing 1: and prints nothing" "$HOOK_OUT" ""
   eq "t1-passwd-missing 1: nothing was created under /home/ghost/.ballast" "$([ -e /home/ghost/.ballast ] && echo present || echo absent)" "absent"
   render_org --home-root /home
-  j=$(cd /home/ghost && as_uid 4242 /home/ghost "$BL" doctor --json 2>/dev/null)
+  j=$(cd /home/ghost && as_uid 4242 /home/ghost "$BL" doctor --json --t1 2>/dev/null)
   has "t1-passwd-missing 2: with home_root, tier.locked_home passes via home_root" "$(doctor_check "$j" tier.locked_home)" "home_root"
   has "t1-passwd-missing 2: pass" "$(doctor_check "$j" tier.locked_home)" "ok|"
   eq "t1-passwd-missing 2: the judgement is T1" "$(doctor_tier "$j")" "T1"
-  j=$(cd /tmp && as_uid 4242 /tmp/ghost "$BL" doctor --json 2>/dev/null)
+  j=$(cd /tmp && as_uid 4242 /tmp/ghost "$BL" doctor --json --t1 2>/dev/null)
   has "t1-passwd-missing 3: HOME=/tmp/ghost (not under home_root) => fail" "$(doctor_check "$j" tier.locked_home)" "fail|"
   chmod 0777 /home/ghost
-  j=$(cd /home/ghost && as_uid 4242 /home/ghost "$BL" doctor --json 2>/dev/null)
+  j=$(cd /home/ghost && as_uid 4242 /home/ghost "$BL" doctor --json --t1 2>/dev/null)
   has "t1-passwd-missing 4: a world-writable home => fail" "$(doctor_check "$j" tier.locked_home)" "fail|"
   chmod 0755 /home/ghost
   render_org

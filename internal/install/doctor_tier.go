@@ -101,16 +101,16 @@ func redirectVars(env sys.Env) []string {
 // tierChecks implements the tier.* doctor checks (docs/p2-design.md §3.5):
 // tier.level (tier.Detect, every Missing id listed), tier.declared_mismatch,
 // tier.runner_sandbox, tier.redirect_ignored, tier.locked_home,
-// tier.repo_sandbox_weakened and tier.binary_hardening. Windows is T0 only
-// and keeps the two pre-P2 rows.
+// tier.repo_sandbox_weakened and tier.binary_hardening.
+//
+// v0.6 positioning: T0 is the product guarantee and the default, T1 is an
+// experimental feature. On a T0 host that has not opted into T1 (no org.json
+// declaring T1, no locked host, no `doctor --t1`) tier.level is a plain OK
+// "T0(默认模式)" and no other tier.* row is emitted. Native Windows is T0
+// only and always takes that shape.
 func tierChecks(opt DoctorOptions, fsys sys.FS, lay layout.Layout, goos, self string) []Check {
 	if goos == "windows" {
-		return []Check{
-			{ID: "tier.level", Status: CheckOK,
-				Message: "T0 (best effort): tampering is detectable but not preventable on native Windows"},
-			{ID: "tier.windows_t0", Status: CheckWarn,
-				Message: "原生 Windows 仅支持 T0;如需 T1 请使用 WSL2"},
-		}
+		return []Check{t0DefaultLevel()}
 	}
 	var info model.TierInfo
 	if opt.Tier != nil {
@@ -124,6 +124,12 @@ func tierChecks(opt DoctorOptions, fsys sys.FS, lay layout.Layout, goos, self st
 	t1 := info.Tier == model.TierT1
 	org, locked := lockState(opt, fsys, goos)
 
+	// T1 detail is shown only when the user opted in: --t1, a trusted
+	// org.json declaring T1, a locked host, or a host already judged T1.
+	if !(opt.T1 || t1 || info.Declared == model.TierT1 || locked) {
+		return []Check{t0DefaultLevel()}
+	}
+
 	out := []Check{tierLevel(info, lay, opt.Env)}
 	out = append(out,
 		tierDeclared(info),
@@ -134,6 +140,12 @@ func tierChecks(opt DoctorOptions, fsys sys.FS, lay layout.Layout, goos, self st
 		tierBinaryHardening(fsys, goos, self, t1),
 	)
 	return out
+}
+
+// t0DefaultLevel is the tier.level row of a host that has not opted into the
+// experimental T1: T0 is the default guarantee, nothing is "missing".
+func t0DefaultLevel() Check {
+	return Check{ID: "tier.level", Status: CheckOK, Message: "T0(默认模式)"}
 }
 
 func lockState(opt DoctorOptions, fsys sys.FS, goos string) (tier.OrgConfig, bool) {

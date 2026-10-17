@@ -40,7 +40,7 @@ type caseRow struct {
 	// Env overrides environment variables of the hook process for this row
 	// (placeholders allowed); used to redirect the client config roots.
 	Env map[string]string `json:"env,omitempty"`
-	// Class is the trust-model §2.1 "未覆盖的写法" class (1-7) of a gap row.
+	// Class is the trust-model §2.1 "未覆盖的写法" class (1-8) of a gap row.
 	Class int `json:"class,omitempty"`
 }
 

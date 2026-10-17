@@ -33,7 +33,7 @@
 #     log, and no keychain or ~/.claude* file is read.
 #
 # Docker missing: SKIP (exit 0), unless BALLAST_REQUIRE_DOCKER=1 (the Linux CI
-# job is to set it once impl/ci-fix lands, docs/p2-design.md section 11): then FAIL. Build-time network overrides: BALLAST_T1_BUILD_PROXY (or the
+# jobs set it; the P2 steps are wired into CI, docs/p2-design.md section 11): then FAIL. Build-time network overrides: BALLAST_T1_BUILD_PROXY (or the
 # caller's HTTPS_PROXY), BALLAST_DEBIAN_MIRROR. BALLAST_T1_IMAGE=<tag> uses an
 # existing image (needs bwrap, git, python3, jq, util-linux, user agent uid 1000)
 # instead of building one. BALLAST_T1_EXTERNAL_URL overrides the external

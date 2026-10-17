@@ -10,7 +10,8 @@
 #   * `ballast org render` prints the T1 template as ONE pure JSON document
 #     (the managed-settings fragment; --part org-json prints org.json
 #     alone) and refuses --write for non-admins; `ballast doctor` reports
-#     the tier honestly
+#     T0 as the ok default mode and prints the experimental T1 detail only
+#     with --t1
 #
 # The container-based T1 boundary tests (boundary-t1.sh / boundary-t0.sh) are
 # P2 in the plan and are not part of this script. No arguments.
@@ -99,6 +100,12 @@ section "doctor"
 bl doctor
 expect_rc "doctor on a machine with nothing installed only warns" 0
 expect_out_has "doctor states the tier" "层级: T0"
+expect_out_has "v0.6: T0 is the default mode (ok, not a warning)" "T0(默认模式)"
+expect_out_lacks "v0.6: the default does not list missing T1 components" "missing T1 components"
+expect_out_lacks "v0.6: the default emits no T1 detail rows" "tier.runner_sandbox"
+bl doctor --t1
+expect_rc "doctor --t1 (experimental T1 detail) only warns" 0
+expect_out_has "doctor --t1 lists the T1 detail rows" "tier.runner_sandbox"
 expect_out_has "and that CI is the final arbiter" "CI 是最终裁判"
 
 finish

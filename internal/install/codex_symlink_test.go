@@ -78,3 +78,55 @@ func TestCodexTrustKeyUsesCanonicalCodexHome(t *testing.T) {
 	mustInstall(t, opt)
 	mustStatus(t, byID(e.doctor(opt.Binary, nil, nil)), "codex.trust", CheckOK)
 }
+
+// CODEX_HOME that does not exist yet (the install creates it): the deepest
+// existing ancestor is resolved and the rest appended, also when HOME itself is
+// a symbolic link, so the trust key names the path Codex will canonicalize to.
+func TestCodexHomeRealResolvesTheDeepestExistingAncestor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs privileges on Windows")
+	}
+	e := newTenv(t)
+	root, err := filepath.EvalSymlinks(e.sb.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	realHome := filepath.Join(root, "realhome")
+	linkHome := filepath.Join(root, "linkhome")
+	if err := os.MkdirAll(realHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realHome, linkHome); err != nil {
+		t.Fatal(err)
+	}
+	// helper-level cases
+	for _, c := range []struct{ in, want string }{
+		{filepath.Join(linkHome, ".codex"), filepath.Join(realHome, ".codex")},
+		{filepath.Join(linkHome, "a", "b", ".codex"), filepath.Join(realHome, "a", "b", ".codex")},
+		{linkHome, realHome},
+	} {
+		got, err := evalSymlinksDeepest(e.fs, c.in)
+		if err != nil || got != c.want {
+			t.Errorf("evalSymlinksDeepest(%s) = %q, %v; want %q", c.in, got, err, c.want)
+		}
+	}
+
+	// end to end: HOME is a link, CODEX_HOME=<link>/.codex does not exist.
+	e.lay.CodexDir = filepath.Join(linkHome, ".codex")
+	opt := e.opts(model.ClientCodex)
+	opt.Force = true
+	opt.CodexTrust = true
+	opt.Binary = filepath.Join(root, "ballast")
+	e.write(opt.Binary, "#!/bin/sh\n")
+	if err := os.Chmod(opt.Binary, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustInstall(t, opt)
+	cfg := e.read(filepath.Join(realHome, ".codex", "config.toml"))
+	if !strings.Contains(cfg, "[hooks.state.'"+filepath.Join(realHome, ".codex", "hooks.json")+":") {
+		t.Errorf("trust keys must name the resolved path under the real HOME:\n%s", cfg)
+	}
+	if strings.Contains(cfg, linkHome) {
+		t.Errorf("trust keys must not name the symlinked HOME %s:\n%s", linkHome, cfg)
+	}
+}

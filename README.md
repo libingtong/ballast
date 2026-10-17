@@ -9,7 +9,7 @@ Ballast 是给 AI 编码客户端用的**行为策略引擎**:把一小组关键
 - **热路径很轻**:每次 hook 调用 p95 不超过 30ms,不联网、不调 LLM,任何异常都放行(stdout 为空、退出码 1)。
 - **可审计、可回放**:`stats` 看命中,`replay` 用历史 transcript 离线评估规则。
 
-> 状态:接口契约 v2.0(P2)已冻结,U1 到 U12 与 P2 各单元的实现已合入集成分支。P2 加入了层级判定与重定向锁、hook 代起 verify、沙箱化 runner、脱敏上报文件、ConfigChange 审计与两个边界验收脚本。设计依据见 [`docs/ballast-plan.md`](docs/ballast-plan.md)(末尾"v0.5 P2 计划"优先)与 [`docs/p2-design.md`](docs/p2-design.md),接口契约见 [`docs/architecture.md`](docs/architecture.md)。
+> 状态:接口契约 v2.0(P2)已冻结,U1 到 U12 与 P2 各单元的实现已合入集成分支。**产品主线与默认保证是 T0**(篡改可检测、不可防):个人开发者安装后即可用,不需要任何托管部署。P2 加入的层级判定与重定向锁、hook 代起 verify、沙箱化 runner、脱敏上报文件与 ConfigChange 审计中,T1 相关部分(托管设置、沙箱 runner、hook 代起 verify、重定向锁)自 v0.6 起是**实验特性**,代码保留、默认不启用,见 [`docs/advanced-t1.md`](docs/advanced-t1.md)。设计依据见 [`docs/ballast-plan.md`](docs/ballast-plan.md)(末尾"v0.6 定位调整"与"v0.5 P2 计划")与 [`docs/p2-design.md`](docs/p2-design.md),接口契约见 [`docs/architecture.md`](docs/architecture.md)。
 
 ## 目录
 
@@ -30,24 +30,23 @@ Ballast 是给 AI 编码客户端用的**行为策略引擎**:把一小组关键
 
 ## 能力边界
 
-先说清楚 Ballast **不能**做什么,再谈它能做什么。
+Ballast 的默认保证是 **T0**,面向个人开发者,安装即得,不需要管理员、托管设置或沙箱。完整的信任模型见 [`docs/trust-model.md`](docs/trust-model.md)。
 
-**CI 是最终裁判。** 会话内的规则只负责引导 agent 的行为、减少无效往返;它们不保证交付质量。`ballast doctor` 每次都会重申这一点。真正决定一份改动能不能合入的,应该是服务端 CI。
+**T0 提供的保证:篡改可检测、不可防。** agent 与 Ballast 以同一用户权限运行,理论上能改写规则和状态文件;Ballast 不假装能阻止这一点,而是保证这类行为**会被发现**:
 
-Ballast 把保证强度分成两级(详见 [`docs/trust-model.md`](docs/trust-model.md)):
-
-| 层级 | 适用条件 | 能兑现的保证 |
-|---|---|---|
-| **T1 托管强制** | macOS / Linux / WSL2,且组织用托管设置部署了 Ballast | 设计目标是 agent 不可写规则、状态、证据和二进制。托管层的合并与强制行为已在 Linux 容器里用 Claude Code 2.1.300 取证(M0b),沙箱化 runner 在真实 bwrap 下验收(`scripts/boundary-t1.sh`);**让真实模型 agent 去尝试逃逸的部分仍是【需凭据】,macOS 与 Windows 的托管路径没有取过证** |
-| **T0 尽力而为** | 个人安装、没有托管部署,或原生 Windows | **篡改可检测、不可防**:agent 与 Ballast 同一用户权限,能改规则和状态文件;`no-tamper` 规则与审计只能让这种行为被发现 |
-
-个人安装默认是 T0。`ballast doctor` 会输出当前层级和缺失的 T1 组件;想要 T1,让管理员用 `ballast org render` 与 `ballast org render --part org-json` 分别生成托管设置模板与 `org.json` 自行下发(`--write --i-am-admin` 可由 root 代写)。已写入 root 所有的 `org.json` 的主机称为"已锁定":生产构建忽略 `BALLAST_HOME` 等重定向变量,家目录取自 passwd。
+- **检测**:默认规则 `no-tamper` 检查文件工具和 shell 对 Ballast 规则、状态、证据和客户端 hook 配置的写入,命中写入审计;`ballast doctor` 与 `ballast audit lint` 暴露配置与日志的异常。能识别什么、识别不了什么,由 `scripts/boundary-t0.sh` 作为可执行登记表逐条验证(见"已知局限")。
+- **注入**:把一小组关键规则在会话开始和每次提示时持续注入,让 agent 始终看到约束。
+- **证据**:"测试通过"只以 `ballast verify` 记录的退出码和内容快照为准,不解析输出;快照与待提交内容不一致就判为过期。
+- **审计**:每次规则命中、诊断和 verify 结果都留下记录,可用 `stats` 查看、用 `replay` 离线重放。
+- **最终把关**:**git pre-commit 模板与服务端 CI 才是最终把关。** 会话内的规则只负责引导 agent 的行为、减少无效往返,不保证交付质量;真正决定一份改动能不能合入的,应该是服务端 CI。`ballast doctor` 每次都会重申这一点。
 
 其他边界:
 
 - hook 一旦把决策写到 stdout,决策即生效;之后进程即使崩溃也不撤销。
 - 磁盘写满会使强制失效(hook 按"任何异常都放行"设计),审计和 `doctor` 会告警。
 - "新鲜证据"只看**已跟踪文件**的内容快照:测试依赖了未跟踪文件时,本地可能判为新鲜而 CI 失败,这类情况交给 CI 兜底。
+
+**T1(实验特性)**:面向团队合规场景的托管强制模式(托管设置、沙箱 runner、hook 代起 verify),个人用户无需配置,默认不启用。详见 [`docs/advanced-t1.md`](docs/advanced-t1.md)。
 
 ## 支持的客户端
 
@@ -84,7 +83,7 @@ ballast install --client claude-code --dry-run    # 只打印 unified diff,不�
 ballast uninstall --dry-run                       # 预览卸载
 ballast uninstall --client codex                  # 卸载某个客户端
 ballast uninstall                                 # 等价于 --all,以 manifest 为准
-ballast doctor                                    # 自检:层级、各客户端状态、规则 lint
+ballast doctor                                    # 自检:各客户端状态、规则 lint、层级(T0 为默认模式)
 ```
 
 每个客户端的写入位置:
@@ -311,26 +310,26 @@ git 在提交阶段会把 `GIT_INDEX_FILE` 指向真正要提交的索引,`commi
 | `ballast test-rules <文件\|目录>...` | 运行规则内的 examples |
 | `ballast config show [--explain]` | 显示当前生效的 org / repo / user 三层规则 |
 | `ballast init` | 探测技术栈,写入 `.ballast/project.json` |
-| `ballast verify` / `--status` / `--check` / `--foreground` | 后台运行验证、查询结果、检查新鲜度。T1 主机上,agent 运行的规范 `ballast verify <name>` 由 hook 在沙箱外代起(hook 给出 job id,`--status <job id>` 查询) |
+| `ballast verify` / `--status` / `--check` / `--foreground` | 后台运行验证、查询结果、检查新鲜度。[实验] 仅在已部署 T1 的主机上,agent 运行的规范 `ballast verify <name>` 才由 hook 在沙箱外代起(hook 给出 job id,`--status <job id>` 查询);T0 主机上不拦截,原样后台运行 |
 | `ballast stats` / `ballast rules promote <id> --to deny` | 命中统计、抽样复核、升级动作档位 |
 | `ballast replay <transcript>` | 对历史 transcript 离线回放规则 |
 | `ballast audit lint` | 检查审计日志格式 |
 | `ballast report --out <文件> [--since 30d] [--force]` | 把审计日志脱敏聚合成一个**本地**文件(只含计数、枚举与分桶数值,不含 id、路径、命令文本;非内置规则 id 只输出哈希);默认不运行,不联网,不发送任何数据;分享前请自行检查 |
-| `ballast install --client <id>` / `uninstall` / `doctor` | 安装、卸载、自检(层级 T0 / T1 与各客户端状态) |
-| `ballast org render [--part managed-settings\|org-json] [--home-root <目录>] [--write --i-am-admin]` | stdout 恒为单个合法 JSON:缺省输出组织托管设置模板(T1),`--part org-json` 输出 `org.json`,均可直接重定向成文件;风险提示写 stderr;`--write` 由 root 把两个文件各写入托管目录 |
+| `ballast install --client <id>` / `uninstall` / `doctor [--t1]` | 安装、卸载、自检(各客户端状态;T0 为默认模式)。`doctor --t1` [实验] 额外输出 T1 的全部 `tier.*` 检查,已声明 T1 或主机已锁定时自动输出 |
+| `ballast org render [--part managed-settings\|org-json] [--home-root <目录>] [--write --i-am-admin]` | **[实验]** 仅服务于 T1:stdout 恒为单个合法 JSON,缺省输出组织托管设置模板,`--part org-json` 输出 `org.json`;个人用户无需使用,见 [`docs/advanced-t1.md`](docs/advanced-t1.md) |
 
 退出码约定见 [`docs/architecture.md` §7](docs/architecture.md)。
 
 ## 已知局限
 
-- **T0 只能检测篡改,不能防止**(`scripts/boundary-t0.sh` 是这条边界的可执行登记表:被检测的写法必须命中,登记的缺口一旦被检测到脚本就失败,提示同步 trust-model);T1 的托管层行为已在 Linux 容器里取证,但需要真实模型调用的部分仍是【需凭据】,且**T1 证据的保证是全机范围的**——主机上任何一个削弱沙箱的项目层都能绕过 runner(`weakened_project:"deny"` 缺省拒绝这类会话的全部工具调用),见 [`docs/trust-model.md`](docs/trust-model.md) §2.3。
+- **T0 只能检测篡改,不能防止**(`scripts/boundary-t0.sh` 是这条边界的可执行登记表:被检测的写法必须命中,登记的缺口一旦被检测到脚本就失败,提示同步 trust-model)。这是产品的默认保证与有意的取舍:目标用户是个人开发者,agent 不会故意改自己的 hook;需要托管强制的团队合规场景见实验特性 [`docs/advanced-t1.md`](docs/advanced-t1.md)(其证据保证是全机范围的、真实模型逃逸测试仍是【需凭据】,见 [`docs/trust-model.md`](docs/trust-model.md) §2.3)。
 - **Codex、Cursor 的 payload 字段与输出协议未经 Ballast 自己取证**(M0a 只覆盖 Claude Code),安装后的行为以 `ballast doctor` 与 `ballast lint` 的警告为准。Hermes 做过离线核验(`hermes hooks test`:形状、解析、阻断语义),**真实 agent 的触发时机未核验**。Codex 的 hook 只在交互式 TUI 触发;Cursor 的 Stop 与 Hermes 的 `pre_verify` 都只能续跑;Hermes 只有 `pre_tool_call` 能拦截。
 - **PowerShell 只做保守分词**,覆盖面窄于 bash;无法分词时按"不确定"处理(放行并写审计)。
 - **`git add … && git commit …` 写在同一条命令里**会被判为证据过期(Ballast 不模拟同一命令里前序节点的副作用)。请分两次执行。
 - **新鲜度只看已跟踪文件**。新建的文件要先 `git add` 再 `verify`;测试依赖未跟踪文件的情况交给 CI。
 - **shell 的读写目标只覆盖列出的常见命令**,`no-tamper` 因此只能检测、不能保证。会被识别的写入:重定向、`tee`、`cp`/`mv`/`install`/`rsync` 的目标、`sed -i`、`perl -i`/`ruby -i`、`git checkout [<rev>] -- <path>`、`git restore <path>`、`rm`、`truncate`、`dd of=`、`touch`、`ln`。**未覆盖**(尽力列举,完整清单见 [`docs/trust-model.md`](docs/trust-model.md) §2.1):语言运行时内部的写入(`python -c "open(...).write()"`、`node -e`、`php -r`、不带 `-i` 的 `perl -e`/`ruby -e`、`gawk -i inplace`、`yq -i`);先写脚本再执行或经管道交给解释器;`patch`、`git apply`、`ed`/`vim -es`、`curl -o`/`wget -O`、`tar -x`/`unzip`、`find -delete`/`-exec`、`xargs` 间接调用;`git reset --hard`、`git stash`、`git switch`/`git checkout <分支>`、`git merge`/`pull`、不带 `--` 的 `git checkout <path>`;命令词是变量或 `eval`。`find … | xargs cat` 之类的读取不计入"已读",只会让 `read-before-edit` 更严,不会更松。
 - **`git -c core.hooksPath=<路径> commit` 能绕过 git hooks**(包括 `hooks/pre-commit` 模板),默认的 `no-skip-verify` 只匹配 `--no-verify` / `-n`,不拦它:DSL 里 `flags` 与 `args_regex` 是 AND,无法在不误报提交说明的前提下并入同一条规则,理由见 [`docs/pinrule-mapping.md`](docs/pinrule-mapping.md) §2.6。`evidence-before-commit` 不受影响:提交前仍要有一致的 `ballast verify` 记录,与 hooks 是否运行无关。
-- **`no-tamper` 对重定向的客户端配置根:只认 hook 进程环境里的绝对路径值**:引擎在编译 `~/.claude/…`、`~/.codex/…`、`~/.hermes/…` 这三类路径模式时,会同时按 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`HERMES_HOME`(及其符号链接解析后的形式)展开,与字面形式并存,所以重定向后的 `settings*.json`、`hooks.json`、`config.toml`、`config.yaml` 同样受检测。覆盖不到的:变量值是相对路径(客户端相对它自己的 cwd 解析,hook 无从得知)、hook 进程环境里没有该变量而客户端加载时有、`ballast replay` 离线重放(不带这些变量)。T1 下 `CLAUDE_CONFIG_DIR` 重定向仍直接判 T0;见 [`docs/trust-model.md`](docs/trust-model.md) §2.1 与 [`docs/dsl-semantics.md`](docs/dsl-semantics.md) 的路径宏一节。
+- **`no-tamper` 对重定向的客户端配置根:只认 hook 进程环境里的绝对路径值**:引擎在编译 `~/.claude/…`、`~/.codex/…`、`~/.hermes/…` 这三类路径模式时,会同时按 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`HERMES_HOME`(及其符号链接解析后的形式)展开,与字面形式并存,所以重定向后的 `settings*.json`、`hooks.json`、`config.toml`、`config.yaml` 同样受检测。覆盖不到的(trust-model §2.1 第 8 类缺口,`scripts/boundary/t0-cases.json` 有对应的 gap 行):变量值是相对路径(客户端相对它自己的 cwd 解析,hook 无从得知)、hook 进程环境里没有该变量而客户端加载时有、`ballast replay` 离线重放(不带这些变量)。见 [`docs/trust-model.md`](docs/trust-model.md) §2.1 与 [`docs/dsl-semantics.md`](docs/dsl-semantics.md) 的路径宏一节。
 - **`no-tamper` 不拦"搬走"**:`mv ~/.ballast/rules.json /tmp/x` 的源路径不算写入目标(只有目标算),所以不命中;这是 T0 只检测不防止的一个具体表现,见 [`docs/trust-model.md`](docs/trust-model.md)。
 - `flags` 匹配不知道哪些选项带值(`git commit -m -n` 会把 `-n` 当作标志)。
 - Codex 上字符串形式的 `apply_patch <<EOF` 仍被当作 shell 命令而不是文件编辑。
@@ -349,10 +348,11 @@ GOPROXY=off go test -race ./...
 ```
 
 - **不联网、不碰真实配置**:所有触及文件系统的测试都使用 `internal/testenv` 的沙箱,把 `HOME`、`BALLAST_HOME`、`CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`HERMES_HOME`、`BALLAST_INSTALL_ROOT`、`BALLAST_MANAGED_DIR`、`GIT_CONFIG_GLOBAL` 等全部重定向到临时目录;不会读写真实的 `~/.claude`、`~/.codex`、`~/.cursor`、`~/.hermes`、`~/.ballast`,也不会运行真实的客户端。`internal/cli` 的端到端测试会把 `ballast` 构建到临时目录并以子进程运行。
-- **P2 验收**:`bash scripts/accept-p2.sh` 编排 P2 的集成验收(构建与 vet、archtest、`go test ./...`、redact 60 秒 fuzz、`report` 端到端、`boundary-t0.sh`、Docker 下的 `sandbox-docker.sh` 与 `boundary-t1.sh`、M0b 取证检查、bench 场景 12–14 与 ConfigChange、卫生检查)。缺 Docker 时相应步骤显式 SKIP,`BALLAST_REQUIRE_DOCKER=1` 时失败;需要真实模型的步骤只打印【需凭据】与补测命令(`ANTHROPIC_API_KEY=<你自己提供> bash scripts/boundary-t1.sh --with-credentials`,密钥只从环境读、以变量名传给 `docker run`,不写入任何文件)。
+- **P2 验收**:`bash scripts/accept-p2.sh` 编排 P2 的集成验收(构建与 vet、archtest、`go test ./...`、redact 60 秒 fuzz、`report` 端到端、`boundary-t0.sh`、Docker 下的实验特性 T1 的 `sandbox-docker.sh` 与 `boundary-t1.sh`、M0b 取证检查、bench 场景 12–14 与 ConfigChange、卫生检查)。缺 Docker 时相应步骤显式 SKIP,`BALLAST_REQUIRE_DOCKER=1` 时失败;需要真实模型的步骤只打印【需凭据】与补测命令(`ANTHROPIC_API_KEY=<你自己提供> bash scripts/boundary-t1.sh --with-credentials`,密钥只从环境读、以变量名传给 `docker run`,不写入任何文件)。
 - **架构检查**:`internal/archtest` 强制依赖白名单——热路径(hook)不得依赖 `net/*`,`os/exec` 只允许出现在契约指定的隔离文件里,包级变量不得 `regexp.MustCompile`,不得有重的 `init()`。
 - **新增第三方依赖需要先走契约变更流程**(`docs/architecture.md` §12)。
-- **CI**:`.github/workflows/ci.yml` 在 ubuntu、macos、windows 三个平台上运行 `go vet`、`go test -race`(Windows 缺 cgo 时退回不带 `-race`)、`internal/archtest`、验收脚本和 bench 门槛(p95 不超过 30ms),另有 `matrix-real` job 在真实工具链上跑多语言证据矩阵。P2 的步骤(`accept-p2.sh`、Linux 上的 Docker 验收、macOS 上的 sandbox-exec 用例)待 CI 修复分支合入后追加,见 [`scripts/README.md`](scripts/README.md)。
+- **CI**:`.github/workflows/ci.yml` 在 ubuntu、macos、windows 三个平台上运行 `go vet`、`go test -race`(Windows 缺 cgo 时退回不带 `-race`)、`internal/archtest`、验收脚本 `accept-m0` 到 `accept-m4`、`accept-p2` 与 bench 门槛;另有 `Linux T1 沙箱(ubuntu-22.04)` job(实验特性 T1 的真实 bwrap 验收)和 `matrix-real` job(真实工具链上的多语言证据矩阵)。P2 的步骤已接入 CI,见 [`scripts/README.md`](scripts/README.md)。
+- **bench 门槛**:产品门槛是每次 hook 调用 p95 不超过 **30ms**,**Linux CI 强制 30ms**。托管 macOS 与 Windows runner 上 CI 使用**临时的平台上限**(`BALLAST_BENCH_P95_MS`:macOS 45ms、Windows 150ms;遍历整个工作区的场景另有 `BALLAST_BENCH_P95_HEAVY_MS`:macOS 80ms、Windows 400ms),这些上限只防数量级退化,**不是性能目标,也意味着这两个平台尚未达到 30ms 产品门槛**:只要任一场景 p95 超过 30ms,bench 的结论就写作"通过平台上限,但 N 个场景未达 30ms 产品门槛"并列出场景。依据、实测数据与这是否被接受的说明见 [`scripts/bench/README.md`](scripts/bench/README.md)。开发机上直接运行 `scripts/bench.sh` 始终强制 30ms。
 - 契约与取证资料:[`docs/architecture.md`](docs/architecture.md)、[`docs/dsl-semantics.md`](docs/dsl-semantics.md)、[`docs/facts/`](docs/facts/)、[`docs/research/pinrule-install-and-clients.md`](docs/research/pinrule-install-and-clients.md)、[`docs/pinrule-mapping.md`](docs/pinrule-mapping.md)。
 
 ## 许可

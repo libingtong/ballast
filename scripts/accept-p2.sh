@@ -4,8 +4,8 @@
 # arguments; any failed assertion exits non-zero. Three platforms; the parts
 # that need Docker or a client are an explicit SKIP when the prerequisite is
 # missing and a FAILURE when the matching BALLAST_REQUIRE_* variable is set
-# (the Linux CI job is to set BALLAST_REQUIRE_DOCKER=1 once impl/ci-fix lands;
-# docs/p2-design.md section 11).
+# (the P2 steps are wired into CI: the Linux CI jobs set
+# BALLAST_REQUIRE_DOCKER=1; docs/p2-design.md section 11).
 #
 #   1. go build, go vet (host and GOOS=windows), go test ./internal/archtest,
 #      go test ./...

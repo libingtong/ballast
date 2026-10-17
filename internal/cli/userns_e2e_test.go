@@ -11,7 +11,7 @@ import (
 
 // TestUsernsRestrictedDoctorIsT0: with BALLAST_EXPECT_USERNS_RESTRICTED=1 (the
 // host forbids unprivileged user namespaces, so the runner sandbox cannot
-// work) `ballast doctor` must judge the host T0 and say the sandbox backend is
+// work) `ballast doctor --t1` must judge the host T0 and say the sandbox backend is
 // unavailable. Skipped when the variable is not set.
 func TestUsernsRestrictedDoctorIsT0(t *testing.T) {
 	if runtime.GOOS != "linux" || os.Getenv("BALLAST_EXPECT_USERNS_RESTRICTED") != "1" {
@@ -21,7 +21,7 @@ func TestUsernsRestrictedDoctorIsT0(t *testing.T) {
 		t.Fatalf("bwrap is not installed, so unavailability would prove nothing: %v", err)
 	}
 	s := newSandbox(t)
-	r := s.mustExit(0, "", "", "doctor", "--json")
+	r := s.mustExit(0, "", "", "doctor", "--json", "--t1")
 	var doc struct {
 		Tier   string `json:"tier"`
 		Checks []struct {

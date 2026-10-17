@@ -168,6 +168,7 @@ func (e *tenv) tierOpt(goos string) DoctorOptions {
 		Layout: lay, FS: e.fs, Env: sys.MapEnv{Vars: map[string]string{"HOME": e.sb.Home}},
 		TierManagedDir: e.lay.ManagedDir,
 		TierLock:       func() (tier.OrgConfig, bool) { return tier.OrgConfig{}, false },
+		T1:             true, // these tests exercise the experimental T1 detail rows
 	}
 }
 
@@ -592,13 +593,76 @@ func TestDoctorTierBinaryHardening(t *testing.T) {
 	checkGolden(t, "doctor_binary_hardening", golden.String())
 }
 
-func TestDoctorTierWindowsOnlyHasTheLegacyRows(t *testing.T) {
+func TestDoctorTierWindowsOnlyHasTierLevel(t *testing.T) {
 	e := newTenv(t)
-	cs := byID(Doctor(e.tierOpt("windows")))
-	for id := range cs {
-		if strings.HasPrefix(id, "tier.") && id != "tier.level" && id != "tier.windows_t0" {
-			t.Errorf("windows emitted %s", id)
+	for _, t1 := range []bool{false, true} {
+		opt := e.tierOpt("windows")
+		opt.T1 = t1
+		cs := byID(Doctor(opt))
+		for id := range cs {
+			if strings.HasPrefix(id, "tier.") && id != "tier.level" {
+				t.Errorf("windows (T1 flag %v) emitted %s", t1, id)
+			}
 		}
+		if c := cs["tier.level"]; c.Status != CheckOK || c.Message != "T0(默认模式)" || c.Fix != "" {
+			t.Errorf("windows tier.level = %+v", c)
+		}
+	}
+}
+
+// v0.6: a T0 host that has not opted into the experimental T1 gets exactly one
+// tier row, ok "T0(默认模式)", with no missing-component list and no fix.
+func TestDoctorTierT0DefaultMode(t *testing.T) {
+	e := newTenv(t)
+	for _, goos := range []string{"linux", "darwin"} {
+		opt := e.tierOpt(goos)
+		opt.T1 = false
+		cs := byID(Doctor(opt))
+		for id := range cs {
+			if strings.HasPrefix(id, "tier.") && id != "tier.level" {
+				t.Errorf("%s: T0 default emitted %s", goos, id)
+			}
+		}
+		c := cs["tier.level"]
+		if c.Status != CheckOK || c.Message != "T0(默认模式)" || c.Fix != "" {
+			t.Errorf("%s: tier.level = %+v", goos, c)
+		}
+	}
+}
+
+// The T1 rows come back when T1 is declared, the host is locked, or --t1 is
+// given; the T1 check logic itself is unchanged.
+func TestDoctorTierDetailOptIn(t *testing.T) {
+	e := newTenv(t)
+	cases := []struct {
+		name   string
+		mutate func(*DoctorOptions)
+	}{
+		{"flag", func(o *DoctorOptions) { o.T1 = true }},
+		{"declared", func(o *DoctorOptions) {
+			o.Tier = fakeProbe{model.TierInfo{Tier: model.TierT0, Declared: model.TierT1, Missing: []string{"sandbox"}}}
+		}},
+		{"locked", func(o *DoctorOptions) { o.TierLock = lockedWith("/home") }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			opt := e.tierOpt("linux")
+			opt.T1 = false
+			c.mutate(&opt)
+			cs := byID(Doctor(opt))
+			for _, id := range []string{"tier.level", "tier.declared_mismatch", "tier.runner_sandbox", "tier.redirect_ignored",
+				"tier.locked_home", "tier.repo_sandbox_weakened", "tier.binary_hardening"} {
+				if _, ok := cs[id]; !ok {
+					t.Errorf("%s missing", id)
+				}
+			}
+		})
+	}
+	// With the flag on a plain T0 host the missing components are listed.
+	opt := e.tierOpt("linux")
+	opt.Tier = fakeProbe{model.TierInfo{Tier: model.TierT0, Missing: []string{model.TierMissingSandbox}}}
+	if c := byID(Doctor(opt))["tier.level"]; c.Status != CheckWarn || !strings.Contains(c.Message, "sandbox(") || !strings.Contains(c.Fix, "ballast org render") {
+		t.Errorf("--t1 tier.level = %+v", c)
 	}
 }
 
@@ -613,7 +677,7 @@ func TestDoctorTierIDs(t *testing.T) {
 		}
 	}
 	if _, ok := cs["tier.windows_t0"]; ok {
-		t.Error("tier.windows_t0 is windows-only")
+		t.Error("tier.windows_t0 no longer exists (v0.6)")
 	}
 }
 

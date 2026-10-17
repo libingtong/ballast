@@ -14,7 +14,7 @@
 #   * scripts/boundary/t0-cases.json: every row is a synthetic payload fed to
 #     the REAL `ballast hook` (driver: scripts/boundary/t0). "detected" rows
 #     (docs/trust-model.md §2.1 "识别的写入") must leave a rule_id "no-tamper"
-#     hit in the audit; "gap" rows (§2.1 "未覆盖的写法", classes 1-7, two or
+#     hit in the audit; "gap" rows (§2.1 "未覆盖的写法", classes 1-8, two or
 #     more each) must NOT. A gap that becomes detected FAILS the script:
 #     the coverage changed, update docs/trust-model.md §2.1;
 #   * a hand-written forged pass record with an arbitrary S_end is still
@@ -96,6 +96,7 @@ fi
 check_int_ge "the fixture ran at least 60 rows" "$(grep -c '^ok ' "$cases_out" || true)" 60
 check_contains "gap class 1 (language runtimes) has rows" "$(cat "$cases_out")" "gap1-"
 check_contains "gap class 7 (MCP) has rows" "$(cat "$cases_out")" "gap7-"
+check_contains "gap class 8 (client config root redirect residue) has rows" "$(cat "$cases_out")" "gap8-"
 check_contains "redirected client config roots have detected rows" "$(cat "$cases_out")" "redir-"
 
 # ------------------------------------------------------- forged evidence ---

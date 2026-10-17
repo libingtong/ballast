@@ -56,7 +56,9 @@
 //     unknown 12 (job_running 13).
 //   - install leaves binary resolution to install.Options.Binary == "" (os.Executable,
 //     symlinks resolved, temporary/build directories refused with exit 2).
-//   - doctor prints the tier (T0/T1), one row per client (detected, installed,
+//   - doctor prints the tier (T0 is the default guarantee: ok "T0(默认模式)";
+//     the experimental T1 detail rows need --t1, a declared T1 or a locked
+//     host), one row per client (detected, installed,
 //     worst check status), every check, and restates that CI is the final
 //     arbiter.
 //

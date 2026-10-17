@@ -8,6 +8,8 @@
   "settings": "{{CLAUDE_DIR}}/settings.json",
  "claude_redirected": "{{TMP}}/redirected-claude-root/settings.json",
  "codex_redirected": "{{TMP}}/redirected-codex-root/hooks.json",
+ "codex_config_redirected": "{{TMP}}/redirected-codex-root/config.toml",
+ "claude_relative_root": "{{REPO}}/cfg-rel/settings.json",
  "hermes_redirected": "{{TMP}}/redirected-hermes-root/config.yaml",
   "org": "{{ORG_MANAGED}}/ballast/rules.json"
  },
@@ -1161,8 +1163,12 @@
   {"id": "redir-claude-write", "client": "claude-code", "tool": "Write", "input": {"file_path": "{{T}}", "content": "{}"}, "expect": "detected", "via": "Write into the settings of a CLAUDE_CONFIG_DIR that points elsewhere", "targets": ["claude_redirected"], "env": {"CLAUDE_CONFIG_DIR": "{{TMP}}/redirected-claude-root"}},
   {"id": "redir-claude-shell", "client": "claude-code", "tool": "Bash", "input": {"command": "echo '{}' > {{T}}"}, "expect": "detected", "via": "shell redirect into the settings of a redirected CLAUDE_CONFIG_DIR", "targets": ["claude_redirected"], "env": {"CLAUDE_CONFIG_DIR": "{{TMP}}/redirected-claude-root"}},
   {"id": "redir-codex-patch", "client": "codex", "tool": "apply_patch", "input": {"input": "*** Begin Patch\n*** Update File: {{T}}\n@@\n-x\n+y\n*** End Patch\n"}, "expect": "detected", "via": "patch of the hooks.json of a CODEX_HOME that points elsewhere", "targets": ["codex_redirected"], "env": {"CODEX_HOME": "{{TMP}}/redirected-codex-root"}},
-  {"id": "redir-codex-config-shell", "client": "codex", "tool": "Bash", "input": {"command": "echo 'x' >> {{TMP}}/redirected-codex-root/config.toml"}, "expect": "detected", "via": "shell append to the config.toml of a redirected CODEX_HOME", "targets": ["codex_redirected"], "env": {"CODEX_HOME": "{{TMP}}/redirected-codex-root"}},
+  {"id": "redir-codex-config-shell", "client": "codex", "tool": "Bash", "input": {"command": "echo 'x' >> {{T}}"}, "expect": "detected", "via": "shell append to the config.toml of a redirected CODEX_HOME", "targets": ["codex_config_redirected"], "env": {"CODEX_HOME": "{{TMP}}/redirected-codex-root"}},
   {"id": "redir-hermes-write", "client": "hermes", "tool": "write_file", "input": {"path": "{{T}}", "content": "x"}, "expect": "detected", "via": "write_file into the config.yaml of a HERMES_HOME that points elsewhere", "targets": ["hermes_redirected"], "env": {"HERMES_HOME": "{{TMP}}/redirected-hermes-root"}},
-  {"id": "redir-claude-sibling-is-not-config", "client": "claude-code", "tool": "Write", "input": {"file_path": "{{TMP}}/redirected-claude-root/notes.txt", "content": "x"}, "expect": "gap", "via": "an unrelated file under the redirected root is not a hook configuration (control: the expansion is not a blanket match)", "targets": ["claude_redirected"], "env": {"CLAUDE_CONFIG_DIR": "{{TMP}}/redirected-claude-root"}}
+  {"id": "redir-claude-sibling-is-not-config", "client": "claude-code", "tool": "Write", "input": {"file_path": "{{TMP}}/redirected-claude-root/notes.txt", "content": "x"}, "expect": "gap", "via": "an unrelated file under the redirected root is not a hook configuration (control: the expansion is not a blanket match)", "targets": ["claude_redirected"], "env": {"CLAUDE_CONFIG_DIR": "{{TMP}}/redirected-claude-root"}},
+  {"id": "gap8-relative-root", "client": "claude-code", "tool": "Write", "input": {"file_path": "{{T}}", "content": "{}"}, "expect": "gap", "via": "CLAUDE_CONFIG_DIR is a relative path: the client resolves it against its own cwd, the hook cannot know it, so the settings written there are not recognised", "targets": ["claude_relative_root"], "env": {"CLAUDE_CONFIG_DIR": "cfg-rel"}, "class": 8},
+  {"id": "gap8-relative-root-shell", "client": "claude-code", "tool": "Bash", "input": {"command": "echo '{}' > {{T}}"}, "expect": "gap", "via": "shell redirect into the settings of a relative CLAUDE_CONFIG_DIR", "targets": ["claude_relative_root"], "env": {"CLAUDE_CONFIG_DIR": "cfg-rel"}, "class": 8},
+  {"id": "gap8-var-missing-in-hook-claude", "client": "claude-code", "tool": "Write", "input": {"file_path": "{{T}}", "content": "{}"}, "expect": "gap", "via": "CLAUDE_CONFIG_DIR is set when the client loads its configuration but absent from the hook process environment (the hook's own CLAUDE_CONFIG_DIR is a different root), so the redirected settings are not recognised", "targets": ["claude_redirected"], "class": 8},
+  {"id": "gap8-var-missing-in-hook-codex", "client": "codex", "tool": "apply_patch", "input": {"input": "*** Begin Patch\n*** Update File: {{T}}\n@@\n-x\n+y\n*** End Patch\n"}, "expect": "gap", "via": "CODEX_HOME is set when Codex loads its configuration but is not the value in the hook process environment, so the hooks.json of that root is not recognised", "targets": ["codex_redirected"], "class": 8}
 ]
 }

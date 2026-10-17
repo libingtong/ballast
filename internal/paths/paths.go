@@ -856,7 +856,9 @@ func clientRootMacros(r model.ClientRoots) [3]struct{ prefix, root string } {
 // root (and at its symlink-resolved form), so the literal and the redirected
 // location are both protected. A root equal to the default adds nothing.
 func (s *Service) expandClientRoots(list []string, home string, ctx model.PathContext) []string {
-	out := list
+	// out starts as list itself; the first append copies it (slices.Clip
+	// forces a reallocation), so the caller's backing array is never written.
+	out := slices.Clip(list)
 	for _, m := range clientRootMacros(ctx.ClientRoots) {
 		if m.root == "" {
 			continue

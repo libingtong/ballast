@@ -220,6 +220,30 @@ func TestSyntheticDenyDoesNotChangeEvalCounts(t *testing.T) {
 	}
 }
 
+// v0.6: hook-started verify is an experimental T1 feature. With the tier
+// probe wired but the host T0 and T1 never declared, the canonical verify is
+// not intercepted (empty stdout, nothing spawned, no hook-start audit); the
+// verify then runs as the agent's own, original detached background verify.
+func TestT0HostCanonicalVerifyIsNotIntercepted(t *testing.T) {
+	h, tier := t1Harness(t)
+	tier.info = model.TierInfo{Tier: model.TierT0}
+	mustExit0(t, h, h.claude("PreToolUse", verifyStdin))
+	if h.stdout.Len() != 0 {
+		t.Errorf("a T0 host must not deny the canonical verify, stdout = %q", h.stdout.String())
+	}
+	if sp := h.spawner.spawned(); len(sp) != 0 {
+		t.Errorf("a T0 host spawned a hook-start verify: %v", sp)
+	}
+	for _, r := range h.audit.all() {
+		if r.Type == model.AuditDiag && strings.Contains(string(r.Detail), model.DiagVerifyHookStart) {
+			t.Errorf("verify_hook_start audited on a T0 host: %s", r.Detail)
+		}
+		if r.Tier != model.TierT0 {
+			t.Errorf("%s line: tier %q, want the probed T0", r.Type, r.Tier)
+		}
+	}
+}
+
 func TestTierIsProbedOnlyForCanonicalVerify(t *testing.T) {
 	h, tier := t1Harness(t)
 	// An ordinary Bash call: parsed (Tier wired) but never probed.

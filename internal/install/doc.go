@@ -95,7 +95,10 @@
 // DoctorOptions.SandboxAvailable, install never imports sandbox),
 // tier.redirect_ignored, tier.locked_home (tier.LockedHome, timed),
 // tier.repo_sandbox_weakened (cwd and repository top) and
-// tier.binary_hardening (debug/macho CS_RUNTIME, debug/elf PT_INTERP).
+// tier.binary_hardening (debug/macho CS_RUNTIME, debug/elf PT_INTERP). Since
+// v0.6 T0 is the default guarantee: a host that has not opted into the
+// experimental T1 (no declared T1, not locked, no DoctorOptions.T1) gets one
+// row, tier.level = ok "T0(默认模式)", with no missing-component list.
 //
 // Acceptance (U10): scripts/install-e2e.sh per client with
 // BALLAST_HOME/BALLAST_INSTALL_ROOT/CLAUDE_CONFIG_DIR/CODEX_HOME/HERMES_HOME

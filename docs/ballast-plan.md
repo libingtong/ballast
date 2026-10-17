@@ -1,5 +1,7 @@
 # Ballast(压舱石)实施计划 v0.4
 
+> v0.6(2026-10-17):**定位调整**——T0 是产品主线与默认保证,T1 降为实验特性。见末尾"v0.6 定位调整"(优先于正文及 v0.5 中与 T1 相关的条目)。
+
 > v0.5(2026-10-16):核心路径完成并通过系统审计,P2 计划见末尾"v0.5 P2 计划"(含 v0.5.1–v0.5.7 审核修订),详细设计见 `docs/p2-design.md`。
 
 > v0.4(2026-10-16):M0a/M0c 实测完成,并按用户要求加入多客户端支持(参照 pinrule)。改动见末尾"v0.4 变更",与正文冲突时以 v0.4 变更为准。
@@ -645,7 +647,7 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 | **客户端取证** | Hermes:在隔离环境(Docker 或临时 venv,不碰真实 `~/.hermes`)中用 `hermes hooks test` 离线验证安装后的调用链(载荷、stdout 协议、阻断语义),写 `docs/facts/hermes-cases.json`,据此修正 adapter/hermes(`patch` 工具、`pre_verify` 续跑映射等);Codex、Cursor 不碰凭据无法取证,写补测命令 | `bash scripts/probe-clients/hermes.sh`;`go test ./internal/adapter/...` |
 | **其他增强** | psparse 写入目标补全(Tee-Object、-LiteralPath、Rename-Item、`[IO.File]::Write*` 等);请求文件 GC。cache GC 已在 v0.4.1 完成 | `go test ./internal/psparse ./internal/runner` |
 
-集成验收:`scripts/accept-p2.sh`(设计文档 §10),计划三平台 CI 执行(CI 步骤待 `impl/ci-fix` 合入后接入,见设计文档 §11;目前 `ci.yml` 不含它),容器与真实客户端部分缺前提时显式 SKIP。
+集成验收:`scripts/accept-p2.sh`(设计文档 §10),计划三平台 CI 执行(P2 步骤已接入 CI,见设计文档 §11),容器与真实客户端部分缺前提时显式 SKIP。
 
 ### 2. 已定事项(本版裁决)
 
@@ -736,3 +738,30 @@ docs/{facts/,dsl-semantics.md,pinrule-mapping.md,trust-model.md}  testdata/  pro
 - **验收不可被 SKIP**(minor):P2-SANDBOX、P2-RUNNER 的 Docker 验收命令带 `BALLAST_REQUIRE_DOCKER=1`;P2-SANDBOX 交付须附 macOS 本机 IPC 用例输出(cfprefsd 等),否则这些用例在 macOS CI 接入前不算通过。
 - 文档对齐(minor):P2-INSTALL 验收删去与条件契约矛盾的 `"audit"`;trust-model 按来源区分 runner 沙箱的可写集合;SecurityServer 永不放行。
 - 单元划分不变(仍是 13 个),依赖不变,性能门槛不变(hook p95 ≤ 30ms)。
+
+## v0.6 定位调整(2026-10-17,优先于正文及 v0.5 中与 T1 相关的条目)
+
+### 裁决
+
+项目负责人在 2026-10-17 作出产品定位裁决("A 方案"):
+
+- **目标用户是个人开发者**。agent 不会故意改自己的 hook,**对抗型 agent 不是目标威胁**。
+- **T0(篡改可检测、不可防)是产品主线与默认保证**。
+- **T1 降为实验特性**:托管设置、沙箱 runner、hook 代起 verify、重定向锁、job 私有副本的代码全部保留,但默认不启用,面向团队合规场景,个人用户无需配置。
+
+### 理由
+
+- T1 的价值只在"agent 会故意改自己的 hook"这一威胁成立时才显现;对个人开发者,这一威胁不是目标威胁,而 T1 的部署成本(root 所有的二进制、托管目录、沙箱后端、锁定主机)和使用成本(hook 代起 verify 让 agent 看到 deny 加 job id、受限主机上只能 T0)都很高。
+- T1 的外部依赖不稳定:例如 Ubuntu 23.10+/24.04 默认限制非特权用户命名空间,`bwrap` 在其上不可用,主机只能是 T0。一个默认路径依赖它的产品,会让大量个人环境一开始就显示"缺失 T1 组件"的警告。
+- T1 的保证仍有未证明的部分(真实模型逃逸测试是【需凭据】,macOS 与 Windows 的托管路径没有取过证),不应作为对个人用户的默认承诺。
+
+### 影响
+
+| 方面 | 变更 |
+|---|---|
+| 默认路径 | 不变:安装、规则注入、`no-tamper` 检测、`ballast verify` 后台 runner(证据 `tier:"T0"`)、审计、git pre-commit 与服务端 CI 把关。T0 主机(未声明 T1、未锁定)上 PreToolUse **不拦截**规范形式的 `ballast verify <name>`;hook 代起 verify 只在 T1 生效(`internal/hook` 与 `internal/cli` 有测试锁定) |
+| `doctor` | T0 主机上 `tier.level` 为 ok,消息"T0(默认模式)",不列缺失的 T1 组件、Fix 为空;其余 `tier.*` 行只在已声明 T1、已检测到锁定或 `doctor --t1`(新增参数)时输出;原生 Windows 的"如需 T1 请使用 WSL2"警告(`tier.windows_t0`)去掉,`tier.level` 同样 ok。T1 声明后的检查逻辑不变 |
+| README | "能力边界"一节只讲 T0,把它作为默认保证正面描述;T1 压成一句话加链接。T1 细节(org render、托管部署、沙箱 runner、bwrap/sandbox-exec 要求、AppArmor 用户命名空间限制、boundary-t1)移到新建的 `docs/advanced-t1.md`,开头标注"实验特性,面向团队合规场景;个人用户无需配置" |
+| CLI 帮助 | `org render`、`doctor --t1`、`verify --hook-start` 标 [实验] |
+| T1 状态 | 实验特性:代码、测试与 CI(含 `Linux T1 沙箱(ubuntu-22.04)` job)保留;`docs/trust-model.md`、`docs/architecture.md`、`docs/p2-design.md` 开头改为以 T0 为产品保证,T1 章节标注实验特性 |
+| 顺带的文档同步 | README、trust-model、scripts/README、`scripts/accept-p2.sh` 头注释不再写"CI 步骤待合入",改为"P2 步骤已接入 CI";README 写清 bench 门槛(Linux 30ms 产品门槛,macOS/Windows 为 CI 临时平台上限,尚未达产品门槛);trust-model §2.1 正式加上第 8 类缺口"客户端配置根重定向的残余",`scripts/boundary/t0-cases.json` 补 class 8 的 gap 用例 |
