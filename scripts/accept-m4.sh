@@ -105,7 +105,11 @@ expect_out_lacks "v0.6: the default does not list missing T1 components" "missin
 expect_out_lacks "v0.6: the default emits no T1 detail rows" "tier.runner_sandbox"
 bl doctor --t1
 expect_rc "doctor --t1 (experimental T1 detail) only warns" 0
-expect_out_has "doctor --t1 lists the T1 detail rows" "tier.runner_sandbox"
+if [ "$IS_WINDOWS" = 1 ]; then
+  skip "doctor --t1 lists the T1 detail rows" "native Windows is T0 only: no per-component tier rows"
+else
+  expect_out_has "doctor --t1 lists the T1 detail rows" "tier.runner_sandbox"
+fi
 expect_out_has "and that CI is the final arbiter" "CI 是最终裁判"
 
 finish

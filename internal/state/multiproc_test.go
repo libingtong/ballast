@@ -290,7 +290,13 @@ func TestMultiProcessGCFlushExactlyOnce(t *testing.T) {
 		}
 	}
 	if len(seen) != sessions {
-		t.Errorf("flushed %d distinct sessions, want %d", len(seen), sessions)
+		var missing []string
+		for i := 0; i < sessions; i++ {
+			if k := fmt.Sprintf("repo/s%d/main", i); seen[k] == 0 {
+				missing = append(missing, k)
+			}
+		}
+		t.Errorf("flushed %d distinct sessions, want %d (missing %v)", len(seen), sessions, missing)
 	}
 	for k, n := range seen {
 		if n != 1 {

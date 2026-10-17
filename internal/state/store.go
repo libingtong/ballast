@@ -474,7 +474,10 @@ const claimStale = time.Hour
 // another process claimed it first.
 func (s *Store) claimSession(root, sessPath string) (string, error) {
 	dir := filepath.Join(root, claimDirName)
-	if err := s.opt.FS.MkdirAll(dir, 0o700); err != nil {
+	// Concurrent first-time creation of the claim directory can fail
+	// transiently on Windows (access denied while another worker is creating
+	// it); an unretried failure would skip the session in every racing worker.
+	if err := retryWindows(func() error { return s.opt.FS.MkdirAll(dir, 0o700) }); err != nil {
 		return "", err
 	}
 	name := fmt.Sprintf("%d-%d-%s", s.opt.Clock.Now().UnixNano(), os.Getpid(), s.opt.IDs.NewID(4))

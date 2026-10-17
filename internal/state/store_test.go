@@ -739,7 +739,13 @@ func TestGCFlushConcurrentGoroutines(t *testing.T) {
 	}
 	wg.Wait()
 	if len(seen) != sessions {
-		t.Fatalf("flushed %d sessions, want %d", len(seen), sessions)
+		var missing []string
+		for i := 0; i < sessions; i++ {
+			if n := fmt.Sprintf("s%d", i); seen[n] == 0 {
+				missing = append(missing, n)
+			}
+		}
+		t.Fatalf("flushed %d sessions, want %d (missing %v)", len(seen), sessions, missing)
 	}
 	for s, n := range seen {
 		if n != 1 {
