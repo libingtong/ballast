@@ -9,11 +9,13 @@ import (
 	"testing"
 )
 
-// TestUsernsRestrictedDoctorIsT0: with BALLAST_EXPECT_USERNS_RESTRICTED=1 (the
-// host forbids unprivileged user namespaces, so the runner sandbox cannot
-// work) `ballast doctor --t1` must judge the host T0 and say the sandbox backend is
-// unavailable. Skipped when the variable is not set.
-func TestUsernsRestrictedDoctorIsT0(t *testing.T) {
+// TestUsernsRestrictedDoctorReportsBackendUnavailable: with
+// BALLAST_EXPECT_USERNS_RESTRICTED=1 (the host forbids unprivileged user
+// namespaces, so the runner sandbox cannot work) `ballast doctor --t1` must say
+// the sandbox backend is unavailable. That message check is the real evidence;
+// the tier==T0 assertion holds on any host without a managed deployment and
+// proves nothing about fail-closed. Skipped when the variable is not set.
+func TestUsernsRestrictedDoctorReportsBackendUnavailable(t *testing.T) {
 	if runtime.GOOS != "linux" || os.Getenv("BALLAST_EXPECT_USERNS_RESTRICTED") != "1" {
 		t.Skip("BALLAST_EXPECT_USERNS_RESTRICTED is not 1")
 	}

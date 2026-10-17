@@ -28,7 +28,7 @@ T1 的设计目标是让 agent **不可写**规则、状态、证据和 Ballast 
   - macOS:`/usr/bin/sandbox-exec`。
   - Linux:bubblewrap(`bwrap`),并且主机**允许非特权用户命名空间**。
   - 没有可用后端时,hook 代起的 verify 不执行测试,记为 infra `sandbox_unavailable`,不产生任何 pass 证据(fail-closed)。
-- **Ubuntu 23.10+ / 24.04 的 AppArmor 限制**:这些发行版默认 `kernel.apparmor_restrict_unprivileged_userns=1`,容器或普通用户里的 `bwrap` 建不了用户命名空间(典型报错 `loopback: Failed RTM_NEWADDR`),沙箱后端不可用,主机**只能是 T0**(`doctor --t1` 的 `tier.runner_sandbox` 报 fail)。是否放宽该限制(例如为 `bwrap` 单独配置 AppArmor profile,或改用不受限的发行版/内核设置)是管理员的决定,Ballast 不会替你改动任何内核开关或 AppArmor 配置。
+- **Ubuntu 23.10+ / 24.04 的 AppArmor 限制**:这些发行版默认 `kernel.apparmor_restrict_unprivileged_userns=1`,容器或普通用户里的 `bwrap` 建不了用户命名空间(典型报错 `loopback: Failed RTM_NEWADDR`),沙箱后端不可用。已部署 T1 的主机仍判为 T1,但 `doctor --t1` 的 `tier.runner_sandbox` 报 fail,hook 代起的 verify 全部记 infra `sandbox_unavailable`(fail-closed,不产生 pass 证据);未部署时为 T0,该项为 ok 并注明后端不可用。是否放宽该限制(例如为 `bwrap` 单独配置 AppArmor profile,或改用不受限的发行版/内核设置)是管理员的决定,Ballast 不会替你改动任何内核开关或 AppArmor 配置。
 - **`.ballast/project.json`** 必须提交到仓库,且 `exempt` 不得覆盖它,否则 hook 代起的 verify 记 infra `project_json_untracked`。
 
 ## 3. 管理员部署步骤

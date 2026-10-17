@@ -244,7 +244,7 @@ jobs:
       # 被限制,容器里的 bwrap 无法配置网络命名空间("loopback: Failed RTM_NEWADDR"),
       # 沙箱天然不可用。这里只读该开关(不写 sysctl、不改 AppArmor、不给容器加权限),
       # 为 1 时 accept-p2 改为断言 fail-closed(Probe 不可用、hook 代起的 verify 记为 infra
-      # sandbox_unavailable、doctor 判为 T0);真实 bwrap 的验证由下面的 ubuntu-22.04 job 承担。
+      # sandbox_unavailable、doctor --t1 报告沙箱后端不可用);真实 bwrap 的验证由下面的 ubuntu-22.04 job 承担。
       - name: 探测用户命名空间限制(只读)
         if: ${{ !cancelled() && runner.os == 'Linux' }}
         run: |
