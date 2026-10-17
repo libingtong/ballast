@@ -339,7 +339,10 @@ func TestVerifyStatusMultiJobRequestTakesTheWorst(t *testing.T) {
 	var st result
 	for time.Now().Before(deadline) {
 		st = s.run("", "", "verify", "--status", id)
-		if st.code != 6 {
+		// The aggregate ranks infra above running, so a finished infra job
+		// next to a still-running one already exits non-6: wait until no job
+		// of the request is running before reading the aggregate.
+		if st.code != 6 && !strings.Contains(st.stdout, "state=running") {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -350,6 +353,10 @@ func TestVerifyStatusMultiJobRequestTakesTheWorst(t *testing.T) {
 	want := 0
 	for _, name := range []string{"okjob", "badjob"} {
 		one := s.run(repo, "", "verify", "--status", name)
+		for end := time.Now().Add(60 * time.Second); one.code == 6 && time.Now().Before(end); {
+			time.Sleep(100 * time.Millisecond)
+			one = s.run(repo, "", "verify", "--status", name)
+		}
 		t.Logf("--status %s: exit %d", name, one.code)
 		if one.code == 1 || (one.code == 5 && want != 1) {
 			want = one.code

@@ -487,7 +487,7 @@ func (s *Store) claimSession(root, sessPath string) (string, error) {
 }
 
 // retryWindows runs op, and on native Windows retries a failure for up to
-// about 50 ms. A directory cannot be renamed or removed on Windows while any
+// about 2 s. A directory cannot be renamed or removed on Windows while any
 // handle is open on it or inside it (Go opens files without FILE_SHARE_DELETE),
 // and another GC worker listing the same session (ReadDir, or reading its
 // counts) holds such a handle for a moment. Without the retry every worker
@@ -497,7 +497,7 @@ func (s *Store) claimSession(root, sessPath string) (string, error) {
 func retryWindows(op func() error) error {
 	tries := 1
 	if runtime.GOOS == "windows" {
-		tries = 25
+		tries = 400 // ~2s at 5ms: a loaded -race runner holds handles far longer than 50 ms
 	}
 	var err error
 	for i := 0; i < tries; i++ {
@@ -505,7 +505,7 @@ func retryWindows(op func() error) error {
 			return err
 		}
 		if i+1 < tries {
-			time.Sleep(2 * time.Millisecond)
+			time.Sleep(5 * time.Millisecond)
 		}
 	}
 	return err
