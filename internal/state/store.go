@@ -489,26 +489,35 @@ func (s *Store) claimSession(root, sessPath string) (string, error) {
 	return dest, nil
 }
 
-// retryWindows runs op, and on native Windows retries a failure for up to
-// about 2 s. A directory cannot be renamed or removed on Windows while any
-// handle is open on it or inside it (Go opens files without FILE_SHARE_DELETE),
-// and another GC worker listing the same session (ReadDir, or reading its
-// counts) holds such a handle for a moment. Without the retry every worker
-// can lose the claim on the same session at once, and nobody reports it in
-// that run. A missing path (another worker claimed or removed it) is final
-// and never retried. Elsewhere op runs exactly once.
+// retryWindows runs op, and on native Windows retries a transient failure for
+// up to about 2 s. A directory cannot be renamed or removed on Windows while
+// any handle is open on it or inside it (Go opens files without
+// FILE_SHARE_DELETE), and another GC worker listing the same session
+// (ReadDir, or reading its counts) holds such a handle for a moment. Without
+// the retry every worker can lose the claim on the same session at once, and
+// nobody reports it in that run. Only sharing/access/lock conflicts count as
+// transient (see isTransientWindows); every other error, including a missing
+// path (another worker claimed or removed it), is final and returned at once.
+// Elsewhere op runs exactly once.
 func retryWindows(op func() error) error {
 	tries := 1
 	if runtime.GOOS == "windows" {
 		tries = 400 // ~2s at 5ms: a loaded -race runner holds handles far longer than 50 ms
 	}
+	return retryTransient(tries, 5*time.Millisecond, isTransientWindows, op)
+}
+
+// retryTransient runs op up to tries times, sleeping delay between attempts,
+// and retries only while transient(err) holds; any other error (or success)
+// returns immediately.
+func retryTransient(tries int, delay time.Duration, transient func(error) bool, op func() error) error {
 	var err error
 	for i := 0; i < tries; i++ {
-		if err = op(); err == nil || errors.Is(err, fs.ErrNotExist) {
+		if err = op(); err == nil || errors.Is(err, fs.ErrNotExist) || !transient(err) {
 			return err
 		}
 		if i+1 < tries {
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(delay)
 		}
 	}
 	return err

@@ -995,3 +995,53 @@ func TestLockIsCurrentDetectsReplacedLockFile(t *testing.T) {
 		t.Error("a recreated lock file is a different file")
 	}
 }
+
+func TestRetryTransientNonTransientNotRetried(t *testing.T) {
+	boom := errors.New("boom")
+	calls := 0
+	err := retryTransient(50, time.Millisecond, func(e error) bool { return errors.Is(e, errTransientForTest) }, func() error {
+		calls++
+		return boom
+	})
+	if !errors.Is(err, boom) || calls != 1 {
+		t.Fatalf("non-transient error: err=%v calls=%d, want boom after 1 call", err, calls)
+	}
+}
+
+func TestRetryTransientRetriesTransientThenSucceeds(t *testing.T) {
+	calls := 0
+	err := retryTransient(50, time.Millisecond, func(e error) bool { return errors.Is(e, errTransientForTest) }, func() error {
+		calls++
+		if calls < 3 {
+			return errTransientForTest
+		}
+		return nil
+	})
+	if err != nil || calls != 3 {
+		t.Fatalf("err=%v calls=%d, want nil after 3 calls", err, calls)
+	}
+}
+
+func TestRetryTransientNotExistNotRetried(t *testing.T) {
+	calls := 0
+	err := retryTransient(50, time.Millisecond, func(error) bool { return true }, func() error {
+		calls++
+		return fs.ErrNotExist
+	})
+	if !errors.Is(err, fs.ErrNotExist) || calls != 1 {
+		t.Fatalf("err=%v calls=%d, want ErrNotExist after 1 call", err, calls)
+	}
+}
+
+func TestRetryTransientGivesUpAfterTries(t *testing.T) {
+	calls := 0
+	err := retryTransient(4, time.Millisecond, func(error) bool { return true }, func() error {
+		calls++
+		return errTransientForTest
+	})
+	if !errors.Is(err, errTransientForTest) || calls != 4 {
+		t.Fatalf("err=%v calls=%d, want transient error after 4 calls", err, calls)
+	}
+}
+
+var errTransientForTest = errors.New("transient")

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -132,8 +133,8 @@ func TestProtectedPaths(t *testing.T) {
 		got[i].Resolved = filepath.ToSlash(got[i].Resolved)
 		// On Windows the in-memory FS hands back backslash forms for
 		// slash-written inputs; after ToSlash that is the same path, i.e.
-		// "no distinct resolved form".
-		if got[i].Resolved == got[i].Path {
+		// "no distinct resolved form". linux/darwin compare strictly.
+		if runtime.GOOS == "windows" && got[i].Resolved == got[i].Path {
 			got[i].Resolved = ""
 		}
 	}
